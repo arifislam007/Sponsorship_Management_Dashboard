@@ -24,6 +24,21 @@ const defaultFormState = {
   story: '',
 };
 
+function calculateAgeFromDOB(dateOfBirth: string): string {
+  if (!dateOfBirth) return '';
+  
+  const birthDate = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  
+  return age.toString();
+}
+
 async function fileToDataUrl(file: File | null): Promise<string | undefined> {
   if (!file) {
     return undefined;
@@ -194,7 +209,15 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
                 <input
                   type="date"
                   value={formData.dateOfBirth}
-                  onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                  onChange={(e) => {
+                    const dob = e.target.value;
+                    const calculatedAge = calculateAgeFromDOB(dob);
+                    setFormData({ 
+                      ...formData, 
+                      dateOfBirth: dob,
+                      age: calculatedAge
+                    });
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
                 />
               </div>
