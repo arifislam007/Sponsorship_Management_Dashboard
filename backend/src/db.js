@@ -18,10 +18,13 @@ export async function query(text, params = []) {
 export async function ensureSchema() {
   const schemaPath = path.resolve(__dirname, '../sql/schema.sql');
   const authSchemaPath = path.resolve(__dirname, '../sql/auth_schema.sql');
+  const seedAdminPath = path.resolve(__dirname, '../sql/seed_admin.sql');
   
   const schemaSql = await readFile(schemaPath, 'utf8');
   const authSchemaSql = await readFile(authSchemaPath, 'utf8');
+  const seedAdminSql = await readFile(seedAdminPath, 'utf8');
   
   await pool.query(schemaSql);
   await pool.query(authSchemaSql);
+  await pool.query(seedAdminSql);
 }
