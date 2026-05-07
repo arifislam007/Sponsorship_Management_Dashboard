@@ -4,7 +4,8 @@ WORKDIR /frontend
 COPY package.json ./
 RUN npm install
 COPY . .
-RUN npm run build
+RUN if [ -d node_modules/.bin ]; then chmod -R +x node_modules/.bin || true; fi && \
+	node ./node_modules/vite/bin/vite.js build
 
 FROM nginx:1.27-alpine
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
