@@ -3,6 +3,7 @@ import { Search, Upload, Plus, User, X, Star } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddStudentModal } from './AddStudentModal';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
+import { BulkStudentUploadModal } from './BulkStudentUploadModal';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -25,6 +26,7 @@ export function Students() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'sponsored' | 'unsponsored'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSponsorshipModalOpen, setIsSponsorshipModalOpen] = useState(false);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -111,7 +113,10 @@ export function Students() {
               <Plus size={18} />
               Add Student
             </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors w-full sm:w-auto">
+            <button
+              onClick={() => setIsBulkUploadOpen(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors w-full sm:w-auto"
+            >
               <Upload size={18} />
               Bulk Upload Excel
             </button>
@@ -295,6 +300,14 @@ export function Students() {
             amount: number;
             status?: string;
           });
+          await loadStudents();
+        }}
+      />
+
+      <BulkStudentUploadModal
+        isOpen={isBulkUploadOpen}
+        onClose={() => setIsBulkUploadOpen(false)}
+        onUploaded={async () => {
           await loadStudents();
         }}
       />
