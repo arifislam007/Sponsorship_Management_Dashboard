@@ -60,3 +60,16 @@ CREATE TABLE IF NOT EXISTS accounting_ledger (
     amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
     closing_balance NUMERIC(14, 2) NOT NULL DEFAULT 0
 );
+
+-- Acknowledgment letters stored for reuse
+CREATE TABLE IF NOT EXISTS acknowledgment_letters (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER REFERENCES students(id) ON DELETE SET NULL,
+    donor_id INTEGER REFERENCES donors(id) ON DELETE SET NULL,
+    template_name VARCHAR(100),
+    subject VARCHAR(255),
+    content TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

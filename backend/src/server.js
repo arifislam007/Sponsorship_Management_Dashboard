@@ -6,6 +6,7 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { listStudents, studentsRouter } from './routes/students.js';
 import { ledgerRouter } from './routes/ledger.js';
 import { exportsRouter } from './routes/exports.js';
+import { acknowledgmentsRouter } from './routes/acknowledgments.js';
 import { donorsRouter } from './routes/donors.js';
 import { sponsorshipsRouter } from './routes/sponsorships.js';
 import { authRouter } from './routes/auth.js';
@@ -43,6 +44,7 @@ app.use(`${config.apiPrefix}/donors`, authMiddleware, moduleAccessMiddleware('Do
 app.use(`${config.apiPrefix}/sponsorships`, authMiddleware, moduleAccessMiddleware('Sponsorships'), sponsorshipsRouter);
 app.use(`${config.apiPrefix}/ledger`, authMiddleware, moduleAccessMiddleware('Accounting'), ledgerRouter);
 app.use(`${config.apiPrefix}/exports`, authMiddleware, moduleAccessMiddleware('Export'), exportsRouter);
+app.use(`${config.apiPrefix}/letters`, authMiddleware, moduleAccessMiddleware('Export'), acknowledgmentsRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) {
