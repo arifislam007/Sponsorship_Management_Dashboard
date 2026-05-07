@@ -201,6 +201,22 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  // Acknowledgment letters
+  saveLetter: (payload: { student_id?: number | null; donor_id?: number | null; template_name?: string | null; subject?: string | null; content: string; is_public?: boolean }) =>
+    request<any>('/letters', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getLetters: (params?: { student_id?: number; donor_id?: number; template_name?: string; public_only?: boolean }) => {
+    const qs = new URLSearchParams();
+    if (params?.student_id) qs.append('student_id', String(params.student_id));
+    if (params?.donor_id) qs.append('donor_id', String(params.donor_id));
+    if (params?.template_name) qs.append('template_name', params.template_name as string);
+    if (params?.public_only) qs.append('public_only', 'true');
+    return request<any>(`/letters?${qs.toString()}`);
+  },
+
   async exportDonorStatement(payload: DonorStatementPayload): Promise<Blob> {
     const response = await fetch(`${API_BASE}/exports/donor-statement`, {
       method: 'POST',

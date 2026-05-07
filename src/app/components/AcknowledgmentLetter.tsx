@@ -100,6 +100,39 @@ export function AcknowledgmentLetter() {
     setShowHistory(true);
   };
 
+  const handleSaveToDB = async () => {
+    if (!printableLetterRef.current) {
+      alert('Letter content not available to save.');
+      return;
+    }
+
+    try {
+      const content = printableLetterRef.current.innerHTML;
+
+      // Try to resolve donor id from selected donor name
+      const matchedDonor = donors.find((d) => d.name === formData.donorName);
+      const donor_id = matchedDonor ? matchedDonor.id : null;
+
+      const payload = {
+        student_id: null,
+        donor_id,
+        template_name: formData.projectName || null,
+        subject: 'Acknowledgment of Donation',
+        content,
+        is_public: false,
+      };
+
+      const res = await api.saveLetter(payload);
+      // push to local history as well
+      setLetterHistory((prev) => [formData, ...prev.slice(0, 9)]);
+      alert('Letter saved successfully.');
+      return res;
+    } catch (error) {
+      console.error('Failed to save letter:', error);
+      alert('Failed to save letter.');
+    }
+  };
+
   const handleLoadDraft = (item: LetterData) => {
     form.reset(item);
     setShowHistory(false);
@@ -387,7 +420,7 @@ export function AcknowledgmentLetter() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-200">
+            <div className="grid grid-cols-4 gap-2 pt-4 border-t border-gray-200">
               <button
                 type="button"
                 onClick={handleGeneratePDF}
@@ -411,6 +444,14 @@ export function AcknowledgmentLetter() {
               >
                 <Save size={16} />
                 <span className="hidden sm:inline">Save Draft</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveToDB}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Save size={16} />
+                <span className="hidden sm:inline">Save to DB</span>
               </button>
             </div>
           </form>
