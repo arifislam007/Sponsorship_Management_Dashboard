@@ -85,10 +85,6 @@ export function Login() {
             {isLoading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-
-        <p className="text-center text-sm text-gray-600 mt-6">
-          Demo credentials: admin / password
-        </p>
       </div>
     </div>
   );
