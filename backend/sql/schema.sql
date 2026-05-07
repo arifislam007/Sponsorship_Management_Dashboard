@@ -1,0 +1,62 @@
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'sponsorship_status') THEN
+        CREATE TYPE sponsorship_status AS ENUM ('Active', 'Ended');
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ledger_type') THEN
+        CREATE TYPE ledger_type AS ENUM ('Credit', 'Debit');
+    END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS students (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    class VARCHAR(50) NOT NULL,
+    age INTEGER NOT NULL CHECK (age > 0),
+    bio TEXT,
+    photo_url TEXT,
+    is_sponsored BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+ALTER TABLE students
+    ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS donors (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(200) NOT NULL UNIQUE,
+    phone VARCHAR(30),
+    country VARCHAR(100),
+    total_contributed NUMERIC(12, 2) NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS sponsorships (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    donor_id INTEGER NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+    status sponsorship_status NOT NULL DEFAULT 'Active',
+    period VARCHAR(20),
+    payment_media VARCHAR(50),
+    reference_number VARCHAR(100) NOT NULL UNIQUE,
+    CONSTRAINT uq_sponsorship_period UNIQUE (student_id, donor_id, start_date)
+);
+
+CREATE TABLE IF NOT EXISTS accounting_ledger (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL,
+    voucher_ref VARCHAR(100) NOT NULL UNIQUE,
+    particulars TEXT NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    type ledger_type NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
+    closing_balance NUMERIC(14, 2) NOT NULL DEFAULT 0
+);
