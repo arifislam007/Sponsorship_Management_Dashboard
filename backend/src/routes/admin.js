@@ -9,7 +9,7 @@ adminRouter.get('/users', authMiddleware, roleMiddleware('admin'), async (req, r
   try {
     const result = await pool.query(
       `SELECT u.id, u.username, u.email, u.full_name, u.is_active, u.created_at,
-              array_agg(r.name) as roles
+              COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), ARRAY[]::text[]) as roles
        FROM users u
        LEFT JOIN user_roles ur ON u.id = ur.user_id
        LEFT JOIN roles r ON ur.role_id = r.id

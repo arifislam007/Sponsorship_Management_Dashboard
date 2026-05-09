@@ -8,6 +8,7 @@ import { ledgerRouter } from './routes/ledger.js';
 import { exportsRouter } from './routes/exports.js';
 import { acknowledgmentsRouter } from './routes/acknowledgments.js';
 import { donorsRouter } from './routes/donors.js';
+import { leavesRouter } from './routes/leaves.js';
 import { sponsorshipsRouter } from './routes/sponsorships.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
@@ -42,6 +43,7 @@ app.use(`${config.apiPrefix}/dashboard`, authMiddleware, moduleAccessMiddleware(
 app.use(`${config.apiPrefix}/students`, authMiddleware, moduleAccessMiddleware('Students'), studentsRouter);
 app.use(`${config.apiPrefix}/donors`, authMiddleware, moduleAccessMiddleware('Donors'), donorsRouter);
 app.use(`${config.apiPrefix}/sponsorships`, authMiddleware, moduleAccessMiddleware('Sponsorships'), sponsorshipsRouter);
+app.use(`${config.apiPrefix}/leaves`, authMiddleware, moduleAccessMiddleware('Leave Management'), leavesRouter);
 app.use(`${config.apiPrefix}/ledger`, authMiddleware, moduleAccessMiddleware('Accounting'), ledgerRouter);
 app.use(`${config.apiPrefix}/exports`, authMiddleware, moduleAccessMiddleware('Export'), exportsRouter);
 app.use(`${config.apiPrefix}/letters`, authMiddleware, moduleAccessMiddleware('Export'), acknowledgmentsRouter);

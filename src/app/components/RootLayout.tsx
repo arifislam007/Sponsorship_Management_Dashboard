@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router';
-import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
 
@@ -100,6 +100,22 @@ export function RootLayout() {
             >
               <FileText size={20} />
               <span>Acknowledgment Letter</span>
+            </NavLink>
+          )}
+
+          {canAccess('Leave Management') && (
+            <NavLink
+              to="/dashboard/leaves"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+                  isActive
+                    ? 'bg-[#14856E] text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`
+              }
+            >
+              <CalendarDays size={20} />
+              <span>Leave Management</span>
             </NavLink>
           )}
 
@@ -205,6 +221,20 @@ export function RootLayout() {
             >
               <FileText size={20} />
               <span className="text-xs mt-1">Letter</span>
+            </NavLink>
+          )}
+
+          {canAccess('Leave Management') && (
+            <NavLink
+              to="/dashboard/leaves"
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center flex-1 h-full ${
+                  isActive ? 'text-[#14856E]' : 'text-gray-600'
+                }`
+              }
+            >
+              <CalendarDays size={20} />
+              <span className="text-xs mt-1">Leave</span>
             </NavLink>
           )}
 

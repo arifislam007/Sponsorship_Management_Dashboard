@@ -24,6 +24,15 @@ interface Module {
   route_name: string;
 }
 
+const LEAVE_ONLY_MODULE = {
+  moduleName: 'Leave Management',
+  canView: true,
+  canCreate: true,
+  canEdit: true,
+  canDelete: false,
+  overrideRolePermissions: true,
+};
+
 export function Admin() {
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
@@ -180,6 +189,52 @@ export function Admin() {
     }
   };
 
+  const handleGrantLeaveOnlyAccess = async (userId: number, userRoles: { id: number; name: string }[]) => {
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      if (userRoles.length > 0) {
+        const response = await fetch(`/api/v1/admin/users/${userId}/roles`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ roleNames: [] }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.message || 'Failed to remove existing roles');
+        }
+      }
+
+      const accessResponse = await fetch(`/api/v1/admin/users/${userId}/module-access`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(LEAVE_ONLY_MODULE),
+      });
+
+      if (accessResponse.ok) {
+        setSuccess('Leave-only access granted successfully');
+        loadUsers();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const data = await accessResponse.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to grant leave-only access');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to grant leave-only access');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8">
       <div className="mb-6">
@@ -235,6 +290,9 @@ export function Admin() {
               <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New User</h3>
                 <form onSubmit={handleCreateUser} className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    Leave the Roles list empty if you want this account to be leave-only. You can assign Leave Management access later from the user list.
+                  </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input
                       type="text"
@@ -333,7 +391,7 @@ export function Admin() {
                           <td className="px-6 py-3">
                             <div className="flex flex-wrap gap-1">
                               {user.roles && user.roles.length > 0 ? (
-                                user.roles.map((role) => (
+                                user.roles.filter(Boolean).map((role) => (
                                   <span
                                     key={role.id}
                                     className="px-2 py-1 bg-[#14856E]/10 text-[#14856E] text-xs rounded-full font-medium"
@@ -364,6 +422,13 @@ export function Admin() {
                                 className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
                               >
                                 <Edit2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleGrantLeaveOnlyAccess(user.id, user.roles || [])}
+                                disabled={isLoading}
+                                className="px-3 py-2 text-xs font-medium rounded-lg border border-[#14856E] text-[#14856E] hover:bg-[#14856E] hover:text-white transition-colors disabled:opacity-50"
+                              >
+                                Leave only
                               </button>
                               <button
                                 onClick={() => handleToggleUserStatus(user.id, user.is_active)}

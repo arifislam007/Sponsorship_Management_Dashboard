@@ -3,6 +3,8 @@ import { Download, Loader2, Upload, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { CreateStudentPayload, api } from '../services/api';
 
+const SAMPLE_FILE_URL = '/templates/student-bulk-upload-sample.xlsx';
+
 interface BulkStudentUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,7 +39,8 @@ function parseBoolean(value: unknown): boolean {
 }
 
 function parseNumber(value: unknown): number {
-  const parsed = Number(value);
+  const normalized = String(value ?? '').replace(/[^0-9.-]/g, '');
+  const parsed = Number(normalized || value);
   return Number.isFinite(parsed) ? parsed : NaN;
 }
 
@@ -113,12 +116,24 @@ export function BulkStudentUploadModal({ isOpen, onClose, onUploaded }: BulkStud
 
   if (!isOpen) return null;
 
-  const downloadSampleSheet = () => {
-    const workbook = buildSampleWorkbook();
-    const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([arrayBuffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
+  const downloadSampleSheet = async () => {
+    let blob: Blob;
+
+    try {
+      const response = await fetch(SAMPLE_FILE_URL);
+      if (!response.ok) {
+        throw new Error('Sample file not available');
+      }
+
+      blob = await response.blob();
+    } catch {
+      const workbook = buildSampleWorkbook();
+      const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      blob = new Blob([arrayBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+    }
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -145,7 +160,9 @@ export function BulkStudentUploadModal({ isOpen, onClose, onUploaded }: BulkStud
       }
 
       const sheet = workbook.Sheets[firstSheetName];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }).filter((row) =>
+        Object.values(row).some((value) => String(value ?? '').trim() !== '')
+      );
 
       if (rows.length === 0) {
         throw new Error('The worksheet is empty.');

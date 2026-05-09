@@ -73,6 +73,7 @@ INSERT INTO modules (name, description, route_name) VALUES
     ('Donors', 'Donor management', 'donors'),
     ('Students', 'Student management', 'students'),
     ('Sponsorships', 'Sponsorship management', 'sponsorships'),
+    ('Leave Management', 'Leave management and approvals', 'leave-management'),
     ('Accounting', 'Accounting and ledger', 'accounting'),
     ('Export', 'Data export functionality', 'export'),
     ('Admin', 'Admin panel and user management', 'admin')
@@ -89,12 +90,12 @@ ON CONFLICT (role_id, module_id) DO NOTHING;
 INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
 SELECT r.id, m.id, true, true, true, false
 FROM roles r, modules m
-WHERE r.name = 'accountant' AND m.name IN ('Dashboard', 'Donors', 'Accounting', 'Export')
+WHERE r.name = 'accountant' AND m.name IN ('Leave Management')
 ON CONFLICT (role_id, module_id) DO NOTHING;
 
 -- Insert default permissions for operator
 INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
 SELECT r.id, m.id, true, true, false, false
 FROM roles r, modules m
-WHERE r.name = 'operator' AND m.name IN ('Dashboard', 'Donors', 'Students', 'Sponsorships')
+WHERE r.name = 'operator' AND m.name IN ('Leave Management')
 ON CONFLICT (role_id, module_id) DO NOTHING;

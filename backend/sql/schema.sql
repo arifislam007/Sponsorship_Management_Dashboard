@@ -14,6 +14,22 @@ BEGIN
 END
 $$;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'leave_type') THEN
+        CREATE TYPE leave_type AS ENUM ('Casual', 'Special');
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'leave_request_status') THEN
+        CREATE TYPE leave_request_status AS ENUM ('Pending', 'Approved', 'Rejected');
+    END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS students (
     id SERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
@@ -59,6 +75,29 @@ CREATE TABLE IF NOT EXISTS accounting_ledger (
     type ledger_type NOT NULL,
     amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
     closing_balance NUMERIC(14, 2) NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS leave_balances (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    casual_balance NUMERIC(6, 2) NOT NULL DEFAULT 12,
+    special_balance NUMERIC(6, 2) NOT NULL DEFAULT 0,
+    special_last_accrued_at DATE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    leave_type leave_type NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    days_requested NUMERIC(6, 2) NOT NULL CHECK (days_requested > 0),
+    reason TEXT NOT NULL,
+    status leave_request_status NOT NULL DEFAULT 'Pending',
+    reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMP,
+    remarks TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Acknowledgment letters stored for reuse

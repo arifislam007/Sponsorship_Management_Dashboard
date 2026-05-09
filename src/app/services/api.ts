@@ -96,6 +96,42 @@ export interface DonorStatementPayload {
   format: 'csv' | 'pdf';
 }
 
+export type LeaveType = 'Casual' | 'Special';
+export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
+
+export interface LeaveBalanceApi {
+  user_id: number;
+  username: string;
+  full_name: string;
+  casual_balance: number;
+  special_balance: number;
+  special_last_accrued_at?: string | null;
+}
+
+export interface LeaveRequestApi {
+  id: number;
+  user_id: number;
+  username: string;
+  full_name: string;
+  leave_type: LeaveType;
+  start_date: string;
+  end_date: string;
+  days_requested: number;
+  reason: string;
+  status: LeaveStatus;
+  reviewed_by?: number | null;
+  reviewed_by_name?: string | null;
+  reviewed_at?: string | null;
+  remarks?: string | null;
+  created_at: string;
+}
+
+export interface LeaveOverviewApi {
+  current_user_balance: LeaveBalanceApi;
+  balances: LeaveBalanceApi[];
+  requests: LeaveRequestApi[];
+}
+
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -198,6 +234,27 @@ export const api = {
   addLedgerEntry: (payload: CreateLedgerEntryPayload) =>
     request<LedgerEntry>('/ledger/entries', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getLeaveOverview: () => request<LeaveOverviewApi>('/leaves/overview'),
+
+  getLeaveRequests: (params?: { user_id?: number; status?: LeaveStatus }) => {
+    const qs = new URLSearchParams();
+    if (params?.user_id) qs.append('user_id', String(params.user_id));
+    if (params?.status) qs.append('status', params.status);
+    return request<{ requests: LeaveRequestApi[] }>(`/leaves/requests${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+
+  createLeaveRequest: (payload: { user_id?: number; leave_type: LeaveType; start_date: string; end_date: string; reason: string }) =>
+    request<{ request: LeaveRequestApi }>('/leaves/requests', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateLeaveRequestStatus: (id: number, payload: { status: Exclude<LeaveStatus, 'Pending'>; remarks?: string }) =>
+    request<{ request: LeaveRequestApi }>(`/leaves/requests/${id}/status`, {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     }),
 

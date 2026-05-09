@@ -10,6 +10,19 @@ import { Donors } from "./components/Donors";
 import { Sponsorships } from "./components/Sponsorships";
 import { AcknowledgmentLetter } from "./components/AcknowledgmentLetter";
 import { Admin } from "./components/Admin";
+import { LeaveManagement } from "./components/LeaveManagement";
+import { Navigate } from "react-router";
+import { useAuth } from "./contexts/AuthContext";
+
+function DashboardLanding() {
+  const { hasRole } = useAuth();
+
+  if (hasRole('admin')) {
+    return <Dashboard />;
+  }
+
+  return <Navigate to="/dashboard/leaves" replace />;
+}
 
 export const router = createBrowserRouter([
   {
@@ -28,7 +41,7 @@ export const router = createBrowserRouter([
     path: "/dashboard",
     Component: RootLayout,
     children: [
-      { index: true, Component: Dashboard },
+      { index: true, Component: DashboardLanding },
       { path: "students", Component: () => (
         <ProtectedRoute requiredModule="Students">
           <Students />
@@ -47,6 +60,11 @@ export const router = createBrowserRouter([
       { path: "acknowledgment-letter", Component: () => (
         <ProtectedRoute requiredModule="Export">
           <AcknowledgmentLetter />
+        </ProtectedRoute>
+      ) },
+      { path: "leaves", Component: () => (
+        <ProtectedRoute requiredModule="Leave Management">
+          <LeaveManagement />
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (
