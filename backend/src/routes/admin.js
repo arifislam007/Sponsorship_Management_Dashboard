@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { authMiddleware, roleMiddleware, requirePermission } from '../middleware/auth.js';
 
@@ -9,7 +10,10 @@ adminRouter.get('/users', authMiddleware, roleMiddleware('admin'), async (req, r
   try {
     const result = await pool.query(
       `SELECT u.id, u.username, u.email, u.full_name, u.is_active, u.created_at,
-              COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), ARRAY[]::text[]) as roles
+              COALESCE(
+                json_agg(json_build_object('id', r.id, 'name', r.name)) FILTER (WHERE r.id IS NOT NULL),
+                '[]'::json
+              ) as roles
        FROM users u
        LEFT JOIN user_roles ur ON u.id = ur.user_id
        LEFT JOIN roles r ON ur.role_id = r.id
@@ -102,6 +106,101 @@ adminRouter.put('/users/:userId/roles', authMiddleware, roleMiddleware('admin'),
   } catch (error) {
     console.error('Update user roles error:', error);
     res.status(500).json({ message: 'Failed to update user roles' });
+  }
+});
+
+// Update user profile fields
+adminRouter.put('/users/:userId', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  const { userId } = req.params;
+  const { username, email, fullName } = req.body;
+
+  if (!username || !email || !fullName) {
+    return res.status(400).json({ message: 'username, email and fullName are required' });
+  }
+
+  try {
+    const existingUser = await pool.query(
+      `SELECT id FROM users
+       WHERE (username = $1 OR email = $2) AND id <> $3`,
+      [username, email, userId]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ message: 'Username or email already exists' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users
+       SET username = $1,
+           email = $2,
+           full_name = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING id, username, email, full_name, is_active, created_at`,
+      [username, email, fullName, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    return res.json({ user: result.rows[0] });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ message: 'Failed to update user' });
+  }
+});
+
+// Reset user password
+adminRouter.put('/users/:userId/password', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  const { userId } = req.params;
+  const { password } = req.body;
+
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(String(password), 10);
+    const result = await pool.query(
+      `UPDATE users
+       SET password_hash = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING id`,
+      [passwordHash, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    return res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Reset user password error:', error);
+    res.status(500).json({ message: 'Failed to reset password' });
+  }
+});
+
+// Delete user
+adminRouter.delete('/users/:userId', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    if (Number(userId) === req.user.userId) {
+      return res.status(400).json({ message: 'You cannot delete your own account' });
+    }
+
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    return res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ message: 'Failed to delete user' });
   }
 });
 

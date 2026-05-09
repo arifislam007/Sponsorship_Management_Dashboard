@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CalendarDays, CheckCircle2, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { api, LeaveBalanceApi, LeaveRequestApi, LeaveType } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const DEFAULT_FORM = {
   leave_type: 'Casual' as LeaveType,
@@ -13,7 +14,25 @@ function getTodayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatDisplayDate(value?: string | null) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export function LeaveManagement() {
+  const { user, hasRole } = useAuth();
   const [balances, setBalances] = useState<LeaveBalanceApi[]>([]);
   const [currentBalance, setCurrentBalance] = useState<LeaveBalanceApi | null>(null);
   const [requests, setRequests] = useState<LeaveRequestApi[]>([]);
@@ -23,8 +42,17 @@ export function LeaveManagement() {
   const [success, setSuccess] = useState('');
   const [statusBusyId, setStatusBusyId] = useState<number | null>(null);
   const [formData, setFormData] = useState(DEFAULT_FORM);
+  const isAdmin = hasRole('admin');
 
-  const pendingCount = useMemo(() => requests.filter((request) => request.status === 'Pending').length, [requests]);
+  const visibleRequests = useMemo(() => {
+    if (isAdmin || !user) {
+      return requests;
+    }
+
+    return requests.filter((request) => request.user_id === user.id);
+  }, [isAdmin, requests, user]);
+
+  const pendingCount = useMemo(() => visibleRequests.filter((request) => request.status === 'Pending').length, [visibleRequests]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -226,9 +254,11 @@ export function LeaveManagement() {
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Leave requests</h2>
-            <p className="text-sm text-gray-600">Review pending requests and approve or reject them.</p>
+            <p className="text-sm text-gray-600">
+              {isAdmin ? 'Review pending requests and approve or reject them.' : 'View your own leave requests and status updates.'}
+            </p>
           </div>
-          <p className="text-sm text-gray-500">Total: {requests.length}</p>
+          <p className="text-sm text-gray-500">Total: {visibleRequests.length}</p>
         </div>
 
         {isLoading ? (
@@ -251,7 +281,7 @@ export function LeaveManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {requests.map((request) => (
+                {visibleRequests.map((request) => (
                   <tr key={request.id} className="align-top">
                     <td className="px-6 py-4">
                       <p className="font-medium text-gray-900">{request.full_name}</p>
@@ -277,7 +307,7 @@ export function LeaveManagement() {
                       {request.remarks && <p className="mt-1 text-xs text-gray-500">Remarks: {request.remarks}</p>}
                     </td>
                     <td className="px-6 py-4">
-                      {request.status === 'Pending' ? (
+                      {isAdmin && request.status === 'Pending' ? (
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -301,16 +331,16 @@ export function LeaveManagement() {
                       ) : (
                         <div className="text-xs text-gray-500">
                           <p>Reviewed by: {request.reviewed_by_name || 'N/A'}</p>
-                          <p>{request.reviewed_at ? `Reviewed at ${request.reviewed_at}` : ''}</p>
+                          <p>{request.reviewed_at ? `Reviewed at ${formatDisplayDate(request.reviewed_at)}` : ''}</p>
                         </div>
                       )}
                     </td>
                   </tr>
                 ))}
-                {requests.length === 0 && (
+                {visibleRequests.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
-                      No leave requests found.
+                      {isAdmin ? 'No leave requests found.' : 'No leave requests found for your account.'}
                     </td>
                   </tr>
                 )}
@@ -320,44 +350,48 @@ export function LeaveManagement() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Leave balances</h2>
-          <p className="text-sm text-gray-600">Per-user leave status, including special leave accrual.</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-6 py-3">Employee</th>
-                <th className="px-6 py-3">Casual balance</th>
-                <th className="px-6 py-3">Special balance</th>
-                <th className="px-6 py-3">Special accrual month</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {balances.map((balance) => (
-                <tr key={balance.user_id}>
-                  <td className="px-6 py-4">
-                    <p className="font-medium text-gray-900">{balance.full_name}</p>
-                    <p className="text-xs text-gray-500">@{balance.username}</p>
-                  </td>
-                  <td className="px-6 py-4 text-gray-700">{balance.casual_balance}</td>
-                  <td className="px-6 py-4 text-gray-700">{balance.special_balance}</td>
-                  <td className="px-6 py-4 text-gray-700">{balance.special_last_accrued_at || 'Not allocated yet'}</td>
-                </tr>
-              ))}
-              {balances.length === 0 && (
+      {isAdmin && (
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-200 px-6 py-4">
+            <h2 className="text-lg font-semibold text-gray-900">Leave balances</h2>
+            <p className="text-sm text-gray-600">Per-user leave status, including special leave accrual.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
-                  <td colSpan={4} className="px-6 py-10 text-center text-gray-500">
-                    No leave balances found.
-                  </td>
+                  <th className="px-6 py-3">Employee</th>
+                  <th className="px-6 py-3">Casual balance</th>
+                  <th className="px-6 py-3">Special balance</th>
+                  <th className="px-6 py-3">Special accrual month</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {balances.map((balance) => (
+                  <tr key={balance.user_id}>
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-gray-900">{balance.full_name}</p>
+                      <p className="text-xs text-gray-500">@{balance.username}</p>
+                    </td>
+                    <td className="px-6 py-4 text-gray-700">{balance.casual_balance}</td>
+                    <td className="px-6 py-4 text-gray-700">{balance.special_balance}</td>
+                    <td className="px-6 py-4 text-gray-700">
+                      {formatDisplayDate(balance.special_last_accrued_at) || 'Not allocated yet'}
+                    </td>
+                  </tr>
+                ))}
+                {balances.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-gray-500">
+                      No leave balances found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

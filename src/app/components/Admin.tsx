@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound } from 'lucide-react';
 
 interface User {
   id: number;
@@ -43,6 +43,13 @@ export function Admin() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({
+    username: '',
+    email: '',
+    fullName: '',
+    roleNames: [] as string[],
+    password: '',
+  });
   const [newUserForm, setNewUserForm] = useState({ username: '', email: '', password: '', fullName: '', roles: [] as string[] });
 
   useEffect(() => {
@@ -52,6 +59,27 @@ export function Admin() {
       loadModules();
     }
   }, [token]);
+
+  useEffect(() => {
+    if (selectedUser) {
+      setEditForm({
+        username: selectedUser.username,
+        email: selectedUser.email,
+        fullName: selectedUser.full_name,
+        roleNames: (selectedUser.roles || []).map((role) => role?.name).filter(Boolean),
+        password: '',
+      });
+      return;
+    }
+
+    setEditForm({
+      username: '',
+      email: '',
+      fullName: '',
+      roleNames: [],
+      password: '',
+    });
+  }, [selectedUser]);
 
   const loadUsers = async () => {
     try {
@@ -184,6 +212,130 @@ export function Admin() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update user status');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateSelectedUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const userResponse = await fetch(`/api/v1/admin/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          username: editForm.username,
+          email: editForm.email,
+          fullName: editForm.fullName,
+        }),
+      });
+
+      if (!userResponse.ok) {
+        const data = await userResponse.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to update user');
+      }
+
+      const rolesResponse = await fetch(`/api/v1/admin/users/${selectedUser.id}/roles`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ roleNames: editForm.roleNames }),
+      });
+
+      if (!rolesResponse.ok) {
+        const data = await rolesResponse.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to update user roles');
+      }
+
+      setSuccess('User updated successfully');
+      setSelectedUser(null);
+      await loadUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update user');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedUser) return;
+
+    if (!editForm.password || editForm.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`/api/v1/admin/users/${selectedUser.id}/password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ password: editForm.password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to reset password');
+      }
+
+      setEditForm((current) => ({ ...current, password: '' }));
+      setSuccess('Password reset successfully');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteSelectedUser = async (userId: number) => {
+    if (!window.confirm('Delete this user permanently?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`/api/v1/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to delete user');
+      }
+
+      setSuccess('User deleted successfully');
+      if (selectedUser?.id === userId) {
+        setSelectedUser(null);
+      }
+      await loadUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete user');
     } finally {
       setIsLoading(false);
     }
@@ -431,11 +583,18 @@ export function Admin() {
                                 Leave only
                               </button>
                               <button
-                                onClick={() => handleToggleUserStatus(user.id, user.is_active)}
+                                onClick={() => handleDeleteSelectedUser(user.id)}
                                 disabled={isLoading}
-                                className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                               >
                                 {isLoading ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                              </button>
+                              <button
+                                onClick={() => handleToggleUserStatus(user.id, user.is_active)}
+                                disabled={isLoading}
+                                className="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                              >
+                                {user.is_active ? 'Deactivate' : 'Activate'}
                               </button>
                             </div>
                           </td>
@@ -486,6 +645,128 @@ export function Admin() {
           )}
         </div>
       </div>
+
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-200 p-5">
+              <div>
+                <p className="text-sm font-semibold text-[#14856E] uppercase tracking-[0.18em]">Edit user</p>
+                <h3 className="text-2xl font-bold text-gray-900 mt-1">{selectedUser.username}</h3>
+              </div>
+              <button onClick={() => setSelectedUser(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSelectedUser} className="p-5 space-y-5 overflow-auto">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 text-sm font-medium text-gray-700">
+                  Username
+                  <input
+                    type="text"
+                    value={editForm.username}
+                    onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#14856E]"
+                  />
+                </label>
+                <label className="space-y-2 text-sm font-medium text-gray-700">
+                  Email
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#14856E]"
+                  />
+                </label>
+              </div>
+
+              <label className="space-y-2 text-sm font-medium text-gray-700 block">
+                Full name
+                <input
+                  type="text"
+                  value={editForm.fullName}
+                  onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#14856E]"
+                />
+              </label>
+
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Roles</p>
+                <div className="flex flex-wrap gap-3">
+                  {roles.map((role) => (
+                    <label key={role.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editForm.roleNames.includes(role.name)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditForm({ ...editForm, roleNames: [...editForm.roleNames, role.name] });
+                          } else {
+                            setEditForm({ ...editForm, roleNames: editForm.roleNames.filter((name) => name !== role.name) });
+                          }
+                        }}
+                        className="w-4 h-4 rounded"
+                      />
+                      <span className="text-sm text-gray-700">{role.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+                <p className="text-sm font-semibold text-gray-900">Reset password</p>
+                <div className="flex flex-col md:flex-row gap-3">
+                  <input
+                    type="password"
+                    value={editForm.password}
+                    onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                    placeholder="New password"
+                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#14856E]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleResetPassword}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#14856E] px-4 py-2.5 text-[#14856E] hover:bg-[#14856E] hover:text-white transition-colors"
+                  >
+                    <KeyRound size={16} />
+                    Reset password
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSelectedUser(selectedUser.id)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 size={16} />
+                  Delete user
+                </button>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUser(null)}
+                    className="rounded-lg border border-gray-300 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#14856E] px-4 py-2.5 text-white hover:bg-[#0f6b5a] transition-colors disabled:opacity-50"
+                  >
+                    {isLoading ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                    Save changes
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
