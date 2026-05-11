@@ -577,24 +577,24 @@ export function Admin() {
                               </button>
                               <button
                                 onClick={() => handleGrantLeaveOnlyAccess(user.id, user.roles || [])}
-                                disabled={isLoading || user.roles?.some((r) => r?.name === 'admin')}
-                                title={user.roles?.some((r) => r?.name === 'admin') ? 'Cannot modify admin user' : ''}
+                                disabled={isLoading || user.username === 'admin'}
+                                title={user.username === 'admin' ? 'Cannot modify admin user' : ''}
                                 className="px-3 py-2 text-xs font-medium rounded-lg border border-[#14856E] text-[#14856E] hover:bg-[#14856E] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 Leave only
                               </button>
                               <button
                                 onClick={() => handleDeleteSelectedUser(user.id)}
-                                disabled={isLoading || user.roles?.some((r) => r?.name === 'admin')}
-                                title={user.roles?.some((r) => r?.name === 'admin') ? 'Admin users cannot be deleted' : ''}
+                                disabled={isLoading || user.username === 'admin'}
+                                title={user.username === 'admin' ? 'Admin user cannot be deleted' : ''}
                                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                               >
                                 {isLoading ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
                               </button>
                               <button
                                 onClick={() => handleToggleUserStatus(user.id, user.is_active)}
-                                disabled={isLoading || (user.roles?.some((r) => r?.name === 'admin') && user.is_active)}
-                                title={user.roles?.some((r) => r?.name === 'admin') && user.is_active ? 'Cannot deactivate admin user' : ''}
+                                disabled={isLoading || (user.username === 'admin' && user.is_active)}
+                                title={user.username === 'admin' && user.is_active ? 'Cannot deactivate admin user' : ''}
                                 className="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                               >
                                 {user.is_active ? 'Deactivate' : 'Activate'}
@@ -656,7 +656,7 @@ export function Admin() {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-[#14856E] uppercase tracking-[0.18em]">Edit user</p>
-                  {selectedUser.roles?.some((r) => r?.name === 'admin') && (
+                  {selectedUser.username === 'admin' && (
                     <span className="px-2.5 py-0.5 bg-amber-100 border border-amber-300 text-amber-700 text-xs font-semibold rounded-full">ADMIN</span>
                   )}
                 </div>
@@ -701,10 +701,10 @@ export function Admin() {
 
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Roles</p>
-                {selectedUser?.roles.some((r) => r?.name === 'admin') && (
+                {selectedUser?.username === 'admin' && (
                   <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <p className="text-sm text-amber-800 font-medium">⚠️ Admin Protection Active</p>
-                    <p className="text-xs text-amber-700 mt-1">Admin role cannot be removed. Only password can be edited.</p>
+                    <p className="text-xs text-amber-700 mt-1">Admin user cannot be modified. Only password can be edited.</p>
                   </div>
                 )}
                 <div className="flex flex-wrap gap-3">
@@ -720,11 +720,11 @@ export function Admin() {
                             setEditForm({ ...editForm, roleNames: editForm.roleNames.filter((name) => name !== role.name) });
                           }
                         }}
-                        disabled={role.name === 'admin' && selectedUser?.roles.some((r) => r?.name === 'admin')}
+                        disabled={selectedUser?.username === 'admin'}
                         className="w-4 h-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                       <span className={`text-sm ${
-                        role.name === 'admin' && selectedUser?.roles.some((r) => r?.name === 'admin')
+                        selectedUser?.username === 'admin'
                           ? 'text-gray-400'
                           : 'text-gray-700'
                       }`}>{role.name}</span>
@@ -758,8 +758,8 @@ export function Admin() {
                 <button
                   type="button"
                   onClick={() => handleDeleteSelectedUser(selectedUser.id)}
-                  disabled={selectedUser?.roles.some((r) => r?.name === 'admin')}
-                  title={selectedUser?.roles.some((r) => r?.name === 'admin') ? 'Admin users cannot be deleted' : ''}
+                  disabled={selectedUser?.username === 'admin'}
+                  title={selectedUser?.username === 'admin' ? 'Admin user cannot be deleted' : ''}
                   className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 >
                   <Trash2 size={16} />
