@@ -40,8 +40,10 @@ export function StatementGenerator({ isOpen, onClose, onGenerate }: StatementGen
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <div className="bg-[#14856E] p-2 rounded-lg">
@@ -241,7 +243,9 @@ export function StatementGenerator({ isOpen, onClose, onGenerate }: StatementGen
           </button>
         </div>
       </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 

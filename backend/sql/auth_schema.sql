@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS user_module_access (
 INSERT INTO roles (name, description) VALUES
     ('admin', 'Administrator with full access'),
     ('accountant', 'Accountant with access to accounting and donor data'),
-    ('operator', 'Operator with limited access to data entry and viewing')
+    ('operator', 'Operator with limited access to data entry and viewing'),
+    ('ict', 'ICT coordinator with access to ICT module and student profiles')
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert modules
@@ -74,6 +75,8 @@ INSERT INTO modules (name, description, route_name) VALUES
     ('Students', 'Student management', 'students'),
     ('Sponsorships', 'Sponsorship management', 'sponsorships'),
     ('Leave Management', 'Leave management and approvals', 'leave-management'),
+    ('ICT', 'ICT student profiles and admission forms', 'ict'),
+    ('School Operations', 'School operations including class routines, curriculum, attendance, and exams', 'school-operations'),
     ('Accounting', 'Accounting and ledger', 'accounting'),
     ('Export', 'Data export functionality', 'export'),
     ('Admin', 'Admin panel and user management', 'admin')
@@ -86,16 +89,29 @@ FROM roles r, modules m
 WHERE r.name = 'admin'
 ON CONFLICT (role_id, module_id) DO NOTHING;
 
--- Insert default permissions for accountant
+-- Insert default permissions for accountant (accounting and export access)
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, true
+FROM roles r, modules m
+WHERE r.name = 'accountant' AND m.name IN ('Accounting', 'Export')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
 INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
 SELECT r.id, m.id, true, true, true, false
 FROM roles r, modules m
 WHERE r.name = 'accountant' AND m.name IN ('Leave Management')
 ON CONFLICT (role_id, module_id) DO NOTHING;
 
--- Insert default permissions for operator
+-- Insert default permissions for operator (limited access)
 INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
 SELECT r.id, m.id, true, true, false, false
 FROM roles r, modules m
 WHERE r.name = 'operator' AND m.name IN ('Leave Management')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- Insert permissions for ICT role (full ICT module access)
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, true
+FROM roles r, modules m
+WHERE r.name = 'ict' AND m.name IN ('ICT')
 ON CONFLICT (role_id, module_id) DO NOTHING;

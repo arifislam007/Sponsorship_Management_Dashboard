@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Download, Printer, Calendar, FileText } from 'lucide-react';
+import { Plus, Download, Printer, Calendar, FileText, Book, ReceiptText } from 'lucide-react';
 import { AddLedgerEntryPanel } from './AddLedgerEntryPanel';
 import { StatementGenerator } from './StatementGenerator';
 import { api, CreateLedgerEntryPayload, LedgerEntry, LedgerSummary } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 
 export function Accounting() {
+  const [activeTab, setActiveTab] = useState<'ledger-book' | 'voucher'>('ledger-book');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -73,6 +75,35 @@ export function Accounting() {
         <p className="text-sm md:text-base text-gray-600 mt-1">Track all financial transactions</p>
       </div>
 
+      <div className="mb-6 border-b border-gray-200">
+        <div className="flex gap-4 md:gap-8">
+          <button
+            onClick={() => setActiveTab('ledger-book')}
+            className={`flex items-center gap-2 px-4 py-3 font-medium border-b-2 transition-colors ${
+              activeTab === 'ledger-book'
+                ? 'border-[#14856E] text-[#14856E]'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Book size={18} />
+            <span>Ledger Book</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('voucher')}
+            className={`flex items-center gap-2 px-4 py-3 font-medium border-b-2 transition-colors ${
+              activeTab === 'voucher'
+                ? 'border-[#14856E] text-[#14856E]'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <ReceiptText size={18} />
+            <span>Voucher</span>
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'ledger-book' && (
+        <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 mb-6">
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm text-gray-600">Opening Balance</p>
@@ -211,7 +242,7 @@ export function Accounting() {
                     }`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {entry.date}
+                      {formatDate(entry.date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {entry.voucher_ref}
@@ -260,7 +291,7 @@ export function Accounting() {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="font-semibold text-gray-900">{entry.voucher_ref}</p>
-                <p className="text-xs text-gray-500">{entry.date}</p>
+                <p className="text-xs text-gray-500">{formatDate(entry.date)}</p>
               </div>
               <span
                 className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
@@ -286,6 +317,71 @@ export function Accounting() {
           </div>
         ))}
       </div>
+        </>
+      )}
+
+      {activeTab === 'voucher' && (
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Voucher Management</h2>
+            <p className="text-sm text-gray-600">View and manage all vouchers for accounting entries.</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="bg-[#14856E]/5 border border-[#14856E]/20 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">Total Vouchers</p>
+                <p className="text-2xl font-bold text-[#14856E]">{ledgerEntries.length}</p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-gray-600 mb-1">Unique Voucher References</p>
+                <p className="text-2xl font-bold text-blue-600">{Array.from(new Set(ledgerEntries.map(e => e.voucher_ref))).length}</p>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="text-md font-semibold text-gray-900 mb-4">Voucher Summary by Type</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Voucher Ref</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {ledgerEntries.slice(0, 20).map((entry) => (
+                      <tr key={entry.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 font-medium text-gray-900">{entry.voucher_ref}</td>
+                        <td className="px-4 py-2 text-gray-700">{formatDate(entry.date)}</td>
+                        <td className="px-4 py-2">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                              entry.type === 'Credit'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {entry.type.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-2 font-semibold ${entry.type === 'Credit' ? 'text-green-700' : 'text-red-700'}`}>
+                          ৳{entry.amount.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {ledgerEntries.length > 20 && (
+                <p className="text-xs text-gray-500 mt-2">Showing 20 of {ledgerEntries.length} vouchers</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <AddLedgerEntryPanel
         isOpen={isPanelOpen}

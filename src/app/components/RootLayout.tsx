@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router';
-import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays, Code2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
 
@@ -116,6 +116,22 @@ export function RootLayout() {
             >
               <CalendarDays size={20} />
               <span>Leave Management</span>
+            </NavLink>
+          )}
+
+          {canAccess('ICT') && (
+            <NavLink
+              to="/dashboard/ict"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+                  isActive
+                    ? 'bg-[#14856E] text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`
+              }
+            >
+              <Code2 size={20} />
+              <span>ICT</span>
             </NavLink>
           )}
 

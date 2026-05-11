@@ -11,6 +11,7 @@ import { Sponsorships } from "./components/Sponsorships";
 import { AcknowledgmentLetter } from "./components/AcknowledgmentLetter";
 import { Admin } from "./components/Admin";
 import { LeaveManagement } from "./components/LeaveManagement";
+import { ICT } from "./components/ICT";
 import { Navigate } from "react-router";
 import { useAuth } from "./contexts/AuthContext";
 
@@ -65,6 +66,11 @@ export const router = createBrowserRouter([
       { path: "leaves", Component: () => (
         <ProtectedRoute requiredModule="Leave Management">
           <LeaveManagement />
+        </ProtectedRoute>
+      ) },
+      { path: "ict", Component: () => (
+        <ProtectedRoute requiredModule="ICT">
+          <ICT />
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (

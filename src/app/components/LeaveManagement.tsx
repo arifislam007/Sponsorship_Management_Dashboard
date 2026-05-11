@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CalendarDays, CheckCircle2, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { api, LeaveBalanceApi, LeaveRequestApi, LeaveType } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { formatDate } from '../utils/dateFormat';
 
 const DEFAULT_FORM = {
   leave_type: 'Casual' as LeaveType,
   start_date: '',
   end_date: '',
   reason: '',
+  is_backdated: false,
 };
 
 function getTodayInputValue() {
@@ -89,6 +91,7 @@ export function LeaveManagement() {
         start_date: formData.start_date,
         end_date: formData.end_date,
         reason: formData.reason,
+        is_backdated: formData.is_backdated,
       });
 
       setSuccess('Leave request submitted successfully.');
@@ -176,7 +179,7 @@ export function LeaveManagement() {
                 <input
                   type="date"
                   value={formData.start_date}
-                  min={getTodayInputValue()}
+                  min={formData.is_backdated ? undefined : getTodayInputValue()}
                   onChange={(event) => setFormData({ ...formData, start_date: event.target.value })}
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
                 />
@@ -188,7 +191,7 @@ export function LeaveManagement() {
                 <input
                   type="date"
                   value={formData.end_date}
-                  min={formData.start_date || getTodayInputValue()}
+                  min={formData.start_date || (formData.is_backdated ? undefined : getTodayInputValue())}
                   onChange={(event) => setFormData({ ...formData, end_date: event.target.value })}
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
                 />
@@ -204,6 +207,16 @@ export function LeaveManagement() {
                 />
               </label>
             </div>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.is_backdated}
+                onChange={(event) => setFormData({ ...formData, is_backdated: event.target.checked })}
+                className="w-4 h-4 rounded border-gray-300 text-[#14856E] focus:ring-[#14856E] cursor-pointer"
+              />
+              <span>This is a backdated leave request</span>
+            </label>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
@@ -293,8 +306,8 @@ export function LeaveManagement() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-gray-700">
-                      <p>{request.start_date}</p>
-                      <p className="text-xs text-gray-500">to {request.end_date}</p>
+                      <p>{formatDate(request.start_date)}</p>
+                      <p className="text-xs text-gray-500">to {formatDate(request.end_date)}</p>
                     </td>
                     <td className="px-6 py-4 text-gray-700">{request.days_requested}</td>
                     <td className="px-6 py-4">

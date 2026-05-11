@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Search, Plus, Link2, User, Heart, X } from 'lucide-react';
 import { api, SponsorshipApi } from '../services/api';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
+import { formatDate } from '../utils/dateFormat';
 
 export function Sponsorships() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -194,7 +195,7 @@ export function Sponsorships() {
                     ৳{Number(sponsorship.amount).toLocaleString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {sponsorship.start_date}
+                    {formatDate(sponsorship.start_date)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
@@ -266,7 +267,7 @@ export function Sponsorships() {
             <div className="p-5 space-y-3 text-sm text-gray-700">
               <p><span className="font-semibold">Donor:</span> {selectedSponsorship.donor_name}</p>
               <p><span className="font-semibold">Amount:</span> ৳{Number(selectedSponsorship.amount).toLocaleString()}</p>
-              <p><span className="font-semibold">Start date:</span> {selectedSponsorship.start_date}</p>
+              <p><span className="font-semibold">Start date:</span> {formatDate(selectedSponsorship.start_date)}</p>
               <p><span className="font-semibold">Status:</span> {selectedSponsorship.status.charAt(0).toUpperCase() + selectedSponsorship.status.slice(1)}</p>
               <div className="flex gap-3 pt-2">
                 <button

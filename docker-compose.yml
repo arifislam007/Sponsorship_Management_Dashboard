@@ -36,6 +36,27 @@ services:
     # ports:
     #   - "8000:8000"
 
+  ict-backend:
+    build:
+      context: ./ict-backend
+      dockerfile: Dockerfile
+    container_name: sombhabona-ict
+    restart: unless-stopped
+    environment:
+      DB_HOST: sombhabona-db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here}
+      PORT: 5002
+      NODE_ENV: ${NODE_ENV:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+    # ports:
+    #   - "5002:5002"
+
   frontend:
     build:
       context: .

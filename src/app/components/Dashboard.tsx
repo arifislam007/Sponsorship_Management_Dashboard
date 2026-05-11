@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Users, Heart, TrendingUp, DollarSign } from 'lucide-react';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { api, DashboardSummary, DonationTrendPoint } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 
 export function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -179,7 +180,7 @@ export function Dashboard() {
                     {activity.donor}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {activity.date}
+                    {formatDate(activity.date)}
                   </td>
                 </tr>
               ))}
