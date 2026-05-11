@@ -84,6 +84,21 @@ adminRouter.put('/users/:userId/roles', authMiddleware, roleMiddleware('admin'),
   }
 
   try {
+    // Check if user currently has admin role
+    const userRolesResult = await pool.query(
+      `SELECT r.name FROM user_roles ur
+       JOIN roles r ON ur.role_id = r.id
+       WHERE ur.user_id = $1`,
+      [userId]
+    );
+
+    const hasAdminRole = userRolesResult.rows.some(role => role.name === 'admin');
+
+    // Protect admin user - cannot remove admin role
+    if (hasAdminRole && !roleNames.includes('admin')) {
+      return res.status(403).json({ message: 'Cannot remove admin role. Admin user privileges are protected.' });
+    }
+
     // Remove existing roles
     await pool.query('DELETE FROM user_roles WHERE user_id = $1', [userId]);
 
@@ -191,6 +206,21 @@ adminRouter.delete('/users/:userId', authMiddleware, roleMiddleware('admin'), as
       return res.status(400).json({ message: 'You cannot delete your own account' });
     }
 
+    // Check if user has admin role
+    const userRolesResult = await pool.query(
+      `SELECT r.name FROM user_roles ur
+       JOIN roles r ON ur.role_id = r.id
+       WHERE ur.user_id = $1`,
+      [userId]
+    );
+
+    const hasAdminRole = userRolesResult.rows.some(role => role.name === 'admin');
+
+    // Protect admin user - cannot delete admin users
+    if (hasAdminRole) {
+      return res.status(403).json({ message: 'Cannot delete admin user. Admin users are protected and cannot be removed.' });
+    }
+
     const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
 
     if (result.rows.length === 0) {
@@ -278,6 +308,21 @@ adminRouter.put('/users/:userId/status', authMiddleware, roleMiddleware('admin')
   }
 
   try {
+    // Check if user has admin role
+    const userRolesResult = await pool.query(
+      `SELECT r.name FROM user_roles ur
+       JOIN roles r ON ur.role_id = r.id
+       WHERE ur.user_id = $1`,
+      [userId]
+    );
+
+    const hasAdminRole = userRolesResult.rows.some(role => role.name === 'admin');
+
+    // Protect admin user - cannot deactivate admin users
+    if (hasAdminRole && !isActive) {
+      return res.status(403).json({ message: 'Cannot deactivate admin user. Admin users must remain active.' });
+    }
+
     await pool.query(
       'UPDATE users SET is_active = $1 WHERE id = $2',
       [isActive, userId]
