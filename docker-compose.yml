@@ -33,6 +33,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
     # ports:
     #   - "8000:8000"
 
@@ -70,3 +72,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_uploads:

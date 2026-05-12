@@ -13,6 +13,11 @@ import { sponsorshipsRouter } from './routes/sponsorships.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 
@@ -24,6 +29,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Serve uploads directory for PDF downloads
+app.use('/uploads', express.static(join(__dirname, '../../uploads')));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

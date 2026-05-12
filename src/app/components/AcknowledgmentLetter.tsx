@@ -1,9 +1,10 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { Plus, Trash2, Download, Save, Printer, History, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Download, Save, Printer, History, ChevronDown, FileText, Archive, DollarSign, Users, Eye, X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { api } from '../services/api';
 import logo from '../../../logo.png';
+import udaySignature from '../../../Uday_signature.jpg';
 
 interface DonationEntry {
   date: string;
@@ -16,6 +17,27 @@ interface LetterData {
   donationType: string;
   projectName: string;
   message: string;
+}
+
+interface SavedLetterApi {
+  id: number;
+  donor_id?: number | null;
+  template_name?: string | null;
+  subject?: string | null;
+  content: string;
+  is_public?: boolean;
+  created_at?: string;
+}
+
+interface SavedLetterRecord {
+  id: number;
+  donorName: string;
+  projectName: string;
+  amount: number;
+  createdAt: string;
+  content: string;
+  formData: LetterData | null;
+  pdf_filename?: string | null;
 }
 
 const defaultLetterData: LetterData = {
@@ -37,6 +59,42 @@ const donationTypes = [
   'Annual Contribution',
 ];
 
+const LETTER_META_PREFIX = '<!--ACKNOWLEDGMENT_META:';
+const LETTER_META_SUFFIX = '-->';
+
+const safeParseLetterData = (content: string): LetterData | null => {
+  const metaStart = content.indexOf(LETTER_META_PREFIX);
+  if (metaStart === -1) return null;
+
+  const metaEnd = content.indexOf(LETTER_META_SUFFIX, metaStart);
+  if (metaEnd === -1) return null;
+
+  const encodedMeta = content.slice(metaStart + LETTER_META_PREFIX.length, metaEnd);
+
+  try {
+    const decoded = decodeURIComponent(atob(encodedMeta));
+    const parsed = JSON.parse(decoded) as LetterData;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      donorName: parsed.donorName || '',
+      donations: Array.isArray(parsed.donations) && parsed.donations.length > 0 ? parsed.donations : [{ date: '', amount: '' }],
+      donationType: parsed.donationType || 'Sponsor a Child',
+      projectName: parsed.projectName || '',
+      message: parsed.message || '',
+    };
+  } catch {
+    return null;
+  }
+};
+
+const stripLetterMeta = (content: string) => {
+  const metaStart = content.indexOf(LETTER_META_PREFIX);
+  const metaEnd = content.indexOf(LETTER_META_SUFFIX, metaStart);
+
+  if (metaStart === -1 || metaEnd === -1) return content;
+  return content.slice(metaEnd + LETTER_META_SUFFIX.length).trimStart();
+};
+
 export function AcknowledgmentLetter() {
   const form = useForm<LetterData>({
     defaultValues: defaultLetterData,
@@ -44,16 +102,55 @@ export function AcknowledgmentLetter() {
 
   const [showHistory, setShowHistory] = useState(false);
   const [letterHistory, setLetterHistory] = useState<LetterData[]>([]);
+  const [savedLetters, setSavedLetters] = useState<SavedLetterRecord[]>([]);
   const [showDonorDropdown, setShowDonorDropdown] = useState(false);
   const [donors, setDonors] = useState<any[]>([]);
   const [isLoadingDonors, setIsLoadingDonors] = useState(false);
+  const [isSavingToDb, setIsSavingToDb] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [viewingLetter, setViewingLetter] = useState<SavedLetterRecord | null>(null);
   const printableLetterRef = useRef<HTMLDivElement>(null);
+  const viewModalRef = useRef<HTMLDivElement>(null);
 
   const formData = form.watch();
 
   const todayDate = useMemo(() => format(new Date(), 'MMMM dd, yyyy'), []);
 
   useEffect(() => {
+    const loadSavedLetters = async () => {
+      try {
+        const response = await api.getLetters({ template_name: 'Acknowledgment of Donation' });
+        const letters = Array.isArray(response) ? response : response.letters || response.data || [];
+
+        const normalized = (letters as SavedLetterApi[])
+          .filter((letter) => typeof letter?.content === 'string')
+          .map((letter: any) => {
+            const formData = safeParseLetterData(letter.content);
+            const fallbackDonorName = formData?.donorName || 'Unnamed donor';
+            const fallbackProjectName = formData?.projectName || letter.template_name || '';
+            const amount = formData?.donations?.reduce((sum, donation) => sum + (Number(donation.amount) || 0), 0) || 0;
+
+            return {
+              id: letter.id,
+              donorName: fallbackDonorName,
+              projectName: fallbackProjectName,
+              amount,
+              createdAt: letter.created_at || new Date().toISOString(),
+              content: stripLetterMeta(letter.content),
+              formData,
+              pdf_filename: letter.pdf_filename || null,
+            } as SavedLetterRecord;
+          })
+          .sort((left, right) => Number(new Date(right.createdAt)) - Number(new Date(left.createdAt)));
+
+        setSavedLetters(normalized);
+      } catch (error) {
+        console.error('Failed to load saved letters:', error);
+        setSavedLetters([]);
+      }
+    };
+
     const loadDonors = async () => {
       setIsLoadingDonors(true);
       try {
@@ -67,6 +164,8 @@ export function AcknowledgmentLetter() {
         setIsLoadingDonors(false);
       }
     };
+
+    loadSavedLetters();
     loadDonors();
   }, []);
 
@@ -77,6 +176,18 @@ export function AcknowledgmentLetter() {
       }, 0),
     [formData.donations]
   );
+
+  const savedLettersTotal = useMemo(
+    () => savedLetters.reduce((sum, letter) => sum + letter.amount, 0),
+    [savedLetters],
+  );
+
+  const uniqueSavedDonors = useMemo(
+    () => new Set(savedLetters.map((letter) => letter.donorName).filter(Boolean)).size,
+    [savedLetters],
+  );
+
+  const latestSavedAt = savedLetters[0]?.createdAt ? format(new Date(savedLetters[0].createdAt), 'MMM dd, yyyy') : 'No saved letters yet';
 
   const hasValidData = formData.donorName && formData.donations.some((d) => d.amount);
 
@@ -100,14 +211,25 @@ export function AcknowledgmentLetter() {
     setShowHistory(true);
   };
 
-  const handleSaveToDB = async () => {
+  const buildSavedContent = () => {
+    if (!printableLetterRef.current) return '';
+
+    const content = printableLetterRef.current.innerHTML;
+    const encodedMeta = btoa(encodeURIComponent(JSON.stringify(formData)));
+    return `${LETTER_META_PREFIX}${encodedMeta}${LETTER_META_SUFFIX}${content}`;
+  };
+
+  const persistLetterToDb = async () => {
     if (!printableLetterRef.current) {
       alert('Letter content not available to save.');
       return;
     }
 
     try {
-      const content = printableLetterRef.current.innerHTML;
+      setIsSavingToDb(true);
+      setSaveMessage('');
+
+      const content = buildSavedContent();
 
       // Try to resolve donor id from selected donor name
       const matchedDonor = donors.find((d) => d.name === formData.donorName);
@@ -120,17 +242,37 @@ export function AcknowledgmentLetter() {
         subject: 'Acknowledgment of Donation',
         content,
         is_public: false,
+        donor_name: formData.donorName,
       };
 
       const res = await api.saveLetter(payload);
       // push to local history as well
       setLetterHistory((prev) => [formData, ...prev.slice(0, 9)]);
-      alert('Letter saved successfully.');
+      setSavedLetters((prev) => [
+        {
+          id: res?.letter?.id || Date.now(),
+          donorName: formData.donorName || 'Unnamed donor',
+          projectName: formData.projectName || '',
+          amount: totalAmount,
+          createdAt: res?.letter?.created_at || new Date().toISOString(),
+          content: stripLetterMeta(content),
+          formData,
+          pdf_filename: res?.letter?.pdf_filename || null,
+        },
+        ...prev,
+      ]);
+      setSaveMessage('Letter saved to database with PDF.');
       return res;
     } catch (error) {
       console.error('Failed to save letter:', error);
       alert('Failed to save letter.');
+    } finally {
+      setIsSavingToDb(false);
     }
+  };
+
+  const handleSaveToDB = async () => {
+    await persistLetterToDb();
   };
 
   const handleLoadDraft = (item: LetterData) => {
@@ -138,50 +280,77 @@ export function AcknowledgmentLetter() {
     setShowHistory(false);
   };
 
-  const handleGeneratePDF = () => {
-    if (!printableLetterRef.current) return;
+  const handleLoadSavedLetter = (item: SavedLetterRecord) => {
+    if (item.formData) {
+      form.reset(item.formData);
+      setShowHistory(false);
+      return;
+    }
 
-    const letterContent = printableLetterRef.current.innerHTML;
-    const htmlContent = `
+    setShowHistory(false);
+    alert('This saved letter can be viewed and printed, but the original form data was not stored for editing.');
+  };
+
+  const handleViewSavedLetter = (letter: SavedLetterRecord) => {
+    setViewingLetter(letter);
+    setViewModalOpen(true);
+  };
+
+  const handleDownloadPDF = (pdfFilename: string | null | undefined) => {
+    if (!pdfFilename) {
+      alert('PDF not available for this letter.');
+      return;
+    }
+    window.open(`/api/v1/letters/pdf/${pdfFilename}`, '_blank');
+  };
+
+  const handlePrintSavedLetter = () => {
+    if (!viewingLetter || !viewModalRef.current) return;
+
+    const letterContent = viewModalRef.current.innerHTML;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
           <title>Acknowledgment Letter</title>
-            <style>
+          <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, Helvetica, sans-serif; color: #111827; }
+            body { font-family: Arial, Helvetica, sans-serif; color: #111827; line-height: 1.6; }
             .container { max-width: 900px; margin: 0 auto; padding: 0.5cm; }
             table { width: 100%; border-collapse: collapse; margin: 16px 0; }
             th, td { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 14px; }
             th { background: #f3f4f6; text-align: left; }
-            .text-right { text-align: right; }
             img { max-width: 100%; height: auto; }
             @media print {
               body { margin: 0; padding: 0; }
               .container { padding: 0.5cm; }
+              * { page-break-inside: avoid; }
             }
           </style>
         </head>
         <body>
           <div class="container">${letterContent}</div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() {
+                window.close();
+              };
+            };
+          </script>
         </body>
       </html>
-    `;
-
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `acknowledgment-letter-${Date.now()}.html`;
-    
-    const popup = window.open(url, '_blank');
-    if (popup) {
-      popup.focus();
-    }
+    `);
+    printWindow.document.close();
   };
 
   const handlePrint = () => {
     if (!printableLetterRef.current) return;
+
+    void persistLetterToDb();
 
     const letterContent = printableLetterRef.current.innerHTML;
     const printWindow = window.open('', '_blank');
@@ -225,59 +394,135 @@ export function AcknowledgmentLetter() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="mb-6">
+      <div className="mb-6 md:mb-8">
         <div className="md:hidden mb-4">
           <h1 className="text-xl font-bold text-[#14856E]">Sombhabona</h1>
           <p className="text-xs text-gray-600">Foundation Dashboard</p>
         </div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Acknowledgment Letter</h1>
-        <p className="text-sm md:text-base text-gray-600 mt-1">
-          Create professional donation acknowledgment letters
-        </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs md:text-sm font-semibold uppercase tracking-[0.18em] text-[#14856E]">Accounting Module</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mt-1">Acknowledgment Letter</h1>
+            <p className="text-sm md:text-base text-gray-600 mt-1">
+              Create, save, and reuse donor acknowledgment letters from one dashboard.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="inline-flex items-center gap-2 self-start lg:self-auto rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <History size={16} />
+            Saved letters ({savedLetters.length})
+          </button>
+        </div>
       </div>
 
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-gray-900">Generate & Manage Letters</p>
-        </div>
-        <button
-          onClick={() => setShowHistory(!showHistory)}
-          className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <History size={16} />
-          History ({letterHistory.length})
-        </button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6 md:mb-8">
+        {[
+          { title: 'Saved Letters', value: savedLetters.length.toString(), icon: FileText, color: 'bg-[#14856E]' },
+          { title: 'Unique Donors', value: uniqueSavedDonors.toString(), icon: Users, color: 'bg-blue-500' },
+          { title: 'Total Value', value: `৳${savedLettersTotal.toLocaleString()}`, icon: DollarSign, color: 'bg-amber-500' },
+          { title: 'Latest Save', value: latestSavedAt, icon: Archive, color: 'bg-rose-500' },
+        ].map((stat) => (
+          <div key={stat.title} className="rounded-xl bg-white border border-gray-200 shadow-sm p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-gray-600">{stat.title}</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{stat.value}</p>
+              </div>
+              <div className={`${stat.color} rounded-xl p-3`}>
+                <stat.icon size={22} className="text-white" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {showHistory && (
-        <div className="mb-6 bg-white rounded-lg shadow p-4 border border-gray-200">
-          <h3 className="text-base font-semibold text-gray-900 mb-3">Recent Drafts</h3>
-          {letterHistory.length === 0 ? (
-            <p className="text-sm text-gray-500">No saved drafts yet.</p>
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm p-4 md:p-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Saved Letters</h3>
+              <p className="text-sm text-gray-600">Letters saved in the database for future reuse</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowHistory(false)}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Close
+            </button>
+          </div>
+          {savedLetters.length === 0 ? (
+            <p className="text-sm text-gray-500">No saved letters found yet.</p>
           ) : (
-            <div className="space-y-2">
-              {letterHistory.map((item, index) => (
-                <button
-                  key={`${item.donorName}-${index}`}
-                  onClick={() => handleLoadDraft(item)}
-                  className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {savedLetters.map((letter) => (
+                <div
+                  key={letter.id}
+                  className="text-left rounded-xl border border-gray-200 p-4 hover:border-[#14856E] hover:shadow-md transition-all"
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="font-medium text-gray-900">{item.donorName || 'Unnamed donor'}</span>
-                    <span className="text-sm text-gray-500">
-                      ৳{item.donations.reduce((sum, row) => sum + Number(row.amount || 0), 0).toLocaleString()}
-                    </span>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <p className="font-semibold text-gray-900">{letter.donorName}</p>
+                      <p className="text-xs text-gray-500 mt-1">{letter.projectName || 'Acknowledgment Letter'}</p>
+                    </div>
+                    <span className="text-xs font-medium text-gray-500">{format(new Date(letter.createdAt), 'MMM dd, yyyy')}</span>
                   </div>
-                </button>
+                  <div className="mb-3 pb-3 border-b border-gray-200">
+                    <span className="text-sm font-semibold text-[#14856E]">৳{letter.amount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleViewSavedLetter(letter)}
+                      title="View letter"
+                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Eye size={14} />
+                      View
+                    </button>
+                    {letter.pdf_filename && (
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadPDF(letter.pdf_filename)}
+                        title="Download PDF"
+                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
+                      >
+                        <Download size={14} />
+                        PDF
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleLoadSavedLetter(letter)}
+                      title="Load to edit"
+                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-xs bg-[#14856E]/10 text-[#14856E] rounded-lg hover:bg-[#14856E]/20 transition-colors"
+                    >
+                      <FileText size={14} />
+                      Load
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-6 items-start">
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Donor Information</h2>
+      {saveMessage && (
+        <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {saveMessage}
+        </div>
+      )}
+
+      <div className="grid xl:grid-cols-[1.05fr_0.95fr] gap-6 items-start">
+        <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5 md:p-6">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-gray-900">Donor Workspace</h2>
+            <p className="text-sm text-gray-600 mt-1">Prepare the letter and persist it for future usage.</p>
+          </div>
 
           <form className="space-y-5">
             <div>
@@ -420,19 +665,12 @@ export function AcknowledgmentLetter() {
               />
             </div>
 
-            <div className="grid grid-cols-4 gap-2 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={handleGeneratePDF}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors"
-              >
-                <Download size={16} />
-                <span className="hidden sm:inline">View PDF</span>
-              </button>
+            <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-200">
               <button
                 type="button"
                 onClick={handlePrint}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                disabled={isSavingToDb}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
                 <Printer size={16} />
                 <span className="hidden sm:inline">Print</span>
@@ -448,19 +686,20 @@ export function AcknowledgmentLetter() {
               <button
                 type="button"
                 onClick={handleSaveToDB}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                disabled={isSavingToDb}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-50"
               >
                 <Save size={16} />
-                <span className="hidden sm:inline">Save to DB</span>
+                <span className="hidden sm:inline">{isSavingToDb ? 'Saving...' : 'Save to DB'}</span>
               </button>
             </div>
           </form>
         </div>
 
-        <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+        <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
             <h2 className="text-lg font-semibold text-gray-900">Letter Preview</h2>
-            <p className="text-sm text-gray-600">Real-time preview of acknowledgment letter</p>
+            <p className="text-sm text-gray-600">Real-time preview and database-ready letter content</p>
           </div>
 
           <div className="p-6 max-h-[calc(100vh-220px)] overflow-auto" ref={printableLetterRef}>
@@ -549,17 +788,99 @@ export function AcknowledgmentLetter() {
                   <p>Thank you once again for your unwavering support and trust in our mission.</p>
 
                   <p className="pt-4">Yours sincerely,</p>
+
+                  <div className="mt-8 flex flex-col items-center text-center">
+                    <img src={udaySignature} alt="Saad Ibn Maruf signature" className="h-16 w-auto object-contain mb-3" />
+                    <p className="font-semibold text-gray-900">(Saad Ibn Maruf)</p>
+                    <p className="text-sm text-gray-700">Account and Admin</p>
+                    <p className="text-sm text-gray-700">Sombhabona</p>
+                  </div>
                 </div>
 
-                <div className="mt-12 pt-8 border-t border-gray-300 text-sm text-gray-700 text-center" style={{marginTop: '3.5rem', paddingTop: '1.5rem'}}>
-                  <p className="font-semibold">Account and Admin</p>
-                  <p>Sombhabona</p>
-                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* View Letter Modal */}
+      {viewModalOpen && viewingLetter && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between gap-3 p-6 border-b border-gray-200 bg-gray-50">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Saved Letter - {viewingLetter.donorName}</h3>
+                <p className="text-sm text-gray-600 mt-1">{viewingLetter.projectName || 'Acknowledgment Letter'} • {format(new Date(viewingLetter.createdAt), 'MMM dd, yyyy')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewModalOpen(false);
+                  setViewingLetter(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-auto p-6">
+              <div ref={viewModalRef} className="bg-white border border-gray-200 rounded-lg p-6 md:p-8" style={{paddingLeft: '0.5cm', paddingRight: '0.5cm'}}>
+                <div dangerouslySetInnerHTML={{ __html: viewingLetter.content }} />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex gap-3 p-6 border-t border-gray-200 bg-gray-50">
+              {viewingLetter.pdf_filename && (
+                <button
+                  type="button"
+                  onClick={() => handleDownloadPDF(viewingLetter.pdf_filename)}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+                >
+                  <Download size={16} />
+                  Download PDF
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handlePrintSavedLetter}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Printer size={16} />
+                Print
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewingLetter.formData) {
+                    form.reset(viewingLetter.formData);
+                    setViewModalOpen(false);
+                    setViewingLetter(null);
+                    setShowHistory(false);
+                  }
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <FileText size={16} />
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewModalOpen(false);
+                  setViewingLetter(null);
+                }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
