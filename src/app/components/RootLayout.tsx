@@ -254,6 +254,20 @@ export function RootLayout() {
             </NavLink>
           )}
 
+          {canAccess('ICT') && (
+            <NavLink
+              to="/dashboard/ict"
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center flex-1 h-full ${
+                  isActive ? 'text-[#14856E]' : 'text-gray-600'
+                }`
+              }
+            >
+              <Code2 size={20} />
+              <span className="text-xs mt-1">ICT</span>
+            </NavLink>
+          )}
+
           {canAccess('Admin') && (
             <NavLink
               to="/dashboard/settings"
