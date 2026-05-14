@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, FileText, Loader2, Upload, X } from 'lucide-react';
+import logo from '../../../logo.png';
 
 const fileToDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -80,11 +81,11 @@ export function PublicICTAdmission() {
         <div className="mb-6 md:mb-8">
           <div className="inline-flex items-center gap-2 rounded-full bg-[#14856E]/10 px-4 py-2 text-sm font-semibold text-[#14856E]">
             <FileText size={16} />
-            Public ICT Admission
+            Sombhabona Learning And Innovation Hub
           </div>
-          <h1 className="mt-4 text-3xl font-black text-gray-900 md:text-5xl">Submit ICT Admission</h1>
+          <h1 className="mt-4 text-3xl font-black text-gray-900 md:text-5xl">Admission Form</h1>
           <p className="mt-3 max-w-2xl text-sm text-gray-600 md:text-base">
-            This page is public and only exposes the admission form. No dashboard access is required.
+            Please fill up this from with correct information. We will use your information for further process.
           </p>
         </div>
 
@@ -107,7 +108,7 @@ export function PublicICTAdmission() {
             <div className="space-y-6 p-6 md:p-8">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Applicant Details</h2>
-                <p className="text-sm text-gray-600">Enter the details needed for the ICT admission request.</p>
+                <p className="text-sm text-gray-600">Fill up mandatory field (*)</p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -323,11 +324,19 @@ export function PublicICTAdmission() {
               </div>
 
               <div className="mt-6 rounded-[1.75rem] bg-[#14856E] p-5 text-white shadow-lg shadow-[#14856E]/15">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">Public Admission</p>
-                <h3 className="mt-2 text-2xl font-black">No login required</h3>
-                <p className="mt-2 text-sm text-white/85">
-                  This route is intentionally isolated from the dashboard so mobile and public access stays limited to admission submission.
-                </p>
+                <div className="flex items-center gap-3">
+                  <div className="h-14 w-14 rounded-2xl bg-white/15 p-2 shadow-sm">
+                    <img src={logo} alt="Sombhabona logo" className="h-full w-full object-contain" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">Address:</p>
+                    <h3 className="mt-1 text-2xl font-black">756 West Sewrapara, Mirpur, Dhaka</h3>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-2 text-sm text-white/85">
+                  <p><span className="font-semibold text-white">Phone:</span> 01835350647</p>
+                  <p><span className="font-semibold text-white">Email:</span> info@sombhabona.com</p>
+                </div>
               </div>
             </div>
           </div>
