@@ -12,6 +12,7 @@ import { AcknowledgmentLetter } from "./components/AcknowledgmentLetter";
 import { Admin } from "./components/Admin";
 import { LeaveManagement } from "./components/LeaveManagement";
 import { ICT } from "./components/ICT";
+import { PublicICTAdmission } from "./components/PublicICTAdmission";
 import { Navigate } from "react-router";
 import { useAuth } from "./contexts/AuthContext";
 
@@ -37,6 +38,10 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/ict-admission",
+    Component: PublicICTAdmission,
   },
   {
     path: "/dashboard",

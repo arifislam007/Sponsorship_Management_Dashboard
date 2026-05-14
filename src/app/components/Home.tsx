@@ -41,6 +41,12 @@ export function Home() {
               >
                 View Students
               </a>
+              <Link
+                to="/ict-admission"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#14856E] px-6 py-3 text-white font-semibold hover:bg-[#0f6b5a] transition-colors"
+              >
+                Apply for ICT Admission
+              </Link>
             </div>
             <div className="mt-8 grid grid-cols-3 gap-4 max-w-xl">
               <div className="rounded-2xl bg-white/80 backdrop-blur p-4 shadow-sm border border-white">

@@ -690,7 +690,9 @@ export function ICT() {
         <div className="rounded-lg bg-white shadow">
           <div className="flex items-center justify-between border-b border-gray-200 p-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Admission Applications</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Admission Applications
+              </h2>
               <p className="text-sm text-gray-600">View all admission applications</p>
             </div>
             <button
