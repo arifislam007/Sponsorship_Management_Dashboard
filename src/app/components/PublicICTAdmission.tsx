@@ -23,9 +23,12 @@ const DEFAULT_FORM = {
   current_address: '',
   permanent_address: '',
   training_institute: '',
+  training_institute_custom: '',
   course: '',
+  course_custom: '',
   admission_date: '',
   referral_source: '',
+  referral_source_custom: '',
   profile_image: '',
   remarks: '',
 };
@@ -47,6 +50,31 @@ export function PublicICTAdmission() {
       setError((err as Error).message || 'Failed to load image');
     }
   };
+
+  const referralSourceOptions = [
+    'Facebook',
+    'Other Online',
+    'Friends',
+    'Student of Sombhbona',
+    'Other',
+    'Custom write option',
+  ];
+
+  const trainingInstituteOptions = [
+    'Sombhabona Innovation Hub',
+    'Sombhabona Learning And Innovation Hub',
+    'Custom write option',
+  ];
+
+  const courseOptions = [
+    '45 Days Income Challenge',
+    'Digital Marketing For Freelancing',
+    'Graphic Design For Freelancing',
+    'IT Support',
+    'Basic Computer Operation',
+    'Spoken English',
+    'Custom write option',
+  ];
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -212,12 +240,33 @@ export function PublicICTAdmission() {
                 </label>
                 <label className="space-y-2 text-sm font-medium text-gray-700">
                   Referral Source
-                  <input
-                    type="text"
+                  <select
                     value={form.referral_source}
-                    onChange={(e) => setForm({ ...form, referral_source: e.target.value })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        referral_source: e.target.value,
+                        referral_source_custom: e.target.value === 'Custom write option' ? form.referral_source_custom : '',
+                      })
+                    }
                     className="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
+                  >
+                    <option value="">Select referral source</option>
+                    {referralSourceOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  {form.referral_source === 'Custom write option' && (
+                    <input
+                      type="text"
+                      value={form.referral_source_custom}
+                      onChange={(e) => setForm({ ...form, referral_source_custom: e.target.value })}
+                      placeholder="Write referral source"
+                      className="mt-2 w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    />
+                  )}
                 </label>
               </div>
 
@@ -244,21 +293,63 @@ export function PublicICTAdmission() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2 text-sm font-medium text-gray-700">
                   Training Institute
-                  <input
-                    type="text"
+                  <select
                     value={form.training_institute}
-                    onChange={(e) => setForm({ ...form, training_institute: e.target.value })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        training_institute: e.target.value,
+                        training_institute_custom: e.target.value === 'Custom write option' ? form.training_institute_custom : '',
+                      })
+                    }
                     className="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
+                  >
+                    <option value="">Select training institute</option>
+                    {trainingInstituteOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  {form.training_institute === 'Custom write option' && (
+                    <input
+                      type="text"
+                      value={form.training_institute_custom}
+                      onChange={(e) => setForm({ ...form, training_institute_custom: e.target.value })}
+                      placeholder="Write training institute"
+                      className="mt-2 w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    />
+                  )}
                 </label>
                 <label className="space-y-2 text-sm font-medium text-gray-700">
                   Course
-                  <input
-                    type="text"
+                  <select
                     value={form.course}
-                    onChange={(e) => setForm({ ...form, course: e.target.value })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        course: e.target.value,
+                        course_custom: e.target.value === 'Custom write option' ? form.course_custom : '',
+                      })
+                    }
                     className="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
+                  >
+                    <option value="">Select course</option>
+                    {courseOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  {form.course === 'Custom write option' && (
+                    <input
+                      type="text"
+                      value={form.course_custom}
+                      onChange={(e) => setForm({ ...form, course_custom: e.target.value })}
+                      placeholder="Write course"
+                      className="mt-2 w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    />
+                  )}
                 </label>
               </div>
 
