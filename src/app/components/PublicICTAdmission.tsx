@@ -364,14 +364,14 @@ export function PublicICTAdmission() {
                   />
                 </label>
                 <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Photo
+                  Photo (upload or capture)
                   <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     onChange={handlePhotoChange}
                     className="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-[#14856E]"
                   />
+                  <p className="text-xs text-gray-500">You can upload an existing photo or use your device camera.</p>
                 </label>
               </div>
 
