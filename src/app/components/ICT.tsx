@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, FileText, Plus, AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { Users, FileText, Plus, AlertCircle, CheckCircle2, Loader2, X, Pencil } from 'lucide-react';
 import { formatDate } from '../utils/dateFormat';
 import logo from '../../../logo.png';
 
@@ -15,15 +15,8 @@ const fileToDataUrl = (file: File) =>
 
 const DEFAULT_STUDENT_FORM = {
   student_name: '',
-  email: '',
   phone: '',
-  date_of_birth: '',
-  gender: 'Male',
-  father_name: '',
-  mother_name: '',
-  guardian_contact: '',
-  skills: '',
-  certifications: '',
+  course: '',
 };
 
 const DEFAULT_ADMISSION_FORM = {
@@ -121,6 +114,9 @@ export function ICT() {
   const [isLoadingStudentProfile, setIsLoadingStudentProfile] = useState(false);
   const [studentEarnings, setStudentEarnings] = useState<any[]>([]);
   const [isSavingEarning, setIsSavingEarning] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [editProfileForm, setEditProfileForm] = useState({ student_name: '', phone: '', course: '' });
   const [earningForm, setEarningForm] = useState({
     earning_source: '',
     amount: '',
@@ -257,14 +253,11 @@ export function ICT() {
   };
 
   const handleEditAdmission = (admission: any) => {
-    // populate form with admission data (map known keys)
     const form: any = { ...DEFAULT_ADMISSION_FORM };
     Object.keys(form).forEach((k) => {
-      if (admission[k] !== undefined) form[k] = admission[k];
+      if (admission[k] !== null && admission[k] !== undefined) form[k] = admission[k];
     });
-    // also map some extended fields if present
-    form.full_name = admission.full_name || admission.full_name;
-    setAdmissionForm({ ...form, ...(admission || {}) });
+    setAdmissionForm(form);
     setAdmissionEditId(admission.id);
     setIsAdmissionFormOpen(true);
   };
@@ -368,30 +361,6 @@ export function ICT() {
     if (!selectedStudentProfile) return;
 
     const displayName = selectedStudentProfile.student_name || selectedStudentProfile.full_name || 'Student';
-    
-    // Only include specified fields in print
-    const fieldsToShow = ['father_name', 'mother_name', 'education_level', 'course'];
-    const admissionFields = Object.entries(selectedStudentProfile.admission_data || {})
-      .filter(([key]) => fieldsToShow.includes(key))
-      .map(([key, value]) => {
-        const fieldLabels: Record<string, string> = {
-          'father_name': 'Father',
-          'mother_name': 'Mother',
-          'education_level': 'Education',
-          'course': 'Course',
-        };
-        const label = fieldLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-        const displayValue =
-          typeof value === 'boolean'
-            ? value
-              ? 'Yes'
-              : 'No'
-            : value === null || value === undefined || value === ''
-              ? 'N/A'
-              : String(value);
-        return `<tr><td>${label}</td><td>${displayValue}</td></tr>`;
-      })
-      .join('');
 
     const earningRows = studentEarnings
       .map(
@@ -426,15 +395,14 @@ export function ICT() {
             .meta p { margin: 0; opacity: 0.92; }
             .content { padding: 24px; }
             h2 { margin: 0 0 12px; font-size: 16px; color: #14856E; text-transform: uppercase; letter-spacing: 0.14em; }
-            .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-            .card { border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px; background: #fff; }
+            .info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+            .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; }
             .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; margin-bottom: 4px; }
-            .value { font-size: 14px; color: #0f172a; white-space: pre-wrap; }
+            .value { font-size: 14px; color: #0f172a; }
             table { width: 100%; border-collapse: collapse; }
             th, td { border: 1px solid #e2e8f0; padding: 10px 12px; font-size: 13px; vertical-align: top; }
             th { background: #f8fafc; text-align: left; }
             .section { margin-bottom: 20px; }
-            .full { grid-column: 1 / -1; }
             @media print { body { background: #fff; padding: 0; } .sheet { border: none; border-radius: 0; } }
           </style>
         </head>
@@ -445,16 +413,20 @@ export function ICT() {
               ${selectedStudentProfile.profile_image ? `<img src="${selectedStudentProfile.profile_image}" alt="${displayName}" class="photo" />` : '<div class="photo"></div>'}
               <div class="meta">
                 <h1>${displayName}</h1>
-                <p>${selectedStudentProfile.email || 'N/A'}</p>
-                <p>${selectedStudentProfile.phone || ''}</p>
+                <p>${selectedStudentProfile.phone || 'N/A'}</p>
+                <p>${selectedStudentProfile.course || 'N/A'}</p>
               </div>
             </div>
             <div class="content">
-              <div class="section">
-                <h2>Personal Information</h2>
-                <table>
-                  <tbody>${admissionFields}</tbody>
-                </table>
+              <div class="info-grid">
+                <div class="card">
+                  <div class="label">Phone No</div>
+                  <div class="value">${selectedStudentProfile.phone || 'N/A'}</div>
+                </div>
+                <div class="card">
+                  <div class="label">Course</div>
+                  <div class="value">${selectedStudentProfile.course || 'N/A'}</div>
+                </div>
               </div>
 
               <div class="section">
@@ -487,6 +459,43 @@ export function ICT() {
     setIsViewingStudentProfile(false);
     setSelectedStudentProfile(null);
     setStudentEarnings([]);
+    setIsEditingProfile(false);
+  };
+
+  const openEditProfile = () => {
+    if (!selectedStudentProfile) return;
+    setEditProfileForm({
+      student_name: selectedStudentProfile.student_name || '',
+      phone: selectedStudentProfile.phone || '',
+      course: selectedStudentProfile.course || '',
+    });
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentProfile) return;
+    setIsSavingProfile(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/ict/students/${selectedStudentProfile.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editProfileForm),
+      });
+      if (!res.ok) throw new Error('Failed to update profile');
+      const json = await res.json();
+      setSelectedStudentProfile(json.student);
+      setStudents((prev) =>
+        prev.map((s) => (s.id === json.student.id ? { ...s, ...json.student } : s))
+      );
+      setIsEditingProfile(false);
+      setSuccess('Profile updated successfully');
+    } catch (err) {
+      setError((err as Error).message || 'Failed to update profile');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleAddEarningStatement = async (event: React.FormEvent) => {
@@ -656,9 +665,8 @@ export function ICT() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Phone</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Gender</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Phone No</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Course</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>
                   </tr>
                 </thead>
@@ -666,9 +674,8 @@ export function ICT() {
                   {students.map((student) => (
                     <tr key={student.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 font-medium text-gray-900">{student.student_name}</td>
-                      <td className="px-6 py-4 text-gray-700">{student.email}</td>
                       <td className="px-6 py-4 text-gray-700">{student.phone || 'N/A'}</td>
-                      <td className="px-6 py-4 text-gray-700">{student.gender || 'N/A'}</td>
+                      <td className="px-6 py-4 text-gray-700">{student.course || 'N/A'}</td>
                       <td className="px-6 py-4 text-gray-700">
                         <button
                           onClick={() => openStudentProfile(student)}
@@ -791,117 +798,37 @@ export function ICT() {
             </div>
 
             <form onSubmit={handleAddStudent} className="space-y-4 p-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Student Name *
-                  <input
-                    type="text"
-                    value={studentForm.student_name}
-                    onChange={(e) => setStudentForm({ ...studentForm, student_name: e.target.value })}
-                    required
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Email *
-                  <input
-                    type="email"
-                    value={studentForm.email}
-                    onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                    required
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
-                </label>
-              </div>
+              <label className="block space-y-2 text-sm font-medium text-gray-700">
+                Student Name *
+                <input
+                  type="text"
+                  value={studentForm.student_name}
+                  onChange={(e) => setStudentForm({ ...studentForm, student_name: e.target.value })}
+                  required
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                />
+              </label>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Phone
-                  <input
-                    type="tel"
-                    value={studentForm.phone}
-                    onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Date of Birth
-                  <input
-                    type="date"
-                    value={studentForm.date_of_birth}
-                    onChange={(e) => setStudentForm({ ...studentForm, date_of_birth: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
-                </label>
-              </div>
+              <label className="block space-y-2 text-sm font-medium text-gray-700">
+                Phone No
+                <input
+                  type="tel"
+                  value={studentForm.phone}
+                  onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                />
+              </label>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Gender
-                  <select
-                    value={studentForm.gender}
-                    onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </label>
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Father's Name
-                  <input
-                    type="text"
-                    value={studentForm.father_name}
-                    onChange={(e) => setStudentForm({ ...studentForm, father_name: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
-                </label>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Mother's Name
-                  <input
-                    type="text"
-                    value={studentForm.mother_name}
-                    onChange={(e) => setStudentForm({ ...studentForm, mother_name: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Guardian Contact
-                  <input
-                    type="tel"
-                    value={studentForm.guardian_contact}
-                    onChange={(e) => setStudentForm({ ...studentForm, guardian_contact: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                  />
-                </label>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Skills
-                  <textarea
-                    value={studentForm.skills}
-                    onChange={(e) => setStudentForm({ ...studentForm, skills: e.target.value })}
-                    rows={3}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                    placeholder="List technical skills"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-gray-700">
-                  Certifications
-                  <textarea
-                    value={studentForm.certifications}
-                    onChange={(e) => setStudentForm({ ...studentForm, certifications: e.target.value })}
-                    rows={3}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
-                    placeholder="List certifications held"
-                  />
-                </label>
-              </div>
+              <label className="block space-y-2 text-sm font-medium text-gray-700">
+                Course
+                <input
+                  type="text"
+                  value={studentForm.course}
+                  onChange={(e) => setStudentForm({ ...studentForm, course: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  placeholder="e.g. Web Design, Graphics, Office Applications"
+                />
+              </label>
 
               <div className="flex items-center gap-3 pt-2">
                 <button
@@ -1226,6 +1153,13 @@ export function ICT() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={openEditProfile}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    <Pencil size={16} />
+                    Edit Profile
+                  </button>
+                  <button
                     onClick={handlePrintStudentProfile}
                     className="inline-flex items-center gap-2 rounded-lg border border-[#14856E] bg-white px-3 py-2 text-sm font-semibold text-[#14856E] transition-colors hover:bg-[#14856E]/5"
                   >
@@ -1275,73 +1209,86 @@ export function ICT() {
                               {selectedStudentProfile.student_name || selectedStudentProfile.full_name || 'Student'}
                             </h4>
                             <div className="flex flex-wrap gap-2 pt-2 text-sm text-white/90">
-                              <span className="rounded-full bg-white/15 px-3 py-1 backdrop-blur">{selectedStudentProfile.gender || 'N/A'}</span>
-                              <span className="rounded-full bg-white/15 px-3 py-1 backdrop-blur">{selectedStudentProfile.date_of_birth || 'N/A'}</span>
-                              <span className="rounded-full bg-white/15 px-3 py-1 backdrop-blur">{selectedStudentProfile.email || 'N/A'}</span>
+                              <span className="rounded-full bg-white/15 px-3 py-1 backdrop-blur">{selectedStudentProfile.phone || 'N/A'}</span>
+                              <span className="rounded-full bg-white/15 px-3 py-1 backdrop-blur">{selectedStudentProfile.course || 'N/A'}</span>
                             </div>
                           </div>
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2 lg:min-w-96">
                           <div className="rounded-2xl bg-white/10 p-4 text-white backdrop-blur-sm ring-1 ring-white/15">
-                            <p className="text-xs uppercase tracking-[0.18em] text-white/65">Phone</p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-white/65">Phone No</p>
                             <p className="mt-1 font-semibold">{selectedStudentProfile.phone || 'N/A'}</p>
                           </div>
                           <div className="rounded-2xl bg-white/10 p-4 text-white backdrop-blur-sm ring-1 ring-white/15">
-                            <p className="text-xs uppercase tracking-[0.18em] text-white/65">Admissions</p>
-                            <p className="mt-1 font-semibold">{Object.keys(selectedStudentProfile.admission_data || {}).length} fields</p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-white/65">Course</p>
+                            <p className="mt-1 font-semibold">{selectedStudentProfile.course || 'N/A'}</p>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid gap-4 bg-white p-5 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Email</p>
-                        <p className="mt-1 text-sm text-gray-900">{selectedStudentProfile.email || 'N/A'}</p>
+                    {isEditingProfile ? (
+                      <form onSubmit={handleSaveProfile} className="space-y-4 bg-white p-5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#14856E]">Edit Profile</p>
+                        <label className="block space-y-1.5 text-sm font-medium text-gray-700">
+                          Student Name *
+                          <input
+                            type="text"
+                            value={editProfileForm.student_name}
+                            onChange={(e) => setEditProfileForm({ ...editProfileForm, student_name: e.target.value })}
+                            required
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                          />
+                        </label>
+                        <label className="block space-y-1.5 text-sm font-medium text-gray-700">
+                          Phone No
+                          <input
+                            type="tel"
+                            value={editProfileForm.phone}
+                            onChange={(e) => setEditProfileForm({ ...editProfileForm, phone: e.target.value })}
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                          />
+                        </label>
+                        <label className="block space-y-1.5 text-sm font-medium text-gray-700">
+                          Course
+                          <input
+                            type="text"
+                            value={editProfileForm.course}
+                            onChange={(e) => setEditProfileForm({ ...editProfileForm, course: e.target.value })}
+                            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                            placeholder="e.g. Web Design, Graphics, Office Applications"
+                          />
+                        </label>
+                        <div className="flex items-center gap-3 pt-1">
+                          <button
+                            type="submit"
+                            disabled={isSavingProfile}
+                            className="inline-flex items-center gap-2 rounded-lg bg-[#14856E] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0f6b5a] disabled:opacity-60"
+                          >
+                            {isSavingProfile ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                            Save Changes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingProfile(false)}
+                            className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="grid gap-4 bg-white p-5 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Phone No</p>
+                          <p className="mt-1 text-sm text-gray-900">{selectedStudentProfile.phone || 'N/A'}</p>
+                        </div>
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Course</p>
+                          <p className="mt-1 text-sm text-gray-900">{selectedStudentProfile.course || 'N/A'}</p>
+                        </div>
                       </div>
-                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Phone</p>
-                        <p className="mt-1 text-sm text-gray-900">{selectedStudentProfile.phone || 'N/A'}</p>
-                      </div>
-                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Gender</p>
-                        <p className="mt-1 text-sm text-gray-900">{selectedStudentProfile.gender || 'N/A'}</p>
-                      </div>
-                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Date of Birth</p>
-                        <p className="mt-1 text-sm text-gray-900">{selectedStudentProfile.date_of_birth || 'N/A'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <div className="mb-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-[#14856E] uppercase tracking-[0.18em]">Admission Snapshot</p>
-                        <h4 className="text-lg font-bold text-gray-900">All transferred admission data</h4>
-                      </div>
-                      <span className="rounded-full bg-[#14856E]/10 px-3 py-1 text-xs font-semibold text-[#14856E]">
-                        {Object.keys(selectedStudentProfile.admission_data || {}).length} fields
-                      </span>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {Object.entries(selectedStudentProfile.admission_data || {})
-                        .filter(([key]) => !['id', 'student_id', 'created_at', 'updated_at', 'profile_image'].includes(key))
-                        .map(([key, value]) => (
-                          <div key={key} className={key === 'remarks' || key === 'admission_notes' ? 'sm:col-span-2' : ''}>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              {key.replace(/_/g, ' ')}
-                            </p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-gray-900">
-                              {typeof value === 'boolean'
-                                ? (value ? 'Yes' : 'No')
-                                : value === null || value === undefined || value === ''
-                                  ? 'N/A'
-                                  : String(value)}
-                            </p>
-                          </div>
-                        ))}
-                    </div>
+                    )}
                   </div>
                 </section>
 

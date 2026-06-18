@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Search, Upload, Plus, User, X, Star } from 'lucide-react';
+import { Search, Upload, Plus, User, X } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddStudentModal } from './AddStudentModal';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
-import { BulkStudentUploadModal } from './BulkStudentUploadModal';
 import { api } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
 
 interface Student {
   id: number;
@@ -15,18 +13,14 @@ interface Student {
   status: 'sponsored' | 'unsponsored';
   photo?: string;
   bio?: string;
-  is_featured: boolean;
   sponsors?: Array<{ donor_id: number; donor_name: string }>;
 }
 
 export function Students() {
-  const { hasRole } = useAuth();
-  const isAdmin = hasRole('admin');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sponsored' | 'unsponsored'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSponsorshipModalOpen, setIsSponsorshipModalOpen] = useState(false);
-  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -44,7 +38,6 @@ export function Students() {
           status: student.is_sponsored ? 'sponsored' : 'unsponsored',
           photo: student.photo_url,
           bio: student.bio,
-          is_featured: student.is_featured,
           sponsors: (student as any).sponsors || [],
         }))
       );
@@ -61,13 +54,9 @@ export function Students() {
     bio?: string;
     photo_url?: string;
     is_sponsored?: boolean;
-    is_featured?: boolean;
   }) => {
     if (editingStudent) {
-      await api.updateStudent(editingStudent.id, {
-        ...payload,
-        is_featured: editingStudent.is_featured,
-      });
+      await api.updateStudent(editingStudent.id, payload);
     } else {
       await api.createStudent(payload);
     }
@@ -86,8 +75,6 @@ export function Students() {
       student.class.toString().includes(searchTerm);
     return matchesSearch;
   });
-
-  const featuredCount = students.filter((student) => student.is_featured).length;
 
   return (
     <div className="p-4 md:p-8">
@@ -113,16 +100,10 @@ export function Students() {
               <Plus size={18} />
               Add Student
             </button>
-            <button
-              onClick={() => setIsBulkUploadOpen(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors w-full sm:w-auto"
-            >
+            <button className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors w-full sm:w-auto">
               <Upload size={18} />
               Bulk Upload Excel
             </button>
-          </div>
-          <div className="rounded-lg border border-[#14856E]/20 bg-[#14856E]/5 px-4 py-2 text-sm font-semibold text-[#0f6b5a] w-full md:w-auto text-center">
-            Featured students: {featuredCount}/4
           </div>
         </div>
 
@@ -162,13 +143,6 @@ export function Students() {
                 />
               ) : (
                 <User size={64} className="text-white opacity-50" />
-              )}
-
-              {student.is_featured && (
-                <span className="absolute top-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-[#14856E] shadow-sm">
-                  <Star size={12} className="fill-[#14856E] text-[#14856E]" />
-                  Featured
-                </span>
               )}
 
               {student.bio && (
@@ -243,25 +217,6 @@ export function Students() {
                 >
                   Edit
                 </button>
-                {isAdmin && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await api.toggleStudentFeatured(student.id, !student.is_featured);
-                        await loadStudents();
-                      } catch (error) {
-                        console.error('Failed to toggle featured student:', error);
-                      }
-                    }}
-                    className={`flex-1 px-3 py-2 rounded-lg transition-colors text-sm ${
-                      student.is_featured
-                        ? 'border border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {student.is_featured ? 'Unfeature' : 'Feature'}
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -283,7 +238,6 @@ export function Students() {
           bio: editingStudent.bio,
           photo_url: editingStudent.photo,
           is_sponsored: editingStudent.status === 'sponsored',
-          is_featured: editingStudent.is_featured,
         } : null}
         mode={editingStudent ? 'edit' : 'create'}
       />
@@ -300,14 +254,6 @@ export function Students() {
             amount: number;
             status?: string;
           });
-          await loadStudents();
-        }}
-      />
-
-      <BulkStudentUploadModal
-        isOpen={isBulkUploadOpen}
-        onClose={() => setIsBulkUploadOpen(false)}
-        onUploaded={async () => {
           await loadStudents();
         }}
       />

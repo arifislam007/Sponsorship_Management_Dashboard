@@ -54,17 +54,17 @@ router.get('/students/:id/earnings', async (req, res, next) => {
 // Create new ICT student
 router.post('/students', async (req, res, next) => {
   try {
-    const { student_name, email, phone, date_of_birth, gender, father_name, mother_name, guardian_contact, skills, certifications } = req.body;
+    const { student_name, phone, course } = req.body;
 
-    if (!student_name || !email) {
-      return res.status(400).json({ message: 'student_name and email are required.' });
+    if (!student_name) {
+      return res.status(400).json({ message: 'student_name is required.' });
     }
 
     const result = await query(
-      `INSERT INTO ict_students (student_name, email, phone, date_of_birth, gender, father_name, mother_name, guardian_contact, skills, certifications)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO ict_students (student_name, phone, course)
+       VALUES ($1, $2, $3)
        RETURNING *`,
-      [student_name, email, phone, date_of_birth, gender, father_name, mother_name, guardian_contact, skills, certifications]
+      [student_name, phone || null, course || null]
     );
 
     res.status(201).json({ student: result.rows[0] });

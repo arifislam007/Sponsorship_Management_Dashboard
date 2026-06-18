@@ -59,7 +59,7 @@ function buildAdmissionPayload(fields, allowed) {
 router.get('/admissions', async (req, res, next) => {
   try {
     const result = await query(
-      `SELECT a.*, s.student_name, s.email 
+      `SELECT a.*, s.student_name, s.email AS student_email
        FROM ict_admissions a
        LEFT JOIN ict_students s ON a.student_id = s.id
        ORDER BY a.created_at DESC`
@@ -75,7 +75,7 @@ router.get('/admissions/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     const result = await query(
-      `SELECT a.*, s.student_name, s.email 
+      `SELECT a.*, s.student_name, s.email AS student_email
        FROM ict_admissions a
        LEFT JOIN ict_students s ON a.student_id = s.id
        WHERE a.id = $1`,
@@ -95,13 +95,13 @@ router.post('/admissions', async (req, res, next) => {
   try {
     // Accept all form fields from the new detailed admission form
     const fields = req.body || {};
-    if (!fields.full_name || !fields.email) {
-      return res.status(400).json({ message: 'full_name and email are required.' });
+    if (!fields.full_name) {
+      return res.status(400).json({ message: 'full_name is required.' });
     }
 
     // Build insert columns and values dynamically for safety and flexibility
       const allowed = [
-        'student_id','full_name','father_name','mother_name','guardian_name','emergency_contact','occupational_status','date_of_birth','gender','marital_status','nid_number','brc_number','current_address','current_district','current_police_station','current_union','current_post_office','current_post_code','current_village','permanent_address','permanent_district','permanent_police_station','permanent_union','permanent_post_office','permanent_post_code','permanent_village','religion','tribe','education','pwd','disability_type','total_family_members','source_of_income','number_of_earning_members','total_monthly_family_income','applicant_monthly_income','school_going_children','family_healthcare_source','recent_medical_visits','monthly_expenses','house_rent','monthly_meals','financial_status','has_savings','has_bank_account','social_security','training_institute','admission_date','course','batch','preferred_shift','registration_id','referral_source','prior_technical_skills','prior_skills_details','certification_status','training_duration','dropout_status','hours_attended','dropout_reason','competency','improvement_areas','remarks','trainee_signature','office_signature','profile_image','admission_status','admission_notes'
+        'student_id','full_name','email','father_name','mother_name','guardian_name','emergency_contact','occupational_status','date_of_birth','gender','marital_status','nid_number','brc_number','current_address','current_district','current_police_station','current_union','current_post_office','current_post_code','current_village','permanent_address','permanent_district','permanent_police_station','permanent_union','permanent_post_office','permanent_post_code','permanent_village','religion','tribe','education','pwd','disability_type','total_family_members','source_of_income','number_of_earning_members','total_monthly_family_income','applicant_monthly_income','school_going_children','family_healthcare_source','recent_medical_visits','monthly_expenses','house_rent','monthly_meals','financial_status','has_savings','has_bank_account','social_security','training_institute','admission_date','course','batch','preferred_shift','registration_id','referral_source','prior_technical_skills','prior_skills_details','certification_status','training_duration','dropout_status','hours_attended','dropout_reason','competency','improvement_areas','remarks','trainee_signature','office_signature','profile_image','admission_status','admission_notes'
       ];
 
     const { cols, params, placeholders } = buildAdmissionPayload(fields, allowed);
@@ -128,7 +128,7 @@ router.patch('/admissions/:id', async (req, res, next) => {
     const fields = req.body || {};
 
     const allowed = [
-      'student_id','full_name','father_name','mother_name','guardian_name','emergency_contact','occupational_status','date_of_birth','gender','marital_status','nid_number','brc_number','current_address','current_district','current_police_station','current_union','current_post_office','current_post_code','current_village','permanent_address','permanent_district','permanent_police_station','permanent_union','permanent_post_office','permanent_post_code','permanent_village','religion','tribe','education','pwd','disability_type','total_family_members','source_of_income','number_of_earning_members','total_monthly_family_income','applicant_monthly_income','school_going_children','family_healthcare_source','recent_medical_visits','monthly_expenses','house_rent','monthly_meals','financial_status','has_savings','has_bank_account','social_security','training_institute','admission_date','course','batch','preferred_shift','registration_id','referral_source','prior_technical_skills','prior_skills_details','certification_status','training_duration','dropout_status','hours_attended','dropout_reason','competency','improvement_areas','remarks','trainee_signature','office_signature','admission_status','admission_notes'
+      'student_id','full_name','email','father_name','mother_name','guardian_name','emergency_contact','occupational_status','date_of_birth','gender','marital_status','nid_number','brc_number','current_address','current_district','current_police_station','current_union','current_post_office','current_post_code','current_village','permanent_address','permanent_district','permanent_police_station','permanent_union','permanent_post_office','permanent_post_code','permanent_village','religion','tribe','education','pwd','disability_type','total_family_members','source_of_income','number_of_earning_members','total_monthly_family_income','applicant_monthly_income','school_going_children','family_healthcare_source','recent_medical_visits','monthly_expenses','house_rent','monthly_meals','financial_status','has_savings','has_bank_account','social_security','training_institute','admission_date','course','batch','preferred_shift','registration_id','referral_source','prior_technical_skills','prior_skills_details','certification_status','training_duration','dropout_status','hours_attended','dropout_reason','competency','improvement_areas','remarks','trainee_signature','office_signature','admission_status','admission_notes'
     ];
 
     const sets = [];
@@ -176,99 +176,10 @@ router.post('/admissions/:id/process', async (req, res, next) => {
     if (adm.rows.length === 0) return res.status(404).json({ error: 'Admission not found' });
     const admission = adm.rows[0];
 
-    // Insert into ict_students mapping the admission into the profile snapshot
-    const insertFields = [
-      'student_name',
-      'email',
-      'phone',
-      'date_of_birth',
-      'gender',
-      'father_name',
-      'mother_name',
-      'guardian_contact',
-      'nid_number',
-      'brc_number',
-      'current_address',
-      'permanent_address',
-      'religion',
-      'tribe',
-      'education',
-      'pwd',
-      'disability_type',
-      'total_family_members',
-      'earning_members',
-      'total_monthly_income',
-      'applicant_monthly_income',
-      'school_going_children',
-      'family_healthcare_source',
-      'recent_medical_visits',
-      'monthly_expenses',
-      'house_rent',
-      'monthly_meals',
-      'has_savings',
-      'has_bank_account',
-      'social_security',
-      'training_institute',
-      'admission_date',
-      'preferred_shift',
-      'registration_id',
-      'referral_source',
-      'prior_technical_skills',
-      'prior_skills_details',
-      'certification_status',
-      'training_duration',
-      'dropout_status',
-      'hours_attended',
-      'dropout_reason',
-      'competency',
-      'improvement_areas',
-      'remarks',
-      'trainee_signature',
-      'office_signature',
-      'profile_image',
-      'bio',
-      'skills',
-      'certifications',
-      'admission_data',
-    ];
-    const cols = [];
-    const params = [];
-    const placeholders = [];
-    insertFields.forEach((c) => {
-      let value;
-      if (c === 'student_name') {
-        value = admission.full_name;
-      } else if (c === 'guardian_contact') {
-        value = admission.emergency_contact;
-      } else if (c === 'earning_members') {
-        value = admission.number_of_earning_members;
-      } else if (c === 'total_monthly_income') {
-        value = admission.total_monthly_family_income;
-      } else if (c === 'bio') {
-        value = admission.remarks;
-      } else if (c === 'skills') {
-        value = admission.prior_skills_details;
-      } else if (c === 'certifications') {
-        value = admission.certification_status;
-      } else if (c === 'admission_data') {
-        value = JSON.stringify(admission);
-      } else if (Object.prototype.hasOwnProperty.call(admission, c)) {
-        value = admission[c];
-      }
-
-      if (value !== undefined) {
-        cols.push(c);
-        params.push(value);
-        placeholders.push(`$${params.length}`);
-      }
-    });
-
-    // Fallback: if student_name not set, use full_name
-    if (!cols.includes('student_name')) {
-      cols.push('student_name');
-      params.push(admission.full_name);
-      placeholders.push(`$${params.length}`);
-    }
+    // Insert into ict_students with only the required fields
+    const cols = ['student_name', 'phone', 'course'];
+    const params = [admission.full_name, admission.phone || null, admission.course || null];
+    const placeholders = ['$1', '$2', '$3'];
 
     const studentSql = `INSERT INTO ict_students (${cols.join(',')}) VALUES (${placeholders.join(',')}) RETURNING *`;
     const studentRes = await query(studentSql, params);

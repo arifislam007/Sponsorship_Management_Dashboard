@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS ict_admissions (
   student_id INT REFERENCES ict_students(id) ON DELETE CASCADE,
   -- Section 1: Basic Applicant Information
   full_name VARCHAR(150) NOT NULL,
+  email VARCHAR(150),
   father_name VARCHAR(150),
   mother_name VARCHAR(150),
   guardian_name VARCHAR(150),

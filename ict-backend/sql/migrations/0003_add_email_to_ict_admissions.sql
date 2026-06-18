@@ -1,0 +1,1 @@
+ALTER TABLE ict_admissions ADD COLUMN IF NOT EXISTS email VARCHAR(150);

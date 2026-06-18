@@ -21,7 +21,6 @@ export interface StudentApi {
   bio?: string;
   photo_url?: string;
   is_sponsored: boolean;
-  is_featured: boolean;
   sponsors?: Array<{ donor_id: number; donor_name: string }>;
 }
 
@@ -32,7 +31,6 @@ export interface CreateStudentPayload {
   bio?: string;
   photo_url?: string;
   is_sponsored?: boolean;
-  is_featured?: boolean;
 }
 
 export type UpdateStudentPayload = CreateStudentPayload;
@@ -96,57 +94,14 @@ export interface DonorStatementPayload {
   format: 'csv' | 'pdf';
 }
 
-export type LeaveType = 'Casual' | 'Special';
-export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
-
-export interface LeaveBalanceApi {
-  user_id: number;
-  username: string;
-  full_name: string;
-  casual_balance: number;
-  special_balance: number;
-  special_last_accrued_at?: string | null;
-}
-
-export interface LeaveRequestApi {
-  id: number;
-  user_id: number;
-  username: string;
-  full_name: string;
-  leave_type: LeaveType;
-  start_date: string;
-  end_date: string;
-  days_requested: number;
-  reason: string;
-  status: LeaveStatus;
-  reviewed_by?: number | null;
-  reviewed_by_name?: string | null;
-  reviewed_at?: string | null;
-  remarks?: string | null;
-  created_at: string;
-}
-
-export interface LeaveOverviewApi {
-  current_user_balance: LeaveBalanceApi;
-  balances: LeaveBalanceApi[];
-  requests: LeaveRequestApi[];
-}
-
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('authToken');
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(init?.headers ?? {}),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const response = await fetch(`${API_BASE}${path}`, {
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
     ...init,
   });
 
@@ -175,12 +130,6 @@ export const api = {
     request<StudentApi>(`/students/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
-    }),
-
-  toggleStudentFeatured: (id: number, isFeatured: boolean) =>
-    request<StudentApi>(`/students/${id}/feature`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_featured: isFeatured }),
     }),
 
   getDonors: (limit?: number, offset?: number, search?: string) => {
@@ -236,43 +185,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-
-  getLeaveOverview: () => request<LeaveOverviewApi>('/leaves/overview'),
-
-  getLeaveRequests: (params?: { user_id?: number; status?: LeaveStatus }) => {
-    const qs = new URLSearchParams();
-    if (params?.user_id) qs.append('user_id', String(params.user_id));
-    if (params?.status) qs.append('status', params.status);
-    return request<{ requests: LeaveRequestApi[] }>(`/leaves/requests${qs.toString() ? `?${qs.toString()}` : ''}`);
-  },
-
-  createLeaveRequest: (payload: { user_id?: number; leave_type: LeaveType; start_date: string; end_date: string; reason: string }) =>
-    request<{ request: LeaveRequestApi }>('/leaves/requests', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  updateLeaveRequestStatus: (id: number, payload: { status: Exclude<LeaveStatus, 'Pending'>; remarks?: string }) =>
-    request<{ request: LeaveRequestApi }>(`/leaves/requests/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-
-  // Acknowledgment letters
-  saveLetter: (payload: { student_id?: number | null; donor_id?: number | null; template_name?: string | null; subject?: string | null; content: string; is_public?: boolean }) =>
-    request<any>('/letters', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  getLetters: (params?: { student_id?: number; donor_id?: number; template_name?: string; public_only?: boolean }) => {
-    const qs = new URLSearchParams();
-    if (params?.student_id) qs.append('student_id', String(params.student_id));
-    if (params?.donor_id) qs.append('donor_id', String(params.donor_id));
-    if (params?.template_name) qs.append('template_name', params.template_name as string);
-    if (params?.public_only) qs.append('public_only', 'true');
-    return request<any>(`/letters?${qs.toString()}`);
-  },
 
   async exportDonorStatement(payload: DonorStatementPayload): Promise<Blob> {
     const response = await fetch(`${API_BASE}/exports/donor-statement`, {
