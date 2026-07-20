@@ -33,6 +33,11 @@ export async function listStudents(req, res, next) {
          s.name,
          s.class,
          s.age,
+        s.date_of_birth,
+        s.father_name,
+        s.mother_name,
+        s.family_income,
+        s.phone,
          s.bio,
          s.photo_url,
          s.is_featured,
@@ -42,7 +47,7 @@ export async function listStudents(req, res, next) {
        LEFT JOIN sponsorships sp ON sp.student_id = s.id AND sp.status = 'Active'
        LEFT JOIN donors d ON d.id = sp.donor_id
        ${whereClause}
-       GROUP BY s.id, s.name, s.class, s.age, s.bio, s.photo_url, s.is_featured, s.is_sponsored
+       GROUP BY s.id, s.name, s.class, s.age, s.date_of_birth, s.father_name, s.mother_name, s.family_income, s.phone, s.bio, s.photo_url, s.is_featured, s.is_sponsored
        ORDER BY s.id ASC`
     );
 
@@ -61,7 +66,7 @@ studentsRouter.get('/', listStudents);
 
 studentsRouter.post('/', async (req, res, next) => {
   try {
-    const { name, class: studentClass, age, bio, photo_url, is_sponsored, is_featured } = req.body;
+    const { name, class: studentClass, age, date_of_birth, father_name, mother_name, family_income, phone, bio, photo_url, is_sponsored, is_featured } = req.body;
     const parsedAge = Number(age);
 
     if (!name || !studentClass || Number.isNaN(parsedAge) || parsedAge <= 0) {
@@ -79,10 +84,10 @@ studentsRouter.post('/', async (req, res, next) => {
     }
 
     const result = await query(
-      `INSERT INTO students (name, class, age, bio, photo_url, is_sponsored, is_featured)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, name, class, age, bio, photo_url, is_featured, is_sponsored`,
-      [name, studentClass, parsedAge, bio || null, photo_url || null, Boolean(is_sponsored), featuredRequested]
+      `INSERT INTO students (name, class, age, date_of_birth, father_name, mother_name, family_income, phone, bio, photo_url, is_sponsored, is_featured)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id, name, class, age, date_of_birth, father_name, mother_name, family_income, phone, bio, photo_url, is_featured, is_sponsored`,
+      [name, studentClass, parsedAge, date_of_birth || null, father_name || null, mother_name || null, family_income || null, phone || null, bio || null, photo_url || null, Boolean(is_sponsored), featuredRequested]
     );
 
     return res.status(201).json(result.rows[0]);
@@ -94,7 +99,7 @@ studentsRouter.post('/', async (req, res, next) => {
 studentsRouter.put('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, class: studentClass, age, bio, photo_url, is_sponsored, is_featured } = req.body;
+    const { name, class: studentClass, age, date_of_birth, father_name, mother_name, family_income, phone, bio, photo_url, is_sponsored, is_featured } = req.body;
     const parsedId = Number(id);
     const parsedAge = Number(age);
 
@@ -112,10 +117,10 @@ studentsRouter.put('/:id', async (req, res, next) => {
 
     const result = await query(
       `UPDATE students
-       SET name = $1, class = $2, age = $3, bio = $4, photo_url = $5, is_sponsored = $6, is_featured = $7
-       WHERE id = $8
-       RETURNING id, name, class, age, bio, photo_url, is_featured, is_sponsored`,
-      [name, studentClass, parsedAge, bio || null, photo_url || null, Boolean(is_sponsored), featuredRequested, parsedId]
+       SET name = $1, class = $2, age = $3, date_of_birth = $4, father_name = $5, mother_name = $6, family_income = $7, phone = $8, bio = $9, photo_url = $10, is_sponsored = $11, is_featured = $12
+       WHERE id = $13
+       RETURNING id, name, class, age, date_of_birth, father_name, mother_name, family_income, phone, bio, photo_url, is_featured, is_sponsored`,
+      [name, studentClass, parsedAge, date_of_birth || null, father_name || null, mother_name || null, family_income || null, phone || null, bio || null, photo_url || null, Boolean(is_sponsored), featuredRequested, parsedId]
     );
 
     if (!result.rows.length) {
@@ -155,7 +160,7 @@ studentsRouter.patch('/:id/feature', async (req, res, next) => {
       `UPDATE students
        SET is_featured = $1
        WHERE id = $2
-       RETURNING id, name, class, age, bio, photo_url, is_featured, is_sponsored`,
+       RETURNING id, name, class, age, date_of_birth, father_name, mother_name, family_income, phone, bio, photo_url, is_featured, is_sponsored`,
       [featuredRequested, parsedId]
     );
 

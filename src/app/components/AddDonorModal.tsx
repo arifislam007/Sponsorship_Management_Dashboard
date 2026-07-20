@@ -19,12 +19,11 @@ const defaultFormState = {
 
 export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = 'create' }: AddDonorModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [formData, setFormData] = useState(defaultFormState);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+    if (!isOpen) return;
 
     if (mode === 'edit' && initialData) {
       setFormData({
@@ -33,20 +32,24 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
         phone: initialData.phone || '',
         country: initialData.country || '',
       });
+      setSubmitError('');
       return;
     }
 
+    setSubmitError('');
     setFormData(defaultFormState);
-  }, [initialData, isOpen, mode]);
+  }, [isOpen, mode]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.email) {
+      setSubmitError('Name and Email are required.');
       return;
     }
 
     setIsSubmitting(true);
+    setSubmitError('');
     try {
       await onSubmit({
         name: formData.name,
@@ -57,6 +60,8 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
 
       onClose();
       setFormData(defaultFormState);
+    } catch (err) {
+      setSubmitError((err as Error).message || 'Failed to save donor. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -67,8 +72,8 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Add New Donor</h2>
-            <p className="text-sm text-gray-600 mt-1">Register a new donor/supporter</p>
+            <h2 className="text-2xl font-bold text-gray-900">{mode === 'edit' ? 'Edit Donor' : 'Add New Donor'}</h2>
+            <p className="text-sm text-gray-600 mt-1">{mode === 'edit' ? 'Update donor information' : 'Register a new donor/supporter'}</p>
           </div>
           <button
             onClick={onClose}
@@ -132,20 +137,27 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Add Donor'}
-          </button>
+        <div className="border-t border-gray-200">
+          {submitError && (
+            <div className="mx-6 mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {submitError}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-3 p-6">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Add Donor'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

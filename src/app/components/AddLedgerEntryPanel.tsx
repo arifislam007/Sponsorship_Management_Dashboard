@@ -8,37 +8,42 @@ interface AddLedgerEntryPanelProps {
   onSubmit: (payload: CreateLedgerEntryPayload) => Promise<void>;
 }
 
+const defaultLedgerForm = {
+  date: '',
+  voucher: '',
+  particulars: '',
+  category: 'Donation',
+  type: 'Credit',
+  amount: '',
+};
+
 export function AddLedgerEntryPanel({ isOpen, onClose, onSubmit }: AddLedgerEntryPanelProps) {
-  const [formData, setFormData] = useState({
-    date: '',
-    voucher: '',
-    particulars: '',
-    category: 'Donation',
-    type: 'Credit',
-    amount: '',
-  });
+  const [formData, setFormData] = useState(defaultLedgerForm);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
-      date: formData.date,
-      voucher_ref: formData.voucher,
-      particulars: formData.particulars,
-      category: formData.category,
-      type: formData.type as 'Credit' | 'Debit',
-      amount: Number(formData.amount),
-    }).catch(() => null);
-
-    setFormData({
-      date: '',
-      voucher: '',
-      particulars: '',
-      category: 'Donation',
-      type: 'Credit',
-      amount: '',
-    });
+    setSubmitError('');
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        date: formData.date,
+        voucher_ref: formData.voucher,
+        particulars: formData.particulars,
+        category: formData.category,
+        type: formData.type as 'Credit' | 'Debit',
+        amount: Number(formData.amount),
+      });
+      setFormData(defaultLedgerForm);
+      onClose();
+    } catch (err) {
+      setSubmitError((err as Error).message || 'Failed to add entry. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -167,12 +172,18 @@ export function AddLedgerEntryPanel({ isOpen, onClose, onSubmit }: AddLedgerEntr
             />
           </div>
 
+          {submitError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {submitError}
+            </div>
+          )}
           <div className="pt-4 space-y-3">
             <button
               type="submit"
-              className="w-full px-4 py-3 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors font-medium"
+              disabled={isSubmitting}
+              className="w-full px-4 py-3 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Add Entry
+              {isSubmitting ? 'Saving...' : 'Add Entry'}
             </button>
             <button
               type="button"

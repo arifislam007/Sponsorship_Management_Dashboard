@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS students (
     name VARCHAR(150) NOT NULL,
     class VARCHAR(50) NOT NULL,
     age INTEGER NOT NULL CHECK (age > 0),
+    date_of_birth DATE,
+    father_name VARCHAR(150),
+    mother_name VARCHAR(150),
+    family_income NUMERIC(12, 2),
+    phone VARCHAR(30),
     bio TEXT,
     photo_url TEXT,
     is_sponsored BOOLEAN NOT NULL DEFAULT FALSE
@@ -42,6 +47,21 @@ CREATE TABLE IF NOT EXISTS students (
 
 ALTER TABLE students
     ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE students
+    ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+
+ALTER TABLE students
+    ADD COLUMN IF NOT EXISTS father_name VARCHAR(150);
+
+ALTER TABLE students
+    ADD COLUMN IF NOT EXISTS mother_name VARCHAR(150);
+
+ALTER TABLE students
+    ADD COLUMN IF NOT EXISTS family_income NUMERIC(12, 2);
+
+ALTER TABLE students
+    ADD COLUMN IF NOT EXISTS phone VARCHAR(30);
 
 CREATE TABLE IF NOT EXISTS donors (
     id SERIAL PRIMARY KEY,

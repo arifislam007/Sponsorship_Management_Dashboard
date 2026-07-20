@@ -3,13 +3,18 @@ import { Search, Upload, Plus, User, X } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddStudentModal } from './AddStudentModal';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
-import { api } from '../services/api';
+import { api, CreateStudentPayload } from '../services/api';
 
 interface Student {
   id: number;
   name: string;
   class: string;
   age: number;
+  date_of_birth?: string;
+  father_name?: string;
+  mother_name?: string;
+  family_income?: number;
+  phone?: string;
   status: 'sponsored' | 'unsponsored';
   photo?: string;
   bio?: string;
@@ -35,6 +40,11 @@ export function Students() {
           name: student.name,
           class: student.class,
           age: student.age,
+          date_of_birth: student.date_of_birth,
+          father_name: student.father_name,
+          mother_name: student.mother_name,
+          family_income: student.family_income,
+          phone: student.phone,
           status: student.is_sponsored ? 'sponsored' : 'unsponsored',
           photo: student.photo_url,
           bio: student.bio,
@@ -47,20 +57,12 @@ export function Students() {
     }
   };
 
-  const handleSaveStudent = async (payload: {
-    name: string;
-    class: string;
-    age: number;
-    bio?: string;
-    photo_url?: string;
-    is_sponsored?: boolean;
-  }) => {
+  const handleSaveStudent = async (payload: CreateStudentPayload) => {
     if (editingStudent) {
       await api.updateStudent(editingStudent.id, payload);
     } else {
       await api.createStudent(payload);
     }
-
     await loadStudents();
     setIsModalOpen(false);
     setEditingStudent(null);
@@ -235,6 +237,11 @@ export function Students() {
           name: editingStudent.name,
           class: editingStudent.class,
           age: editingStudent.age,
+          date_of_birth: editingStudent.date_of_birth,
+          father_name: editingStudent.father_name,
+          mother_name: editingStudent.mother_name,
+          family_income: editingStudent.family_income,
+          phone: editingStudent.phone,
           bio: editingStudent.bio,
           photo_url: editingStudent.photo,
           is_sponsored: editingStudent.status === 'sponsored',

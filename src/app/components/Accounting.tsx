@@ -11,6 +11,7 @@ export function Accounting() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isStatementOpen, setIsStatementOpen] = useState(false);
+  const [pageError, setPageError] = useState('');
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [ledgerSummary, setLedgerSummary] = useState<LedgerSummary>({
     opening_balance: 0,
@@ -39,18 +40,23 @@ export function Accounting() {
   };
 
   const handleStatementExport = async (month: number, year: number, format: 'csv' | 'pdf', donorId?: number) => {
-    const blob = await api.exportDonorStatement({
-      month,
-      year,
-      format,
-      donor_id: donorId,
-    });
-    const downloadUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = downloadUrl;
-    anchor.download = `donor-statement-${year}-${String(month).padStart(2, '0')}.${format}`;
-    anchor.click();
-    URL.revokeObjectURL(downloadUrl);
+    setPageError('');
+    try {
+      const blob = await api.exportDonorStatement({
+        month,
+        year,
+        format,
+        donor_id: donorId,
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = `donor-statement-${year}-${String(month).padStart(2, '0')}.${format}`;
+      anchor.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setPageError((err as Error).message || 'Failed to export statement. Please try again.');
+    }
   };
 
   const filteredEntries = ledgerEntries.filter((entry) => {
@@ -74,6 +80,12 @@ export function Accounting() {
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Accounting & Financial Ledger</h1>
         <p className="text-sm md:text-base text-gray-600 mt-1">Track all financial transactions</p>
       </div>
+
+      {pageError && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {pageError}
+        </div>
+      )}
 
       <div className="mb-6 border-b border-gray-200">
         <div className="flex gap-4 md:gap-8">

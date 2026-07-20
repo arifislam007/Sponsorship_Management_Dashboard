@@ -18,6 +18,11 @@ export interface StudentApi {
   name: string;
   class: string;
   age: number;
+  date_of_birth?: string;
+  father_name?: string;
+  mother_name?: string;
+  family_income?: number;
+  phone?: string;
   bio?: string;
   photo_url?: string;
   is_sponsored: boolean;
@@ -28,6 +33,11 @@ export interface CreateStudentPayload {
   name: string;
   class: string;
   age: number;
+  date_of_birth?: string;
+  father_name?: string;
+  mother_name?: string;
+  family_income?: number;
+  phone?: string;
   bio?: string;
   photo_url?: string;
   is_sponsored?: boolean;
@@ -97,12 +107,16 @@ export interface DonorStatementPayload {
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+  const { headers: initHeaders, ...requestInit } = init ?? {};
+
   const response = await fetch(`${API_BASE}${path}`, {
+    ...requestInit,
     headers: {
       'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(initHeaders ?? {}),
     },
-    ...init,
   });
 
   if (!response.ok) {

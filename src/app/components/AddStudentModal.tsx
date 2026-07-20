@@ -22,6 +22,7 @@ const defaultFormState = {
   photo: null as File | null,
   photoUrl: '',
   story: '',
+  isSponsored: false,
 };
 
 function calculateAgeFromDOB(dateOfBirth: string): string {
@@ -55,13 +56,12 @@ async function fileToDataUrl(file: File | null): Promise<string | undefined> {
 export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode = 'create' }: AddStudentModalProps) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [formData, setFormData] = useState(defaultFormState);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+    if (!isOpen) return;
 
     if (mode === 'edit' && initialData) {
       setFormData({
@@ -69,16 +69,24 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
         name: initialData.name,
         class: initialData.class,
         age: String(initialData.age),
+        dateOfBirth: initialData.date_of_birth ? initialData.date_of_birth.slice(0, 10) : '',
+        fatherName: initialData.father_name || '',
+        motherName: initialData.mother_name || '',
+        familyIncome: initialData.family_income ? String(initialData.family_income) : '',
+        phone: initialData.phone || '',
         story: initialData.bio || '',
         photoUrl: initialData.photo_url || '',
+        isSponsored: initialData.is_sponsored ?? false,
       });
       setStep(1);
+      setSubmitError('');
       return;
     }
 
     setStep(1);
+    setSubmitError('');
     setFormData(defaultFormState);
-  }, [initialData, isOpen, mode]);
+  }, [isOpen, mode]);
 
   if (!isOpen) return null;
 
@@ -92,10 +100,12 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.class || !formData.age) {
+      setSubmitError('Please fill in Name, Class, and Age before submitting.');
       return;
     }
 
     setIsSubmitting(true);
+    setSubmitError('');
     try {
       const photoUrl = (await fileToDataUrl(formData.photo)) || formData.photoUrl || undefined;
 
@@ -103,14 +113,21 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
         name: formData.name,
         class: formData.class,
         age: Number(formData.age),
+        date_of_birth: formData.dateOfBirth || undefined,
+        father_name: formData.fatherName || undefined,
+        mother_name: formData.motherName || undefined,
+        family_income: formData.familyIncome ? Number(formData.familyIncome) : undefined,
+        phone: formData.phone || undefined,
         bio: formData.story,
         photo_url: photoUrl,
-        is_sponsored: false,
+        is_sponsored: formData.isSponsored,
       });
 
       onClose();
       setStep(1);
       setFormData(defaultFormState);
+    } catch (err) {
+      setSubmitError((err as Error).message || 'Failed to save student. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -121,7 +138,7 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Add New Student</h2>
+            <h2 className="text-2xl font-bold text-gray-900">{mode === 'edit' ? 'Edit Student' : 'Add New Student'}</h2>
             <p className="text-sm text-gray-600 mt-1">Step {step} of 3</p>
           </div>
           <button
@@ -328,44 +345,53 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
           )}
         </div>
 
-        <div className="flex items-center justify-between p-6 border-t border-gray-200">
-          <button
-            onClick={handlePrevious}
-            disabled={step === 1}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              step === 1
-                ? 'text-gray-400 cursor-not-allowed'
-                : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <ChevronLeft size={20} />
-            Previous
-          </button>
-
-          <div className="flex gap-2">
+        <div className="border-t border-gray-200">
+          {submitError && (
+            <div className="mx-6 mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {submitError}
+            </div>
+          )}
+          <div className="flex items-center justify-between p-6">
             <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              onClick={handlePrevious}
+              disabled={step === 1}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                step === 1
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
             >
-              Cancel
+              <ChevronLeft size={20} />
+              Previous
             </button>
-            {step < 3 ? (
+
+            <div className="flex gap-2">
               <button
-                onClick={handleNext}
-                className="flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Next
-                <ChevronRight size={20} />
+                Cancel
               </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Adding...' : 'Add Student'}
-              </button>
-            )}
+              {step < 3 ? (
+                <button
+                  onClick={handleNext}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors"
+                >
+                  Next
+                  <ChevronRight size={20} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting
+                    ? (mode === 'edit' ? 'Saving...' : 'Adding...')
+                    : (mode === 'edit' ? 'Save Changes' : 'Add Student')}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

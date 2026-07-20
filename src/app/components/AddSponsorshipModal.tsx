@@ -53,6 +53,7 @@ function calculateEndDate(startDate: string, period: string): string {
 
 export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create', initialData, initialStudentId }: AddSponsorshipModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [students, setStudents] = useState<StudentApi[]>([]);
   const [donors, setDonors] = useState<DonorApi[]>([]);
   const [formData, setFormData] = useState(defaultFormState);
@@ -64,7 +65,6 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
         api.getDonors().catch(() => []),
       ]).then(([studentList, donorList]) => {
         setStudents(studentList);
-        // Handle paginated response
         const donorData = Array.isArray(donorList) ? donorList : donorList.data || [];
         setDonors(donorData);
       });
@@ -72,18 +72,18 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+    if (!isOpen) return;
+
+    setSubmitError('');
 
     if (mode === 'edit' && initialData) {
       setFormData({
         student_id: String(initialData.student_id),
         donor_id: String(initialData.donor_id),
-        start_date: initialData.start_date,
+        start_date: initialData.start_date ? initialData.start_date.slice(0, 10) : '',
         amount: Number(initialData.amount),
         status: initialData.status === 'ended' ? 'Ended' : 'Active',
-        end_date: initialData.end_date || '',
+        end_date: initialData.end_date ? initialData.end_date.slice(0, 10) : '',
         period: initialData.period || 'continuous',
         payment_media: initialData.payment_media || 'bank_transfer',
       });
@@ -94,7 +94,7 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
       ...defaultFormState,
       student_id: initialStudentId ? String(initialStudentId) : '',
     });
-  }, [initialData, initialStudentId, isOpen, mode]);
+  }, [isOpen, mode, initialStudentId]);
 
   if (!isOpen) return null;
 
@@ -115,20 +115,23 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
   };
 
   const handleSubmit = async () => {
+    setSubmitError('');
+
     if (mode === 'edit') {
       if (!formData.status) {
+        setSubmitError('Status is required.');
         return;
       }
-
       setIsSubmitting(true);
       try {
         await onSubmit({
           status: formData.status,
           end_date: formData.end_date || undefined,
         });
-
         onClose();
         setFormData(defaultFormState);
+      } catch (err) {
+        setSubmitError((err as Error).message || 'Failed to update sponsorship. Please try again.');
       } finally {
         setIsSubmitting(false);
       }
@@ -136,6 +139,7 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
     }
 
     if (!formData.student_id || !formData.donor_id || !formData.start_date || formData.amount <= 0) {
+      setSubmitError('Student, Donor, Start Date and a valid Amount are required.');
       return;
     }
 
@@ -150,9 +154,10 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
         period: formData.period,
         payment_media: formData.payment_media,
       });
-
       onClose();
       setFormData(defaultFormState);
+    } catch (err) {
+      setSubmitError((err as Error).message || 'Failed to create sponsorship. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -316,20 +321,27 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Create Sponsorship'}
-          </button>
+        <div className="border-t border-gray-200">
+          {submitError && (
+            <div className="mx-6 mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {submitError}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-3 p-6">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Create Sponsorship'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
