@@ -104,6 +104,35 @@ export interface DonorStatementPayload {
   format: 'csv' | 'pdf';
 }
 
+export type LeaveType = 'Casual' | 'Special';
+
+export interface LeaveBalanceApi {
+  user_id: number;
+  username: string;
+  full_name: string;
+  casual_balance: number;
+  special_balance: number;
+  special_last_accrued_at?: string | null;
+}
+
+export interface LeaveRequestApi {
+  id: number;
+  user_id: number;
+  username: string;
+  full_name: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  days_requested: number;
+  reason: string;
+  status: string;
+  reviewed_by?: number | null;
+  reviewed_by_name?: string | null;
+  reviewed_at?: string | null;
+  remarks?: string | null;
+  created_at: string;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -197,6 +226,21 @@ export const api = {
   addLedgerEntry: (payload: CreateLedgerEntryPayload) =>
     request<LedgerEntry>('/ledger/entries', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getLeaveOverview: () =>
+    request<{ current_user_balance: LeaveBalanceApi; balances: LeaveBalanceApi[]; requests: LeaveRequestApi[] }>('/leaves/overview'),
+
+  createLeaveRequest: (payload: { leave_type: LeaveType; start_date: string; end_date: string; reason: string; is_backdated?: boolean }) =>
+    request<{ request: LeaveRequestApi }>('/leaves/requests', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateLeaveRequestStatus: (id: number, payload: { status: 'Approved' | 'Rejected'; remarks?: string }) =>
+    request<{ request: LeaveRequestApi }>(`/leaves/requests/${id}/status`, {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     }),
 
