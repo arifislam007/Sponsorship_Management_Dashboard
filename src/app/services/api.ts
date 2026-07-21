@@ -7,6 +7,18 @@ export interface DashboardSummary {
   monthly_revenue: number;
 }
 
+export interface DashboardAnalytics {
+  active_sponsorships: number;
+  active_monthly_total: number;
+  total_contributions_ever: number;
+  new_this_month: number;
+  new_last_month: number;
+  growth_pct: number;
+  top_donors: { name: string; total_contributed: number; active_count: number }[];
+  recent_sponsorships: { id: number; student_name: string; donor_name: string; amount: number; start_date: string; status: string }[];
+  monthly_new: { month: string; month_key: string; new_count: number; new_amount: number }[];
+}
+
 export interface DonationTrendPoint {
   month: string;
   month_key: string;
@@ -159,6 +171,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   getDashboardSummary: () => request<DashboardSummary>('/dashboard/summary'),
   getDonationTrend: () => request<DonationTrendPoint[]>('/dashboard/donation-trend'),
+  getDashboardAnalytics: () => request<DashboardAnalytics>('/dashboard/analytics'),
 
   getStudents: (filter: SponsorshipFilter) =>
     request<StudentApi[]>(`/students?sponsored=${filter}`),

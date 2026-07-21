@@ -15,6 +15,18 @@ async function syncStudentSponsoredStatus(studentId) {
   await query('UPDATE students SET is_sponsored = $2 WHERE id = $1', [studentId, hasActiveSponsorship]);
 }
 
+async function syncDonorTotal(donorId) {
+  await query(
+    `UPDATE donors
+     SET total_contributed = COALESCE(
+       (SELECT SUM(amount) FROM sponsorships WHERE donor_id = $1),
+       0
+     )
+     WHERE id = $1`,
+    [donorId]
+  );
+}
+
 sponsorshipsRouter.get('/', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 500);
@@ -125,13 +137,7 @@ sponsorshipsRouter.post('/', async (req, res, next) => {
       [student_id, donor_id, start_date, calculatedEndDate, parsedAmount, normalizedStatus, period || null, payment_media || null, referenceNumber]
     );
 
-    await query(
-      `UPDATE donors
-       SET total_contributed = COALESCE(total_contributed, 0) + $2
-       WHERE id = $1`,
-      [donor_id, parsedAmount]
-    );
-
+    await syncDonorTotal(donor_id);
     await syncStudentSponsoredStatus(student_id);
 
     return res.status(201).json(insertResult.rows[0]);
@@ -150,7 +156,10 @@ sponsorshipsRouter.put('/:id', async (req, res, next) => {
       return res.status(400).json({ message: 'status must be Active or Ended.' });
     }
 
-    const existingResult = await query('SELECT student_id, status FROM sponsorships WHERE id = $1', [parsedId]);
+    const existingResult = await query(
+      'SELECT student_id, donor_id, status, amount::float8 AS amount FROM sponsorships WHERE id = $1',
+      [parsedId]
+    );
     const existingSponsorship = existingResult.rows[0];
 
     if (!existingSponsorship) {
@@ -175,6 +184,7 @@ sponsorshipsRouter.put('/:id', async (req, res, next) => {
       return res.status(404).json({ message: 'Sponsorship not found.' });
     }
 
+    await syncDonorTotal(existingSponsorship.donor_id);
     await syncStudentSponsoredStatus(result.rows[0].student_id);
 
     return res.json(result.rows[0]);
