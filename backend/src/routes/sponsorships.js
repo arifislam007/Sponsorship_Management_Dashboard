@@ -143,7 +143,7 @@ sponsorshipsRouter.post('/', async (req, res, next) => {
 sponsorshipsRouter.put('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status, end_date } = req.body;
+    const { status, end_date, amount } = req.body;
     const parsedId = Number(id);
 
     if (!status || (status !== 'Active' && status !== 'Ended')) {
@@ -157,12 +157,18 @@ sponsorshipsRouter.put('/:id', async (req, res, next) => {
       return res.status(404).json({ message: 'Sponsorship not found.' });
     }
 
+    const parsedAmount = amount !== undefined ? Number(amount) : null;
+    const amountClause = parsedAmount !== null && parsedAmount > 0 ? `, amount = $4` : '';
+    const params = parsedAmount !== null && parsedAmount > 0
+      ? [status, end_date || null, parsedId, parsedAmount]
+      : [status, end_date || null, parsedId];
+
     const result = await query(
       `UPDATE sponsorships
-       SET status = $1, end_date = $2
+       SET status = $1, end_date = $2${amountClause}
        WHERE id = $3
        RETURNING id, student_id, donor_id, start_date, end_date, amount::float8 AS amount, status`,
-      [status, end_date || null, parsedId]
+      params
     );
 
     if (!result.rows.length) {

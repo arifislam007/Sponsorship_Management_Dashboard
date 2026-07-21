@@ -15,6 +15,7 @@ type SponsorshipFormPayload =
   | {
       status: 'Active' | 'Ended';
       end_date?: string;
+      amount?: number;
     };
 
 interface AddSponsorshipModalProps {
@@ -30,7 +31,7 @@ const defaultFormState = {
   student_id: '',
   donor_id: '',
   start_date: new Date().toISOString().split('T')[0],
-  amount: 6000,
+  amount: 0,
   status: 'Active' as 'Active' | 'Ended',
   end_date: '',
   period: 'continuous',
@@ -127,6 +128,7 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
         await onSubmit({
           status: formData.status,
           end_date: formData.end_date || undefined,
+          amount: formData.amount > 0 ? formData.amount : undefined,
         });
         onClose();
         setFormData(defaultFormState);
@@ -203,6 +205,18 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
                   <option value="Active">Active</option>
                   <option value="Ended">Ended</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Amount (BDT)</label>
+                <input
+                  type="number"
+                  value={formData.amount || ''}
+                  onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
+                  min="1"
+                  placeholder="Enter monthly amount"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
+                />
               </div>
 
               <div>

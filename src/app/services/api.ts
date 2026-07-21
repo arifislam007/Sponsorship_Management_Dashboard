@@ -210,7 +210,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  updateSponsorship: (id: number, payload: { status: string; end_date?: string }) =>
+  updateSponsorship: (id: number, payload: { status: string; end_date?: string; amount?: number }) =>
     request<SponsorshipApi>(`/sponsorships/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
