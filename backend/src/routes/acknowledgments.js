@@ -6,17 +6,21 @@ export const acknowledgmentsRouter = Router();
 
 acknowledgmentsRouter.post('/', async (req, res, next) => {
   try {
-    const { student_id, donor_id, template_name, subject, content, is_public, donor_name } = req.body;
+    const { student_id, donor_id, template_name, subject, content, is_public, donor_name, pdf_base64 } = req.body;
 
     if (!content) {
       return res.status(400).json({ message: 'content is required' });
     }
 
     let pdfBuffer = null;
-    try {
-      pdfBuffer = await generateLetterPDF(content, { donorName: donor_name || 'Unknown' });
-    } catch (pdfError) {
-      console.error('PDF generation warning (continuing):', pdfError);
+    if (pdf_base64) {
+      pdfBuffer = Buffer.from(pdf_base64, 'base64');
+    } else {
+      try {
+        pdfBuffer = await generateLetterPDF(content, { donorName: donor_name || 'Unknown' });
+      } catch (pdfError) {
+        console.error('PDF generation warning (continuing):', pdfError);
+      }
     }
 
     const result = await pool.query(

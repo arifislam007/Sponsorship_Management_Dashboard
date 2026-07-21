@@ -2,6 +2,8 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import { Plus, Trash2, Download, Save, Printer, History, ChevronDown, FileText, Archive, DollarSign, Users, Eye, X, Upload, PenLine } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { api } from '../services/api';
 import logo from '../../../logo.png';
 import udaySignature from '../../../Uday_signature.jpg';
@@ -120,6 +122,7 @@ export function AcknowledgmentLetter() {
     imageUrl: udaySignature as string,
   });
   const printableLetterRef = useRef<HTMLDivElement>(null);
+  const letterContentRef = useRef<HTMLDivElement>(null);
   const viewModalRef = useRef<HTMLDivElement>(null);
   const signatureInputRef = useRef<HTMLInputElement>(null);
 
@@ -264,6 +267,49 @@ export function AcknowledgmentLetter() {
     return `${LETTER_META_PREFIX}${encodedMeta}${LETTER_META_SUFFIX}${content}`;
   };
 
+  const generatePdfFromPreview = async (): Promise<string | null> => {
+    const target = letterContentRef.current;
+    if (!target) return null;
+    try {
+      const canvas = await html2canvas(target, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = pdf.internal.pageSize.getHeight();
+
+      const scaleRatio = pdfW / imgWidth;
+      const scaledH = imgHeight * scaleRatio;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfW, scaledH);
+
+      let heightLeft = scaledH - pdfH;
+      let position = -pdfH;
+      while (heightLeft > 0) {
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfW, scaledH);
+        position -= pdfH;
+        heightLeft -= pdfH;
+      }
+
+      const bytes = new Uint8Array(pdf.output('arraybuffer'));
+      let binary = '';
+      bytes.forEach((b) => (binary += String.fromCharCode(b)));
+      return btoa(binary);
+    } catch {
+      return null;
+    }
+  };
+
   const persistLetterToDb = async () => {
     if (!printableLetterRef.current) {
       alert('Letter content not available to save.');
@@ -274,9 +320,11 @@ export function AcknowledgmentLetter() {
       setIsSavingToDb(true);
       setSaveMessage('');
 
-      const content = buildSavedContent();
+      const [content, pdf_base64] = await Promise.all([
+        Promise.resolve(buildSavedContent()),
+        generatePdfFromPreview(),
+      ]);
 
-      // Try to resolve donor id from selected donor name
       const matchedDonor = donors.find((d) => d.name === formData.donorName);
       const donor_id = matchedDonor ? matchedDonor.id : null;
 
@@ -288,6 +336,7 @@ export function AcknowledgmentLetter() {
         content,
         is_public: false,
         donor_name: formData.donorName,
+        pdf_base64: pdf_base64 ?? undefined,
       };
 
       const res = await api.saveLetter(payload);
@@ -890,7 +939,7 @@ export function AcknowledgmentLetter() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-auto p-4 md:p-6" ref={printableLetterRef}>
-            <div className="relative bg-white border border-gray-200 rounded-lg p-4 md:p-8">
+            <div ref={letterContentRef} className="relative bg-white border border-gray-200 rounded-lg p-4 md:p-8">
               <div className="relative">
                 <div className="text-center border-b-2 border-[#14856E] pb-3 mb-5">
                   <img src={logo} alt="Sombhabona logo" className="h-10 md:h-12 w-auto mx-auto" />

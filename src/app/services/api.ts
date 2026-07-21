@@ -252,7 +252,7 @@ export const api = {
     return request<any>(`/letters?${params.toString()}`);
   },
 
-  saveLetter: (payload: { student_id?: number | null; donor_id?: number | null; template_name?: string | null; subject?: string | null; content: string; is_public?: boolean; donor_name?: string }) =>
+  saveLetter: (payload: { student_id?: number | null; donor_id?: number | null; template_name?: string | null; subject?: string | null; content: string; is_public?: boolean; donor_name?: string; pdf_base64?: string }) =>
     request<any>('/letters', {
       method: 'POST',
       body: JSON.stringify(payload),
