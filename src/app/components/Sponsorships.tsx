@@ -37,6 +37,7 @@ export function Sponsorships() {
       await api.updateSponsorship(editingSponsorship.id, {
         status: payload.status || 'Active',
         end_date: payload.end_date,
+        amount: payload.amount,
       });
     } else {
       await api.createSponsorship({
