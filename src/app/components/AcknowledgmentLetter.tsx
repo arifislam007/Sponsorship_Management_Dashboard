@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { Plus, Trash2, Download, Save, Printer, History, ChevronDown, FileText, Archive, DollarSign, Users, Eye, X } from 'lucide-react';
+import { Plus, Trash2, Download, Save, Printer, History, ChevronDown, FileText, Archive, DollarSign, Users, Eye, X, Upload, PenLine } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { api } from '../services/api';
@@ -37,7 +37,7 @@ interface SavedLetterRecord {
   createdAt: string;
   content: string;
   formData: LetterData | null;
-  pdf_filename?: string | null;
+  has_pdf?: boolean;
 }
 
 const defaultLetterData: LetterData = {
@@ -106,12 +106,22 @@ export function AcknowledgmentLetter() {
   const [showDonorDropdown, setShowDonorDropdown] = useState(false);
   const [donors, setDonors] = useState<any[]>([]);
   const [isLoadingDonors, setIsLoadingDonors] = useState(false);
+  const [donorSponsorships, setDonorSponsorships] = useState<any[]>([]);
+  const [isLoadingSponsorships, setIsLoadingSponsorships] = useState(false);
   const [isSavingToDb, setIsSavingToDb] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewingLetter, setViewingLetter] = useState<SavedLetterRecord | null>(null);
+  const [showSignatureEditor, setShowSignatureEditor] = useState(false);
+  const [signatureData, setSignatureData] = useState({
+    name: 'Saad Ibn Maruf',
+    title: 'Account and Admin',
+    organization: 'Sombhabona',
+    imageUrl: udaySignature as string,
+  });
   const printableLetterRef = useRef<HTMLDivElement>(null);
   const viewModalRef = useRef<HTMLDivElement>(null);
+  const signatureInputRef = useRef<HTMLInputElement>(null);
 
   const formData = form.watch();
 
@@ -139,7 +149,7 @@ export function AcknowledgmentLetter() {
               createdAt: letter.created_at || new Date().toISOString(),
               content: stripLetterMeta(letter.content),
               formData,
-              pdf_filename: letter.pdf_filename || null,
+              has_pdf: !!letter.has_pdf,
             } as SavedLetterRecord;
           })
           .sort((left, right) => Number(new Date(right.createdAt)) - Number(new Date(left.createdAt)));
@@ -206,6 +216,41 @@ export function AcknowledgmentLetter() {
     }
   };
 
+  const fetchAndFillSponsorships = async (donorId: number, donorName: string) => {
+    setDonorSponsorships([]);
+    setIsLoadingSponsorships(true);
+    try {
+      const res = await api.getSponsorships(100, 0, donorName, 'active');
+      const all = Array.isArray(res) ? res : res.data || [];
+      const sponsorships = all.filter((s: any) => s.donor_id === donorId);
+      setDonorSponsorships(sponsorships);
+      if (sponsorships.length > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        form.setValue('donations', sponsorships.map((s: any) => ({ date: today, amount: String(s.amount) })));
+        form.setValue('donationType', 'Sponsor a Child');
+        form.setValue('projectName', sponsorships.length === 1
+          ? `Sponsorship for ${sponsorships[0].student_name}`
+          : `Sponsorship for ${sponsorships.map((s: any) => s.student_name).join(', ')}`
+        );
+      }
+    } catch {
+      setDonorSponsorships([]);
+    } finally {
+      setIsLoadingSponsorships(false);
+    }
+  };
+
+  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSignatureData((prev) => ({ ...prev, imageUrl: event.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const handleSaveDraft = () => {
     setLetterHistory((prev) => [formData, ...prev.slice(0, 9)]);
     setShowHistory(true);
@@ -257,7 +302,7 @@ export function AcknowledgmentLetter() {
           createdAt: res?.letter?.created_at || new Date().toISOString(),
           content: stripLetterMeta(content),
           formData,
-          pdf_filename: res?.letter?.pdf_filename || null,
+          has_pdf: !!res?.pdf_url,
         },
         ...prev,
       ]);
@@ -296,12 +341,22 @@ export function AcknowledgmentLetter() {
     setViewModalOpen(true);
   };
 
-  const handleDownloadPDF = (pdfFilename: string | null | undefined) => {
-    if (!pdfFilename) {
-      alert('PDF not available for this letter.');
-      return;
+  const handleDownloadPDF = async (letterId: number, donorName: string, createdAt: string) => {
+    try {
+      const blob = await api.downloadLetterPDF(letterId);
+      const safeName = (donorName || 'donor').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const date = format(new Date(createdAt), 'yyyy-MM-dd');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `acknowledgment_${safeName}_${date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to download PDF. Please try again.');
     }
-    window.open(`/api/v1/letters/pdf/${pdfFilename}`, '_blank');
   };
 
   const handlePrintSavedLetter = () => {
@@ -483,10 +538,10 @@ export function AcknowledgmentLetter() {
                       <Eye size={14} />
                       View
                     </button>
-                    {letter.pdf_filename && (
+                    {letter.has_pdf && (
                       <button
                         type="button"
-                        onClick={() => handleDownloadPDF(letter.pdf_filename)}
+                        onClick={() => handleDownloadPDF(letter.id, letter.donorName, letter.createdAt)}
                         title="Download PDF"
                         className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
                       >
@@ -517,7 +572,7 @@ export function AcknowledgmentLetter() {
         </div>
       )}
 
-      <div className="grid xl:grid-cols-[1.05fr_0.95fr] gap-6 items-start">
+      <div className="grid lg:grid-cols-2 gap-6">
         <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5 md:p-6">
           <div className="mb-5">
             <h2 className="text-lg font-semibold text-gray-900">Donor Workspace</h2>
@@ -546,6 +601,25 @@ export function AcknowledgmentLetter() {
                     <ChevronDown size={16} className={`transition-transform ${showDonorDropdown ? 'rotate-180' : ''}`} />
                     <span className="hidden sm:inline text-sm">Donors</span>
                   </button>
+                  <button
+                    type="button"
+                    disabled={isLoadingSponsorships}
+                    onClick={() => {
+                      const name = formData.donorName.trim();
+                      if (!name) return;
+                      const matched = donors.find((d) => d.name.toLowerCase() === name.toLowerCase());
+                      if (matched) {
+                        fetchAndFillSponsorships(matched.id, matched.name);
+                      } else {
+                        alert('Donor not found in list. Please select from the dropdown.');
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors flex items-center gap-2 disabled:opacity-60"
+                    title="Fetch sponsored students & amounts"
+                  >
+                    <Users size={16} />
+                    <span className="hidden sm:inline text-sm">{isLoadingSponsorships ? 'Fetching...' : 'Fetch'}</span>
+                  </button>
                 </div>
 
                 {showDonorDropdown && (
@@ -566,6 +640,7 @@ export function AcknowledgmentLetter() {
                             onClick={() => {
                               form.setValue('donorName', donor.name);
                               setShowDonorDropdown(false);
+                              fetchAndFillSponsorships(donor.id, donor.name);
                             }}
                             className="w-full text-left px-4 py-2.5 hover:bg-gray-100 border-b border-gray-100 last:border-b-0 transition-colors"
                           >
@@ -582,6 +657,24 @@ export function AcknowledgmentLetter() {
 
                 {form.formState.errors.donorName && (
                   <p className="mt-1 text-sm text-red-500">{form.formState.errors.donorName.message}</p>
+                )}
+
+                {isLoadingSponsorships && (
+                  <p className="mt-2 text-xs text-gray-500">Loading sponsorships...</p>
+                )}
+
+                {!isLoadingSponsorships && donorSponsorships.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-[#14856E]/30 bg-[#14856E]/5 p-3">
+                    <p className="text-xs font-semibold text-[#14856E] mb-2">Auto-filled from active sponsorships</p>
+                    <div className="space-y-1.5">
+                      {donorSponsorships.map((s: any) => (
+                        <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-gray-200 px-3 py-2">
+                          <p className="text-sm font-medium text-gray-900">{s.student_name}</p>
+                          <span className="text-xs font-semibold text-[#14856E]">৳{Number(s.amount).toLocaleString()}/mo</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -665,6 +758,84 @@ export function AcknowledgmentLetter() {
               />
             </div>
 
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowSignatureEditor(!showSignatureEditor)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <PenLine size={15} />
+                  Signature
+                </div>
+                <ChevronDown size={15} className={`text-gray-500 transition-transform ${showSignatureEditor ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showSignatureEditor && (
+                <div className="p-4 space-y-3 border-t border-gray-200">
+                  <div className="flex items-center gap-3">
+                    {signatureData.imageUrl && (
+                      <img src={signatureData.imageUrl} alt="Signature preview" className="h-14 w-auto object-contain border border-gray-200 rounded-lg bg-white p-1" />
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => signatureInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <Upload size={14} />
+                        Upload Signature
+                      </button>
+                      {signatureData.imageUrl !== (udaySignature as string) && (
+                        <button
+                          type="button"
+                          onClick={() => setSignatureData((prev) => ({ ...prev, imageUrl: udaySignature as string }))}
+                          className="text-xs text-gray-500 hover:text-red-600 transition-colors text-left"
+                        >
+                          Reset to default
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      ref={signatureInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleSignatureUpload}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Signatory Name</label>
+                    <input
+                      type="text"
+                      value={signatureData.name}
+                      onChange={(e) => setSignatureData((prev) => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Title / Designation</label>
+                    <input
+                      type="text"
+                      value={signatureData.title}
+                      onChange={(e) => setSignatureData((prev) => ({ ...prev, title: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Organization</label>
+                    <input
+                      type="text"
+                      value={signatureData.organization}
+                      onChange={(e) => setSignatureData((prev) => ({ ...prev, organization: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-200">
               <button
                 type="button"
@@ -696,17 +867,17 @@ export function AcknowledgmentLetter() {
           </form>
         </div>
 
-        <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
             <h2 className="text-lg font-semibold text-gray-900">Letter Preview</h2>
             <p className="text-sm text-gray-600">Real-time preview and database-ready letter content</p>
           </div>
 
-          <div className="p-6 max-h-[calc(100vh-220px)] overflow-auto" ref={printableLetterRef}>
-            <div className="relative bg-white border border-gray-200 rounded-lg p-6 md:p-8" style={{paddingLeft: '0.5cm', paddingRight: '0.5cm'}}>
+          <div className="flex-1 min-h-0 overflow-auto p-4 md:p-6" ref={printableLetterRef}>
+            <div className="relative bg-white border border-gray-200 rounded-lg p-4 md:p-8">
               <div className="relative">
-                <div className="text-center border-b-2 border-[#14856E] pb-4 mb-6" style={{paddingBottom: '12.8px', marginBottom: '19.2px'}}>
-                  <img src={logo} alt="Sombhabona logo" className="w-auto mx-auto" style={{height: '51.2px'}} />
+                <div className="text-center border-b-2 border-[#14856E] pb-3 mb-5">
+                  <img src={logo} alt="Sombhabona logo" className="h-10 md:h-12 w-auto mx-auto" />
                   <p className="text-xs text-gray-600 mt-2">
                     756 West Sewrapara, Mirpur, Dhaka | Phone: 01737243447 | Email: info@sombhabona.org
                   </p>
@@ -740,35 +911,37 @@ export function AcknowledgmentLetter() {
                         {formData.projectName && ` for the project "${formData.projectName}"`}.
                       </p>
 
-                      <table className="w-full border-collapse border border-gray-300">
-                        <thead>
-                          <tr className="bg-gray-100 text-gray-700">
-                            <th className="border border-gray-300 px-3 py-2 text-left">Date</th>
-                            <th className="border border-gray-300 px-3 py-2 text-right">Amount (BDT)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {formData.donations.map((donation, index) => {
-                            if (!Number(donation.amount)) return null;
-                            return (
-                              <tr key={index} className="hover:bg-gray-50">
-                                <td className="border border-gray-300 px-3 py-2">
-                                  {donation.date ? format(new Date(donation.date), 'MMMM dd, yyyy') : '-'}
-                                </td>
-                                <td className="border border-gray-300 px-3 py-2 text-right">
-                                  ৳{Number(donation.amount).toLocaleString()}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          <tr className="bg-[#14856E]/10">
-                            <td className="border border-gray-300 px-3 py-2 font-semibold">Total Amount</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right font-semibold">
-                              ৳{Number(totalAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse border border-gray-300">
+                          <thead>
+                            <tr className="bg-gray-100 text-gray-700">
+                              <th className="border border-gray-300 px-3 py-2 text-left">Date</th>
+                              <th className="border border-gray-300 px-3 py-2 text-right">Amount (BDT)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {formData.donations.map((donation, index) => {
+                              if (!Number(donation.amount)) return null;
+                              return (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-300 px-3 py-2">
+                                    {donation.date ? format(new Date(donation.date), 'MMMM dd, yyyy') : '-'}
+                                  </td>
+                                  <td className="border border-gray-300 px-3 py-2 text-right">
+                                    ৳{Number(donation.amount).toLocaleString()}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            <tr className="bg-[#14856E]/10">
+                              <td className="border border-gray-300 px-3 py-2 font-semibold">Total Amount</td>
+                              <td className="border border-gray-300 px-3 py-2 text-right font-semibold">
+                                ৳{Number(totalAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
                     </>
                   )}
 
@@ -790,10 +963,12 @@ export function AcknowledgmentLetter() {
                   <p className="pt-4">Yours sincerely,</p>
 
                   <div className="mt-8 flex flex-col items-center text-center">
-                    <img src={udaySignature} alt="Saad Ibn Maruf signature" className="h-16 w-auto object-contain mb-3" />
-                    <p className="font-semibold text-gray-900">(Saad Ibn Maruf)</p>
-                    <p className="text-sm text-gray-700">Account and Admin</p>
-                    <p className="text-sm text-gray-700">Sombhabona</p>
+                    {signatureData.imageUrl && (
+                      <img src={signatureData.imageUrl} alt={`${signatureData.name} signature`} className="h-16 w-auto object-contain mb-3" />
+                    )}
+                    <p className="font-semibold text-gray-900">({signatureData.name})</p>
+                    <p className="text-sm text-gray-700">{signatureData.title}</p>
+                    <p className="text-sm text-gray-700">{signatureData.organization}</p>
                   </div>
                 </div>
 
@@ -834,10 +1009,10 @@ export function AcknowledgmentLetter() {
 
             {/* Modal Footer */}
             <div className="flex gap-3 p-6 border-t border-gray-200 bg-gray-50">
-              {viewingLetter.pdf_filename && (
+              {viewingLetter.has_pdf && (
                 <button
                   type="button"
-                  onClick={() => handleDownloadPDF(viewingLetter.pdf_filename)}
+                  onClick={() => handleDownloadPDF(viewingLetter.id, viewingLetter.donorName, viewingLetter.createdAt)}
                   className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
                 >
                   <Download size={16} />

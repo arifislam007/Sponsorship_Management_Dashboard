@@ -147,16 +147,6 @@ export function Students() {
                 <User size={64} className="text-white opacity-50" />
               )}
 
-              {student.bio && (
-                <div className="absolute inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <div className="text-center">
-                    <p className="text-sm text-white mb-3">{student.bio}</p>
-                    <button className="px-4 py-2 bg-white text-[#14856E] rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors">
-                      Quick View
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="p-4">

@@ -244,6 +244,32 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  getLetters: (filters?: { template_name?: string; donor_id?: number; student_id?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.template_name) params.append('template_name', filters.template_name);
+    if (filters?.donor_id) params.append('donor_id', filters.donor_id.toString());
+    if (filters?.student_id) params.append('student_id', filters.student_id.toString());
+    return request<any>(`/letters?${params.toString()}`);
+  },
+
+  saveLetter: (payload: { student_id?: number | null; donor_id?: number | null; template_name?: string | null; subject?: string | null; content: string; is_public?: boolean; donor_name?: string }) =>
+    request<any>('/letters', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  async downloadLetterPDF(id: number): Promise<Blob> {
+    const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    const response = await fetch(`${API_BASE}/letters/${id}/pdf`, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Failed to download PDF');
+    }
+    return response.blob();
+  },
+
   async exportDonorStatement(payload: DonorStatementPayload): Promise<Blob> {
     const response = await fetch(`${API_BASE}/exports/donor-statement`, {
       method: 'POST',

@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
-import { generateLetterPDF, getLetterPDFPath } from '../services/pdfService.js';
-import { promises as fs } from 'fs';
+import { generateLetterPDF } from '../services/pdfService.js';
 
 export const acknowledgmentsRouter = Router();
 
-// Create a new acknowledgment letter
 acknowledgmentsRouter.post('/', async (req, res, next) => {
   try {
     const { student_id, donor_id, template_name, subject, content, is_public, donor_name } = req.body;
@@ -14,23 +12,17 @@ acknowledgmentsRouter.post('/', async (req, res, next) => {
       return res.status(400).json({ message: 'content is required' });
     }
 
-    // Generate PDF
-    let pdf_filename = null;
+    let pdfBuffer = null;
     try {
-      const pdfResult = await generateLetterPDF(content, {
-        donorName: donor_name || 'Unknown',
-        letterId: null,
-      });
-      pdf_filename = pdfResult.filename;
+      pdfBuffer = await generateLetterPDF(content, { donorName: donor_name || 'Unknown' });
     } catch (pdfError) {
-      console.error('PDF generation warning (continuing with letter save):', pdfError);
-      // Continue even if PDF generation fails
+      console.error('PDF generation warning (continuing):', pdfError);
     }
 
     const result = await pool.query(
-      `INSERT INTO acknowledgment_letters (student_id, donor_id, template_name, subject, content, is_public, created_by, pdf_filename)
+      `INSERT INTO acknowledgment_letters (student_id, donor_id, template_name, subject, content, is_public, created_by, pdf_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
+       RETURNING id, student_id, donor_id, template_name, subject, content, is_public, created_by, created_at, updated_at`,
       [
         student_id ? Number(student_id) : null,
         donor_id ? Number(donor_id) : null,
@@ -39,20 +31,19 @@ acknowledgmentsRouter.post('/', async (req, res, next) => {
         content,
         !!is_public,
         req.user?.userId || null,
-        pdf_filename,
+        pdfBuffer,
       ]
     );
 
-    res.status(201).json({ 
+    res.status(201).json({
       letter: result.rows[0],
-      pdf_url: pdf_filename ? `/api/v1/letters/pdf/${pdf_filename}` : null
+      pdf_url: pdfBuffer ? `/api/v1/letters/${result.rows[0].id}/pdf` : null,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// List letters with optional filters
 acknowledgmentsRouter.get('/', async (req, res, next) => {
   try {
     const { student_id, donor_id, template_name, public_only } = req.query;
@@ -76,24 +67,32 @@ acknowledgmentsRouter.get('/', async (req, res, next) => {
     }
 
     if (public_only === 'true') {
-      params.push(true);
-      clauses.push(`is_public = $${params.length}`);
+      clauses.push(`is_public = true`);
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
-    const result = await pool.query(`SELECT * FROM acknowledgment_letters ${where} ORDER BY created_at DESC`, params);
+    const result = await pool.query(
+      `SELECT id, student_id, donor_id, template_name, subject, content, is_public, created_by, created_at, updated_at,
+              (pdf_data IS NOT NULL) AS has_pdf
+       FROM acknowledgment_letters ${where} ORDER BY created_at DESC`,
+      params
+    );
     res.json({ letters: result.rows });
   } catch (error) {
     next(error);
   }
 });
 
-// Get a single letter by id
 acknowledgmentsRouter.get('/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const result = await pool.query('SELECT * FROM acknowledgment_letters WHERE id = $1', [id]);
+    const result = await pool.query(
+      `SELECT id, student_id, donor_id, template_name, subject, content, is_public, created_by, created_at, updated_at,
+              (pdf_data IS NOT NULL) AS has_pdf
+       FROM acknowledgment_letters WHERE id = $1`,
+      [id]
+    );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Letter not found' });
     res.json({ letter: result.rows[0] });
   } catch (error) {
@@ -101,26 +100,22 @@ acknowledgmentsRouter.get('/:id', async (req, res, next) => {
   }
 });
 
-// Download PDF for a letter
-acknowledgmentsRouter.get('/pdf/:filename', async (req, res, next) => {
+acknowledgmentsRouter.get('/:id/pdf', async (req, res, next) => {
   try {
-    const { filename } = req.params;
+    const id = Number(req.params.id);
+    const result = await pool.query(
+      'SELECT pdf_data, template_name FROM acknowledgment_letters WHERE id = $1',
+      [id]
+    );
 
-    // Validate filename format to prevent directory traversal
-    if (!filename.match(/^letter-[a-z0-9-]+\.pdf$/)) {
-      return res.status(400).json({ message: 'Invalid filename' });
-    }
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Letter not found' });
 
-    const filepath = await getLetterPDFPath(filename);
-    
-    // Check if file exists
-    try {
-      await fs.access(filepath);
-    } catch {
-      return res.status(404).json({ message: 'PDF file not found' });
-    }
+    const { pdf_data } = result.rows[0];
+    if (!pdf_data) return res.status(404).json({ message: 'PDF not available for this letter' });
 
-    res.download(filepath, filename);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="acknowledgment-${id}.pdf"`);
+    res.send(pdf_data);
   } catch (error) {
     next(error);
   }
