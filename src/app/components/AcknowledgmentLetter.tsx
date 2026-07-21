@@ -100,7 +100,7 @@ export function AcknowledgmentLetter() {
     defaultValues: defaultLetterData,
   });
 
-  const [showHistory, setShowHistory] = useState(false);
+  const [activeTab, setActiveTab] = useState<'compose' | 'saved'>('compose');
   const [letterHistory, setLetterHistory] = useState<LetterData[]>([]);
   const [savedLetters, setSavedLetters] = useState<SavedLetterRecord[]>([]);
   const [showDonorDropdown, setShowDonorDropdown] = useState(false);
@@ -254,7 +254,6 @@ export function AcknowledgmentLetter() {
 
   const handleSaveDraft = () => {
     setLetterHistory((prev) => [formData, ...prev.slice(0, 9)]);
-    setShowHistory(true);
   };
 
   const buildSavedContent = () => {
@@ -323,17 +322,13 @@ export function AcknowledgmentLetter() {
 
   const handleLoadDraft = (item: LetterData) => {
     form.reset(item);
-    setShowHistory(false);
   };
 
   const handleLoadSavedLetter = (item: SavedLetterRecord) => {
     if (item.formData) {
       form.reset(item.formData);
-      setShowHistory(false);
       return;
     }
-
-    setShowHistory(false);
     alert('This saved letter can be viewed and printed, but the original form data was not stored for editing.');
   };
 
@@ -464,13 +459,27 @@ export function AcknowledgmentLetter() {
             </p>
           </div>
 
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="inline-flex items-center gap-2 self-start lg:self-auto rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-gray-700 hover:bg-gray-100 transition-colors"
-          >
-            <History size={16} />
-            Saved letters ({savedLetters.length})
-          </button>
+          <div className="flex self-start lg:self-auto rounded-xl border border-gray-200 bg-white p-1 gap-1">
+            <button
+              onClick={() => setActiveTab('compose')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'compose' ? 'bg-[#14856E] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <FileText size={15} />
+              Compose
+            </button>
+            <button
+              onClick={() => setActiveTab('saved')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'saved' ? 'bg-[#14856E] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <History size={15} />
+              Saved PDFs
+              {savedLetters.length > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${activeTab === 'saved' ? 'bg-white/20 text-white' : 'bg-[#14856E]/10 text-[#14856E]'}`}>
+                  {savedLetters.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -495,78 +504,84 @@ export function AcknowledgmentLetter() {
         ))}
       </div>
 
-      {showHistory && (
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm p-4 md:p-5">
-          <div className="flex items-center justify-between gap-3 mb-3">
+      {activeTab === 'saved' && (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
             <div>
-              <h3 className="text-base font-semibold text-gray-900">Saved Letters</h3>
-              <p className="text-sm text-gray-600">Letters saved in the database for future reuse</p>
+              <h3 className="text-base font-semibold text-gray-900">Saved PDFs</h3>
+              <p className="text-sm text-gray-600">All acknowledgment letters saved to the database</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowHistory(false)}
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              Close
-            </button>
+            <span className="text-sm text-gray-500">{savedLetters.length} letter{savedLetters.length !== 1 ? 's' : ''}</span>
           </div>
+
           {savedLetters.length === 0 ? (
-            <p className="text-sm text-gray-500">No saved letters found yet.</p>
+            <div className="px-6 py-12 text-center text-gray-500 text-sm">No saved letters yet. Compose and save one first.</div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {savedLetters.map((letter) => (
-                <div
-                  key={letter.id}
-                  className="text-left rounded-xl border border-gray-200 p-4 hover:border-[#14856E] hover:shadow-md transition-all"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div>
-                      <p className="font-semibold text-gray-900">{letter.donorName}</p>
-                      <p className="text-xs text-gray-500 mt-1">{letter.projectName || 'Acknowledgment Letter'}</p>
-                    </div>
-                    <span className="text-xs font-medium text-gray-500">{format(new Date(letter.createdAt), 'MMM dd, yyyy')}</span>
-                  </div>
-                  <div className="mb-3 pb-3 border-b border-gray-200">
-                    <span className="text-sm font-semibold text-[#14856E]">৳{letter.amount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleViewSavedLetter(letter)}
-                      title="View letter"
-                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <Eye size={14} />
-                      View
-                    </button>
-                    {letter.has_pdf && (
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadPDF(letter.id, letter.donorName, letter.createdAt)}
-                        title="Download PDF"
-                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
-                      >
-                        <Download size={14} />
-                        PDF
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleLoadSavedLetter(letter)}
-                      title="Load to edit"
-                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-xs bg-[#14856E]/10 text-[#14856E] rounded-lg hover:bg-[#14856E]/20 transition-colors"
-                    >
-                      <FileText size={14} />
-                      Load
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3">Donor</th>
+                    <th className="px-6 py-3">Project / Students</th>
+                    <th className="px-6 py-3">Amount</th>
+                    <th className="px-6 py-3">Date Saved</th>
+                    <th className="px-6 py-3">PDF</th>
+                    <th className="px-6 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {savedLetters.map((letter) => (
+                    <tr key={letter.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900">{letter.donorName}</td>
+                      <td className="px-6 py-4 text-gray-600 max-w-xs truncate">{letter.projectName || '—'}</td>
+                      <td className="px-6 py-4 font-semibold text-[#14856E]">৳{letter.amount.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{format(new Date(letter.createdAt), 'MMM dd, yyyy')}</td>
+                      <td className="px-6 py-4">
+                        {letter.has_pdf ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full font-medium">
+                            <FileText size={11} /> PDF
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleViewSavedLetter(letter)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            <Eye size={12} /> View
+                          </button>
+                          {letter.has_pdf && (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPDF(letter.id, letter.donorName, letter.createdAt)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
+                            >
+                              <Download size={12} /> Download
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => { handleLoadSavedLetter(letter); setActiveTab('compose'); }}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-[#14856E]/10 text-[#14856E] rounded-lg hover:bg-[#14856E]/20 transition-colors"
+                          >
+                            <FileText size={12} /> Load
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       )}
 
+      {activeTab === 'compose' && <>
       {saveMessage && (
         <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
           {saveMessage}
@@ -978,6 +993,7 @@ export function AcknowledgmentLetter() {
           </div>
         </div>
       </div>
+      </>}
 
       {/* View Letter Modal */}
       {viewModalOpen && viewingLetter && (
@@ -1035,7 +1051,7 @@ export function AcknowledgmentLetter() {
                     form.reset(viewingLetter.formData);
                     setViewModalOpen(false);
                     setViewingLetter(null);
-                    setShowHistory(false);
+                    setActiveTab('compose');
                   }
                 }}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
