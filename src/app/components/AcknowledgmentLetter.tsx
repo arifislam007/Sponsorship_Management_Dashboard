@@ -226,7 +226,8 @@ export function AcknowledgmentLetter() {
       setDonorSponsorships(sponsorships);
       if (sponsorships.length > 0) {
         const today = new Date().toISOString().slice(0, 10);
-        form.setValue('donations', sponsorships.map((s: any) => ({ date: today, amount: String(s.amount) })));
+        const totalAmount = sponsorships.reduce((sum: number, s: any) => sum + Number(s.amount), 0);
+        form.setValue('donations', [{ date: today, amount: String(totalAmount) }]);
         form.setValue('donationType', 'Sponsor a Child');
         form.setValue('projectName', sponsorships.length === 1
           ? `Sponsorship for ${sponsorships[0].student_name}`
