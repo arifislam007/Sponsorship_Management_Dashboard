@@ -229,6 +229,9 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  deleteSponsorship: (id: number) =>
+    request<{ message: string }>(`/sponsorships/${id}`, { method: 'DELETE' }),
+
   getDonorSponsoredStudents: (donorId: number) =>
     request<StudentApi[]>(`/donors/${donorId}/sponsored-students`),
 

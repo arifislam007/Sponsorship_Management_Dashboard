@@ -154,6 +154,28 @@ sponsorshipsRouter.post('/', async (req, res, next) => {
   }
 });
 
+sponsorshipsRouter.delete('/:id', async (req, res, next) => {
+  try {
+    const parsedId = Number(req.params.id);
+
+    const existingResult = await query(
+      'SELECT student_id, donor_id FROM sponsorships WHERE id = $1',
+      [parsedId]
+    );
+    const existing = existingResult.rows[0];
+    if (!existing) return res.status(404).json({ message: 'Sponsorship not found.' });
+
+    await query('DELETE FROM sponsorships WHERE id = $1', [parsedId]);
+
+    await syncDonorTotal(existing.donor_id);
+    await syncStudentSponsoredStatus(existing.student_id);
+
+    return res.json({ message: 'Sponsorship deleted.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 sponsorshipsRouter.put('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;

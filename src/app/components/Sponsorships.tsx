@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Link2, User, Heart, X } from 'lucide-react';
+import { Search, Plus, Link2, User, Heart, X, Trash2, AlertTriangle } from 'lucide-react';
 import { api, SponsorshipApi } from '../services/api';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
 import { formatDate } from '../utils/dateFormat';
@@ -12,6 +12,8 @@ export function Sponsorships() {
   const [selectedSponsorship, setSelectedSponsorship] = useState<SponsorshipApi | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [editingSponsorship, setEditingSponsorship] = useState<SponsorshipApi | null>(null);
+  const [deletingSponsorship, setDeletingSponsorship] = useState<SponsorshipApi | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadSponsorships = async () => {
     try {
@@ -22,6 +24,21 @@ export function Sponsorships() {
     } catch (error) {
       console.error('Failed to load sponsorships:', error);
       setSponsorships([]);
+    }
+  };
+
+  const handleDeleteSponsorship = async () => {
+    if (!deletingSponsorship) return;
+    setIsDeleting(true);
+    try {
+      await api.deleteSponsorship(deletingSponsorship.id);
+      setDeletingSponsorship(null);
+      await loadSponsorships();
+    } catch (error) {
+      console.error('Failed to delete sponsorship:', error);
+      alert('Failed to delete sponsorship. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -210,24 +227,27 @@ export function Sponsorships() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => {
-                        setSelectedSponsorship(sponsorship);
-                        setIsDetailsOpen(true);
-                      }}
-                      className="text-[#14856E] hover:text-[#0f6b5a] font-medium mr-4"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingSponsorship(sponsorship);
-                        setIsModalOpen(true);
-                      }}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => { setSelectedSponsorship(sponsorship); setIsDetailsOpen(true); }}
+                        className="text-[#14856E] hover:text-[#0f6b5a] font-medium"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => { setEditingSponsorship(sponsorship); setIsModalOpen(true); }}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeletingSponsorship(sponsorship)}
+                        className="text-red-400 hover:text-red-600 transition-colors"
+                        title="Delete sponsorship"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -252,6 +272,53 @@ export function Sponsorships() {
         mode={editingSponsorship ? 'edit' : 'create'}
         initialData={editingSponsorship}
       />
+
+      {/* Delete confirmation modal */}
+      {deletingSponsorship && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle size={20} className="text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Delete Sponsorship</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 mb-1">
+                Are you sure you want to permanently delete the sponsorship between:
+              </p>
+              <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm">
+                <p><span className="font-semibold text-gray-700">Student:</span> {deletingSponsorship.student_name}</p>
+                <p className="mt-1"><span className="font-semibold text-gray-700">Donor:</span> {deletingSponsorship.donor_name}</p>
+                <p className="mt-1"><span className="font-semibold text-gray-700">Amount:</span> ৳{Number(deletingSponsorship.amount).toLocaleString()}/mo</p>
+              </div>
+              <p className="mt-3 text-xs text-red-600">
+                This will also update the donor's total contribution and the student's sponsored status.
+              </p>
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => setDeletingSponsorship(null)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSponsorship}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Trash2 size={15} />
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isDetailsOpen && selectedSponsorship && (
         <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
