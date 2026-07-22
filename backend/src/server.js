@@ -13,6 +13,7 @@ import { sponsorshipsRouter } from './routes/sponsorships.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
+import { startBillingScheduler } from './services/sponsorshipBilling.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -73,6 +74,8 @@ async function start() {
   app.listen(config.port, () => {
     console.log(`Backend running on port ${config.port}`);
   });
+
+  startBillingScheduler();
 }
 
 start().catch(async (error) => {

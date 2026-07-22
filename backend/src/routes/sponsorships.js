@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { query } from '../db.js';
+import { generateSponsorshipLedgerEntries } from '../services/sponsorshipBilling.js';
 
 export const sponsorshipsRouter = Router();
 
@@ -140,6 +141,13 @@ sponsorshipsRouter.post('/', async (req, res, next) => {
     await syncDonorTotal(donor_id);
     await syncStudentSponsoredStatus(student_id);
 
+    // Immediately generate ledger entries for continuous sponsorships
+    if (normalizedStatus === 'Active' && period === 'continuous') {
+      generateSponsorshipLedgerEntries().catch((err) =>
+        console.error('[billing] Post-create billing error:', err)
+      );
+    }
+
     return res.status(201).json(insertResult.rows[0]);
   } catch (error) {
     next(error);
@@ -157,7 +165,7 @@ sponsorshipsRouter.put('/:id', async (req, res, next) => {
     }
 
     const existingResult = await query(
-      'SELECT student_id, donor_id, status, amount::float8 AS amount FROM sponsorships WHERE id = $1',
+      'SELECT student_id, donor_id, status, period, amount::float8 AS amount FROM sponsorships WHERE id = $1',
       [parsedId]
     );
     const existingSponsorship = existingResult.rows[0];
@@ -186,6 +194,13 @@ sponsorshipsRouter.put('/:id', async (req, res, next) => {
 
     await syncDonorTotal(existingSponsorship.donor_id);
     await syncStudentSponsoredStatus(result.rows[0].student_id);
+
+    // Re-sync ledger if a continuous sponsorship is re-activated or amount changed
+    if (status === 'Active' && existingSponsorship.period === 'continuous') {
+      generateSponsorshipLedgerEntries().catch((err) =>
+        console.error('[billing] Post-update billing error:', err)
+      );
+    }
 
     return res.json(result.rows[0]);
   } catch (error) {
