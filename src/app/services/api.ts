@@ -145,6 +145,99 @@ export interface LeaveRequestApi {
   created_at: string;
 }
 
+// ── Accounting Types ────────────────────────────────────────────────────────
+
+export type AccAccountType = 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense';
+export type AccVoucherType = 'PV' | 'RV' | 'JV' | 'CV';
+export type AccVoucherStatus = 'Draft' | 'Submitted' | 'Approved' | 'Posted' | 'Cancelled';
+
+export interface AccAccount {
+  id: number;
+  code: string;
+  name: string;
+  account_type: AccAccountType;
+  parent_id: number | null;
+  parent_name?: string;
+  is_active: boolean;
+  balance: number;
+}
+
+export interface AccProject {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  is_active: boolean;
+}
+
+export interface AccVoucherLine {
+  id?: number;
+  account_id: number;
+  account_code?: string;
+  account_name?: string;
+  account_type?: AccAccountType;
+  debit: number;
+  credit: number;
+  narration?: string;
+  line_order?: number;
+}
+
+export interface AccVoucher {
+  id: number;
+  voucher_no: string;
+  voucher_type: AccVoucherType;
+  date: string;
+  narration: string;
+  project_id?: number | null;
+  project_name?: string;
+  status: AccVoucherStatus;
+  total_amount: number;
+  created_by_name?: string;
+  approved_by_name?: string;
+  lines?: AccVoucherLine[];
+  created_at?: string;
+}
+
+export interface AccLedgerEntry {
+  id: number;
+  date: string;
+  debit: number;
+  credit: number;
+  running_balance: number;
+  account_code: string;
+  account_name: string;
+  voucher_no: string;
+  narration: string;
+  voucher_type: AccVoucherType;
+}
+
+export interface AccTrialBalanceLine {
+  id: number;
+  code: string;
+  name: string;
+  account_type: AccAccountType;
+  total_debit: number;
+  total_credit: number;
+  net_balance: number;
+}
+
+export interface AccIncomeExpenseReport {
+  income: Array<{ id: number; code: string; name: string; amount: number }>;
+  expense: Array<{ id: number; code: string; name: string; amount: number }>;
+  total_income: number;
+  total_expense: number;
+  net: number;
+}
+
+export interface AccDashboard {
+  voucher_counts: { total: number; draft: number; submitted: number; approved: number; posted: number };
+  total_income: number;
+  total_expense: number;
+  net_surplus: number;
+  cash_balance: number;
+  recent_vouchers: Array<{ voucher_no: string; voucher_type: AccVoucherType; date: string; narration: string; status: AccVoucherStatus; total_amount: number }>;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -285,6 +378,65 @@ export const api = {
     }
     return response.blob();
   },
+
+  // Accounting
+  accGetAccounts: () => request<AccAccount[]>('/accounting/accounts'),
+  accCreateAccount: (p: { code: string; name: string; account_type: AccAccountType; parent_id?: number | null }) =>
+    request<AccAccount>('/accounting/accounts', { method: 'POST', body: JSON.stringify(p) }),
+  accUpdateAccount: (id: number, p: { name?: string; is_active?: boolean }) =>
+    request<AccAccount>(`/accounting/accounts/${id}`, { method: 'PUT', body: JSON.stringify(p) }),
+
+  accGetProjects: () => request<AccProject[]>('/accounting/projects'),
+  accCreateProject: (p: { name: string; code: string; description?: string }) =>
+    request<AccProject>('/accounting/projects', { method: 'POST', body: JSON.stringify(p) }),
+
+  accGetVouchers: (params?: { type?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.append('type', params.type);
+    if (params?.status) qs.append('status', params.status);
+    if (params?.from) qs.append('from', params.from);
+    if (params?.to) qs.append('to', params.to);
+    if (params?.limit) qs.append('limit', String(params.limit));
+    if (params?.offset) qs.append('offset', String(params.offset));
+    return request<{ data: AccVoucher[]; total: number }>(`/accounting/vouchers?${qs}`);
+  },
+  accGetVoucher: (id: number) => request<AccVoucher>(`/accounting/vouchers/${id}`),
+  accCreateVoucher: (p: { voucher_type: AccVoucherType; date: string; narration: string; project_id?: number | null; lines: AccVoucherLine[] }) =>
+    request<AccVoucher>('/accounting/vouchers', { method: 'POST', body: JSON.stringify(p) }),
+  accUpdateVoucher: (id: number, p: { date: string; narration: string; project_id?: number | null; lines: AccVoucherLine[] }) =>
+    request<{ message: string }>(`/accounting/vouchers/${id}`, { method: 'PUT', body: JSON.stringify(p) }),
+  accSubmitVoucher: (id: number) => request<{ message: string }>(`/accounting/vouchers/${id}/submit`, { method: 'POST' }),
+  accApproveVoucher: (id: number) => request<{ message: string }>(`/accounting/vouchers/${id}/approve`, { method: 'POST' }),
+  accPostVoucher: (id: number) => request<{ message: string }>(`/accounting/vouchers/${id}/post`, { method: 'POST' }),
+  accCancelVoucher: (id: number, reason?: string) =>
+    request<{ message: string }>(`/accounting/vouchers/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+  accGetLedger: (params?: { account_id?: number; from?: string; to?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.account_id) qs.append('account_id', String(params.account_id));
+    if (params?.from) qs.append('from', params.from);
+    if (params?.to) qs.append('to', params.to);
+    if (params?.limit) qs.append('limit', String(params.limit));
+    if (params?.offset) qs.append('offset', String(params.offset));
+    return request<{ data: AccLedgerEntry[]; total: number }>(`/accounting/ledger?${qs}`);
+  },
+
+  accGetTrialBalance: (as_of?: string) =>
+    request<AccTrialBalanceLine[]>(`/accounting/reports/trial-balance${as_of ? `?as_of=${as_of}` : ''}`),
+  accGetIncomeExpense: (from?: string, to?: string) => {
+    const qs = new URLSearchParams();
+    if (from) qs.append('from', from);
+    if (to) qs.append('to', to);
+    return request<AccIncomeExpenseReport>(`/accounting/reports/income-expense?${qs}`);
+  },
+  accGetCashBook: (params?: { account_id?: number; from?: string; to?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.account_id) qs.append('account_id', String(params.account_id));
+    if (params?.from) qs.append('from', params.from);
+    if (params?.to) qs.append('to', params.to);
+    return request<AccLedgerEntry[]>(`/accounting/reports/cash-book?${qs}`);
+  },
+  accGetDashboard: () => request<AccDashboard>('/accounting/dashboard'),
 
   async exportDonorStatement(payload: DonorStatementPayload): Promise<Blob> {
     const response = await fetch(`${API_BASE}/exports/donor-statement`, {

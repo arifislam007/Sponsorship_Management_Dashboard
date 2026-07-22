@@ -12,6 +12,7 @@ import { AcknowledgmentLetter } from "./components/AcknowledgmentLetter";
 import { Admin } from "./components/Admin";
 import { LeaveManagement } from "./components/LeaveManagement";
 import { ICT } from "./components/ICT";
+import { Accounting } from "./components/Accounting";
 import { PublicICTAdmission } from "./components/PublicICTAdmission";
 import { Navigate } from "react-router";
 import { useAuth } from "./contexts/AuthContext";
@@ -76,6 +77,11 @@ export const router = createBrowserRouter([
       { path: "ict", Component: () => (
         <ProtectedRoute requiredModule="ICT">
           <ICT />
+        </ProtectedRoute>
+      ) },
+      { path: "accounting", Component: () => (
+        <ProtectedRoute requiredModule="Accounting">
+          <Accounting />
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (

@@ -12,6 +12,7 @@ import { leavesRouter } from './routes/leaves.js';
 import { sponsorshipsRouter } from './routes/sponsorships.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
+import { accountingRouter } from './routes/accounting.js';
 import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
 import { startBillingScheduler } from './services/sponsorshipBilling.js';
 import { fileURLToPath } from 'url';
@@ -56,6 +57,7 @@ app.use(`${config.apiPrefix}/leaves`, authMiddleware, moduleAccessMiddleware('Le
 app.use(`${config.apiPrefix}/ledger`, authMiddleware, moduleAccessMiddleware('Accounting'), ledgerRouter);
 app.use(`${config.apiPrefix}/exports`, authMiddleware, moduleAccessMiddleware('Export'), exportsRouter);
 app.use(`${config.apiPrefix}/letters`, authMiddleware, moduleAccessMiddleware('Export'), acknowledgmentsRouter);
+app.use(`${config.apiPrefix}/accounting`, authMiddleware, moduleAccessMiddleware('Accounting'), accountingRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) {
