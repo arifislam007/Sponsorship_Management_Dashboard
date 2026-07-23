@@ -254,154 +254,70 @@ export function RootLayout() {
       </main>
 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
-        <div className="flex justify-around items-center h-16">
+        <div className="flex justify-around items-center h-14">
           {canAccess('Dashboard') && (
-            <NavLink
-              to="/dashboard"
-              end
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <LayoutDashboard size={20} />
-              <span className="text-xs mt-1">Home</span>
+            <NavLink to="/dashboard" end
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <LayoutDashboard size={22} />
             </NavLink>
           )}
-
           {canAccess('Students') && (
-            <NavLink
-              to="/dashboard/students"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <Users size={20} />
-              <span className="text-xs mt-1">Students</span>
+            <NavLink to="/dashboard/students"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <Users size={22} />
             </NavLink>
           )}
-
           {canAccess('Export') && (
-            <NavLink
-              to="/dashboard/acknowledgment-letter"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <FileText size={20} />
-              <span className="text-xs mt-1">Ac_Letter</span>
+            <NavLink to="/dashboard/acknowledgment-letter"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <FileText size={22} />
             </NavLink>
           )}
-
           {canAccess('Leave Management') && (
-            <NavLink
-              to="/dashboard/leaves"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <CalendarDays size={20} />
-              <span className="text-xs mt-1">Leave</span>
+            <NavLink to="/dashboard/leaves"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <CalendarDays size={22} />
             </NavLink>
           )}
-
           {canAccess('ICT') && (
-            <NavLink
-              to="/dashboard/ict"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <Code2 size={20} />
-              <span className="text-xs mt-1">ICT</span>
+            <NavLink to="/dashboard/ict"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <Code2 size={22} />
             </NavLink>
           )}
-
           {canAccess('Accounting') && (
-            <NavLink
-              to="/dashboard/accounting"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <BookOpen size={20} />
-              <span className="text-xs mt-1">Accounts</span>
+            <NavLink to="/dashboard/accounting"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <BookOpen size={22} />
             </NavLink>
           )}
-
           {canAccess('Projects') && (
-            <NavLink
-              to="/dashboard/projects"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <FolderKanban size={20} />
-              <span className="text-xs mt-1">Projects</span>
+            <NavLink to="/dashboard/projects"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <FolderKanban size={22} />
             </NavLink>
           )}
-
           {canAccess('HR') && (
-            <NavLink
-              to="/dashboard/hr"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <UserCog size={20} />
-              <span className="text-xs mt-1">HR</span>
+            <NavLink to="/dashboard/hr"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <UserCog size={22} />
             </NavLink>
           )}
-
           {canAccess('School') && (
-            <NavLink
-              to="/dashboard/school"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <School size={20} />
-              <span className="text-xs mt-1">School</span>
+            <NavLink to="/dashboard/school"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <School size={22} />
             </NavLink>
           )}
-
           {canAccess('Admin') && (
-            <NavLink
-              to="/dashboard/settings"
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full ${
-                  isActive ? 'text-[#14856E]' : 'text-gray-600'
-                }`
-              }
-            >
-              <Settings size={20} />
-              <span className="text-xs mt-1">Admin</span>
+            <NavLink to="/dashboard/settings"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <Settings size={22} />
             </NavLink>
           )}
-
-          <button
-            onClick={handleLogout}
-            className="flex flex-col items-center justify-center flex-1 h-full text-gray-600 hover:text-red-600 transition-colors"
-          >
-            <LogOut size={20} />
-            <span className="text-xs mt-1">Logout</span>
+          <button onClick={handleLogout}
+            className="flex items-center justify-center flex-1 h-full text-gray-500 hover:text-red-600 transition-colors">
+            <LogOut size={22} />
           </button>
         </div>
       </nav>

@@ -1616,10 +1616,10 @@ export function School() {
       <div className="flex gap-1 overflow-x-auto pb-1 mb-6 border-b border-gray-200">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors border-b-2 -mb-px ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors border-b-2 -mb-px ${
               tab === t.id ? 'border-[#14856E] text-[#14856E] bg-green-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}>
-            <t.icon size={16} />{t.label}
+            <t.icon size={16} /><span className="hidden sm:inline">{t.label}</span>
           </button>
         ))}
       </div>
