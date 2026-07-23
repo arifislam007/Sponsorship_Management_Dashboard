@@ -30,6 +30,7 @@ services:
       API_PREFIX: /api/v1
       PORT: 8000
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
     depends_on:
       db:
         condition: service_healthy
@@ -58,6 +59,58 @@ services:
         condition: service_healthy
     # ports:
     #   - "5002:5002"
+
+  project-backend:
+    build:
+      context: ./project-backend
+      dockerfile: Dockerfile
+    container_name: sombhabona-projects
+    restart: unless-stopped
+    environment:
+      DB_HOST: sombhabona-db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here}
+      PORT: 5003
+      NODE_ENV: ${NODE_ENV:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5003/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    # ports:
+    #   - "5003:5003"
+
+  hr-backend:
+    build:
+      context: ./hr-backend
+      dockerfile: Dockerfile
+    container_name: sombhabona-hr
+    restart: unless-stopped
+    environment:
+      DB_HOST: sombhabona-db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      PORT: 5004
+      NODE_ENV: ${NODE_ENV:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5004/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    # ports:
+    #   - "5004:5004"
 
   frontend:
     build:

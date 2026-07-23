@@ -13,6 +13,8 @@ import { Admin } from "./components/Admin";
 import { LeaveManagement } from "./components/LeaveManagement";
 import { ICT } from "./components/ICT";
 import { Accounting } from "./components/Accounting";
+import { Projects } from "./components/Projects";
+import { HR } from "./components/HR";
 import { PublicICTAdmission } from "./components/PublicICTAdmission";
 import { Navigate } from "react-router";
 import { useAuth } from "./contexts/AuthContext";
@@ -82,6 +84,16 @@ export const router = createBrowserRouter([
       { path: "accounting", Component: () => (
         <ProtectedRoute requiredModule="Accounting">
           <Accounting />
+        </ProtectedRoute>
+      ) },
+      { path: "projects", Component: () => (
+        <ProtectedRoute requiredModule="Projects">
+          <Projects />
+        </ProtectedRoute>
+      ) },
+      { path: "hr", Component: () => (
+        <ProtectedRoute requiredModule="HR">
+          <HR />
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (

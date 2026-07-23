@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router';
-import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays, Code2, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays, Code2, BookOpen, FolderKanban, UserCog } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
 
@@ -151,6 +151,38 @@ export function RootLayout() {
             </NavLink>
           )}
 
+          {canAccess('Projects') && (
+            <NavLink
+              to="/dashboard/projects"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+                  isActive
+                    ? 'bg-[#14856E] text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`
+              }
+            >
+              <FolderKanban size={20} />
+              <span>Projects</span>
+            </NavLink>
+          )}
+
+          {canAccess('HR') && (
+            <NavLink
+              to="/dashboard/hr"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+                  isActive
+                    ? 'bg-[#14856E] text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`
+              }
+            >
+              <UserCog size={20} />
+              <span>HR</span>
+            </NavLink>
+          )}
+
           {canAccess('Admin') && (
             <NavLink
               to="/dashboard/settings"
@@ -295,6 +327,34 @@ export function RootLayout() {
             >
               <BookOpen size={20} />
               <span className="text-xs mt-1">Accounts</span>
+            </NavLink>
+          )}
+
+          {canAccess('Projects') && (
+            <NavLink
+              to="/dashboard/projects"
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center flex-1 h-full ${
+                  isActive ? 'text-[#14856E]' : 'text-gray-600'
+                }`
+              }
+            >
+              <FolderKanban size={20} />
+              <span className="text-xs mt-1">Projects</span>
+            </NavLink>
+          )}
+
+          {canAccess('HR') && (
+            <NavLink
+              to="/dashboard/hr"
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center flex-1 h-full ${
+                  isActive ? 'text-[#14856E]' : 'text-gray-600'
+                }`
+              }
+            >
+              <UserCog size={20} />
+              <span className="text-xs mt-1">HR</span>
             </NavLink>
           )}
 

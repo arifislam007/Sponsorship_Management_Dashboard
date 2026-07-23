@@ -78,6 +78,8 @@ INSERT INTO modules (name, description, route_name) VALUES
     ('ICT', 'ICT student profiles and admission forms', 'ict'),
     ('School Operations', 'School operations including class routines, curriculum, attendance, and exams', 'school-operations'),
     ('Accounting', 'Accounting and ledger', 'accounting'),
+    ('Projects', 'Project management and task tracking', 'projects'),
+    ('HR', 'Human resources, employee and payroll management', 'hr'),
     ('Export', 'Data export functionality', 'export'),
     ('Admin', 'Admin panel and user management', 'admin')
 ON CONFLICT (name) DO NOTHING;
