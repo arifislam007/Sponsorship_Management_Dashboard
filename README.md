@@ -1,7 +1,6 @@
 
   # Sponsorship Management Dashboard
 
-  ## This branch is last stable version of CRM before updateing Finance, account, HR, Project feature
 
   This project implements a full-stack Sponsorship Management Dashboard for Sombhabona Foundation, based on the provided Figma design.
 
