@@ -546,7 +546,7 @@ function VoucherDetailModal({ id, onClose, onRefresh }: { id: number; onClose: (
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
             <div><span className="text-gray-500">Date</span><p className="font-medium">{voucher.date?.slice(0, 10)}</p></div>
             <div><span className="text-gray-500">Project</span><p className="font-medium">{voucher.project_name || '—'}</p></div>
             <div><span className="text-gray-500">Created By</span><p className="font-medium">{voucher.created_by_name || '—'}</p></div>
@@ -958,7 +958,7 @@ function ReportsTab() {
             <div className="px-4 py-3 bg-green-50 border-b border-green-200">
               <h4 className="font-semibold text-green-800 flex items-center gap-2"><TrendingUp size={16} />Income</h4>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <tbody className="divide-y divide-gray-100">
                 {incomeExpense.income.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50">
@@ -971,13 +971,13 @@ function ReportsTab() {
               <tfoot className="border-t-2 border-green-300 bg-green-50 font-bold">
                 <tr><td className="px-4 py-2.5 text-green-800">Total Income</td><td className="px-4 py-2.5 text-right text-green-800">{fmt(incomeExpense.total_income)}</td></tr>
               </tfoot>
-            </table>
+            </table></div>
           </div>
           <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
             <div className="px-4 py-3 bg-red-50 border-b border-red-200">
               <h4 className="font-semibold text-red-800 flex items-center gap-2"><TrendingDown size={16} />Expenses</h4>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <tbody className="divide-y divide-gray-100">
                 {incomeExpense.expense.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50">
@@ -990,7 +990,7 @@ function ReportsTab() {
               <tfoot className="border-t-2 border-red-300 bg-red-50 font-bold">
                 <tr><td className="px-4 py-2.5 text-red-800">Total Expenses</td><td className="px-4 py-2.5 text-right text-red-800">{fmt(incomeExpense.total_expense)}</td></tr>
               </tfoot>
-            </table>
+            </table></div>
           </div>
           <div className={`lg:col-span-2 rounded-xl border p-4 ${incomeExpense.net >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
             <div className="flex justify-between items-center">
@@ -1100,8 +1100,7 @@ export function Accounting() {
     <div className="p-4 md:p-8 min-h-full">
       <div className="mb-6">
         <div className="md:hidden mb-4">
-          <h1 className="text-xl font-bold text-[#14856E]">Sombhabona</h1>
-          <p className="text-xs text-gray-600">Foundation Dashboard</p>
+          <img src="/logo.png" alt="Sombhabona" className="h-10 w-auto" />
         </div>
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Accounting & Finance</h1>
         <p className="text-sm text-gray-600 mt-1">Double-entry bookkeeping, vouchers, and financial reports</p>

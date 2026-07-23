@@ -1331,8 +1331,7 @@ export function Projects() {
     <div className="p-4 md:p-8 min-h-full">
       <div className="mb-6">
         <div className="md:hidden mb-4">
-          <h1 className="text-xl font-bold text-[#14856E]">Sombhabona</h1>
-          <p className="text-xs text-gray-600">Foundation Dashboard</p>
+          <img src="/logo.png" alt="Sombhabona" className="h-10 w-auto" />
         </div>
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Project Management</h1>
         <p className="text-sm text-gray-600 mt-1">Track projects, tasks, and team progress</p>

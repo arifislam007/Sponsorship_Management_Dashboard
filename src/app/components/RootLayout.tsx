@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router';
 import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays, Code2, BookOpen, FolderKanban, UserCog } from 'lucide-react';
+import logo from '../../../logo.png';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
 
@@ -17,8 +18,10 @@ export function RootLayout() {
     <div className="flex h-screen bg-gray-50">
       <aside className="hidden md:flex w-64 bg-white border-r border-gray-200 flex-col">
         <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-[#14856E]">Sombhabona</h1>
-          <p className="text-xs text-gray-600 mt-1">Foundation Dashboard</p>
+          <img src={logo} alt="Sombhabona" className="h-14 w-auto" />
+          <p className="mt-3 text-xs text-gray-600">📞 01737243447</p>
+          <p className="text-xs text-gray-600">📍 Mirpur, Dhaka</p>
+          <p className="text-gray-500 text-xs mt-1">© 2026 Sombhabona Foundation</p>
         </div>
 
         <nav className="flex-1 p-4">
@@ -99,7 +102,7 @@ export function RootLayout() {
               }
             >
               <FileText size={20} />
-              <span>Acknowledgment Letter</span>
+              <span>Ac_Letter</span>
             </NavLink>
           )}
 
@@ -115,7 +118,7 @@ export function RootLayout() {
               }
             >
               <CalendarDays size={20} />
-              <span>Leave Management</span>
+              <span>Leave</span>
             </NavLink>
           )}
 
@@ -201,15 +204,6 @@ export function RootLayout() {
         </nav>
 
         <footer className="p-4 border-t border-gray-200">
-          <div className="mb-4">
-            <p className="font-semibold text-[#14856E] mb-2 text-sm">
-              বঞ্চিত শিশুও আগামীর সম্ভাবনা
-            </p>
-            <p className="mb-1 text-xs text-gray-600">📞 01737243447</p>
-            <p className="mb-2 text-xs text-gray-600">📍 Mirpur, Dhaka</p>
-            <p className="text-gray-500 text-xs">© 2024 Sombhabona Foundation</p>
-          </div>
-
           {user && (
             <div className="relative">
               <button
@@ -284,7 +278,7 @@ export function RootLayout() {
               }
             >
               <FileText size={20} />
-              <span className="text-xs mt-1">Letter</span>
+              <span className="text-xs mt-1">Ac_Letter</span>
             </NavLink>
           )}
 

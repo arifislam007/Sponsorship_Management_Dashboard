@@ -128,8 +128,7 @@ export function LeaveManagement() {
     <div className="p-4 md:p-8 space-y-6">
       <div>
         <div className="md:hidden mb-4">
-          <h1 className="text-xl font-bold text-[#14856E]">Sombhabona</h1>
-          <p className="text-xs text-gray-600">Foundation Dashboard</p>
+          <img src="/logo.png" alt="Sombhabona" className="h-10 w-auto" />
         </div>
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Leave Management</h1>
         <p className="text-sm md:text-base text-gray-600 mt-1">Track casual and special leave requests with monthly special leave accrual.</p>
