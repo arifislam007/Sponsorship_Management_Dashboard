@@ -15,6 +15,7 @@ import { ICT } from "./components/ICT";
 import { Accounting } from "./components/Accounting";
 import { Projects } from "./components/Projects";
 import { HR } from "./components/HR";
+import { School } from "./components/School";
 import { PublicICTAdmission } from "./components/PublicICTAdmission";
 import { Navigate } from "react-router";
 import { useAuth } from "./contexts/AuthContext";
@@ -94,6 +95,11 @@ export const router = createBrowserRouter([
       { path: "hr", Component: () => (
         <ProtectedRoute requiredModule="HR">
           <HR />
+        </ProtectedRoute>
+      ) },
+      { path: "school", Component: () => (
+        <ProtectedRoute requiredModule="School">
+          <School />
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (
