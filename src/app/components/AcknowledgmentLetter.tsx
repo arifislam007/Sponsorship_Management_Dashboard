@@ -496,13 +496,11 @@ export function AcknowledgmentLetter() {
     <div className="p-4 md:p-8">
       <div className="mb-6 md:mb-8">
         <div className="md:hidden mb-4">
-          <h1 className="text-xl font-bold text-[#14856E]">Sombhabona</h1>
-          <p className="text-xs text-gray-600">Foundation Dashboard</p>
+          <img src="/logo.png" alt="Sombhabona" className="h-10 w-auto" />
         </div>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs md:text-sm font-semibold uppercase tracking-[0.18em] text-[#14856E]">Accounting Module</p>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mt-1">Acknowledgment Letter</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Acknowledgment Letter</h1>
             <p className="text-sm md:text-base text-gray-600 mt-1">
               Create, save, and reuse donor acknowledgment letters from one dashboard.
             </p>

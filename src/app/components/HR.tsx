@@ -609,6 +609,13 @@ function EmployeesTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  const fetchAndEdit = async (id: number) => {
+    try {
+      const full = await hrFetch<Employee>(`/employees/${id}`);
+      setEditing(full); setShowForm(true);
+    } catch (e: any) { alert(e.message); }
+  };
+
   const deleteEmployee = async () => {
     if (!deleting) return;
     try {
@@ -689,7 +696,7 @@ function EmployeesTab() {
                     <td className="px-4 py-3">
                       <div className="flex justify-center gap-1">
                         <button onClick={() => setViewId(e.id)} className="p-1.5 text-gray-400 hover:text-[#14856E]"><Eye size={14} /></button>
-                        <button onClick={() => { setEditing(e); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-gray-700"><Edit2 size={14} /></button>
+                        <button onClick={() => fetchAndEdit(e.id)} className="p-1.5 text-gray-400 hover:text-gray-700"><Edit2 size={14} /></button>
                         <button onClick={() => setDeleting(e)} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
                       </div>
                     </td>
@@ -724,8 +731,7 @@ function EmployeesTab() {
           empId={viewId}
           onClose={() => setViewId(null)}
           onEdit={() => {
-            const emp = employees.find(e => e.id === viewId);
-            if (emp) { setEditing(emp); setShowForm(true); }
+            if (viewId) fetchAndEdit(viewId);
             setViewId(null);
           }}
         />
