@@ -17,7 +17,7 @@ export function Sponsorships() {
 
   const loadSponsorships = async () => {
     try {
-      const response = await api.getSponsorships(50, 0, searchTerm || undefined, statusFilter === 'all' ? undefined : statusFilter);
+      const response = await api.getSponsorships(1000, 0, searchTerm || undefined, statusFilter === 'all' ? undefined : statusFilter);
       // Handle paginated response
       const sponsorshipData = Array.isArray(response) ? response : response.data || [];
       setSponsorships(sponsorshipData);
