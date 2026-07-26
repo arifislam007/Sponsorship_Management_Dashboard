@@ -14,6 +14,7 @@ import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { accountingRouter } from './routes/accounting.js';
 import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
+import { auditMiddleware } from './middleware/audit.js';
 import { startBillingScheduler } from './services/sponsorshipBilling.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -50,14 +51,14 @@ app.use(`${config.apiPrefix}/admin`, adminRouter);
 
 // Protected routes with auth middleware
 app.use(`${config.apiPrefix}/dashboard`, authMiddleware, moduleAccessMiddleware('Dashboard'), dashboardRouter);
-app.use(`${config.apiPrefix}/students`, authMiddleware, moduleAccessMiddleware('Students'), studentsRouter);
-app.use(`${config.apiPrefix}/donors`, authMiddleware, moduleAccessMiddleware('Donors'), donorsRouter);
-app.use(`${config.apiPrefix}/sponsorships`, authMiddleware, moduleAccessMiddleware('Sponsorships'), sponsorshipsRouter);
-app.use(`${config.apiPrefix}/leaves`, authMiddleware, moduleAccessMiddleware('Leave Management'), leavesRouter);
-app.use(`${config.apiPrefix}/ledger`, authMiddleware, moduleAccessMiddleware('Accounting'), ledgerRouter);
+app.use(`${config.apiPrefix}/students`, authMiddleware, moduleAccessMiddleware('Students'), auditMiddleware('Students'), studentsRouter);
+app.use(`${config.apiPrefix}/donors`, authMiddleware, moduleAccessMiddleware('Donors'), auditMiddleware('Donors'), donorsRouter);
+app.use(`${config.apiPrefix}/sponsorships`, authMiddleware, moduleAccessMiddleware('Sponsorships'), auditMiddleware('Sponsorships'), sponsorshipsRouter);
+app.use(`${config.apiPrefix}/leaves`, authMiddleware, moduleAccessMiddleware('Leave Management'), auditMiddleware('Leaves'), leavesRouter);
+app.use(`${config.apiPrefix}/ledger`, authMiddleware, moduleAccessMiddleware('Accounting'), auditMiddleware('Ledger'), ledgerRouter);
 app.use(`${config.apiPrefix}/exports`, authMiddleware, moduleAccessMiddleware('Export'), exportsRouter);
 app.use(`${config.apiPrefix}/letters`, authMiddleware, moduleAccessMiddleware('Export'), acknowledgmentsRouter);
-app.use(`${config.apiPrefix}/accounting`, authMiddleware, moduleAccessMiddleware('Accounting'), accountingRouter);
+app.use(`${config.apiPrefix}/accounting`, authMiddleware, moduleAccessMiddleware('Accounting'), auditMiddleware('Accounting'), accountingRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) {

@@ -358,6 +358,83 @@ adminRouter.get('/roles/:roleName/permissions', authMiddleware, roleMiddleware('
   }
 });
 
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+
+adminRouter.get('/audit-logs', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { user_id, action, module, from_date, to_date, limit = 100, offset = 0 } = req.query;
+    const params = []; const conds = [];
+    if (user_id)   { params.push(Number(user_id)); conds.push(`user_id = $${params.length}`); }
+    if (action)    { params.push(action);           conds.push(`action = $${params.length}`); }
+    if (module)    { params.push(module);           conds.push(`module = $${params.length}`); }
+    if (from_date) { params.push(from_date);        conds.push(`created_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date + 'T23:59:59'); conds.push(`created_at <= $${params.length}`); }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const countR = await pool.query(`SELECT COUNT(*)::int AS total FROM audit_logs ${where}`, params);
+    params.push(Number(limit), Number(offset));
+    const r = await pool.query(
+      `SELECT id, user_id, username, full_name, action, module, resource_type, resource_id,
+              resource_name, ip_address, created_at
+       FROM audit_logs ${where}
+       ORDER BY created_at DESC LIMIT $${params.length-1} OFFSET $${params.length}`,
+      params
+    );
+    res.json({ data: r.rows, total: countR.rows[0].total });
+  } catch (err) {
+    console.error('Audit logs error:', err);
+    res.status(500).json({ message: 'Failed to fetch audit logs' });
+  }
+});
+
+// ── User Activity / Time Report ────────────────────────────────────────────────
+
+adminRouter.get('/user-activity', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  try {
+    const { from_date, to_date } = req.query;
+    const params = []; const conds = [];
+    if (from_date) { params.push(from_date);               conds.push(`login_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date + 'T23:59:59');  conds.push(`login_at <= $${params.length}`); }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+    const [summaryR, sessionsR, dailyR] = await Promise.all([
+      // Per-user summary
+      pool.query(`
+        SELECT user_id, username, full_name,
+               COUNT(*)::int AS total_sessions,
+               ROUND(AVG(
+                 EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60
+               ))::int AS avg_session_min,
+               ROUND(SUM(
+                 EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60
+               ))::int AS total_minutes,
+               MAX(last_seen_at) AS last_seen
+        FROM user_sessions ${where}
+        GROUP BY user_id, username, full_name
+        ORDER BY total_minutes DESC NULLS LAST
+      `, params),
+      // Recent sessions
+      pool.query(`
+        SELECT id, user_id, username, full_name, login_at, last_seen_at, logout_at, ip_address,
+               ROUND(EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60)::int AS duration_min
+        FROM user_sessions ${where}
+        ORDER BY login_at DESC LIMIT 100
+      `, params),
+      // Daily active users
+      pool.query(`
+        SELECT DATE(login_at) AS date,
+               COUNT(DISTINCT user_id)::int AS active_users,
+               COUNT(*)::int AS sessions
+        FROM user_sessions ${where}
+        GROUP BY DATE(login_at) ORDER BY date DESC LIMIT 30
+      `, params),
+    ]);
+    res.json({ summary: summaryR.rows, sessions: sessionsR.rows, daily: dailyR.rows });
+  } catch (err) {
+    console.error('User activity error:', err);
+    res.status(500).json({ message: 'Failed to fetch user activity' });
+  }
+});
+
 // Update role permissions
 adminRouter.put('/roles/:roleName/permissions', authMiddleware, roleMiddleware('admin'), async (req, res) => {
   const { roleName } = req.params;

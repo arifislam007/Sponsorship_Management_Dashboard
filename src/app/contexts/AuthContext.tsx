@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { api } from './api';
 
 interface User {
@@ -36,13 +36,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const sessionIdRef = useRef<number | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load user from localStorage on mount
   useEffect(() => {
     const savedToken = localStorage.getItem('authToken');
+    const savedSession = localStorage.getItem('sessionId');
     if (savedToken) {
+      if (savedSession) sessionIdRef.current = Number(savedSession);
       setToken(savedToken);
       fetchUserData(savedToken);
+      startHeartbeat(savedToken);
     } else {
       setIsLoading(false);
     }
@@ -106,28 +111,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(newToken);
       setUser(data.user);
       localStorage.setItem('authToken', newToken);
+      if (data.sessionId) {
+        sessionIdRef.current = data.sessionId;
+        localStorage.setItem('sessionId', String(data.sessionId));
+      }
 
       // Fetch permissions
       const permResponse = await fetch('/api/v1/auth/permissions', {
-        headers: {
-          Authorization: `Bearer ${newToken}`,
-        },
+        headers: { Authorization: `Bearer ${newToken}` },
       });
-
       if (permResponse.ok) {
         const permData = await permResponse.json();
         setPermissions(permData.permissions);
       }
+
+      // Start heartbeat every 3 minutes
+      startHeartbeat(newToken);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
+  const startHeartbeat = (authToken: string) => {
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    heartbeatRef.current = setInterval(async () => {
+      try {
+        await fetch('/api/v1/auth/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+          body: JSON.stringify({ sessionId: sessionIdRef.current }),
+        });
+      } catch { /* silent */ }
+    }, 3 * 60 * 1000);
+  };
+
+  const logout = async () => {
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    const savedToken = token || localStorage.getItem('authToken');
+    const savedSession = sessionIdRef.current || Number(localStorage.getItem('sessionId'));
+    if (savedToken && savedSession) {
+      try {
+        await fetch('/api/v1/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${savedToken}` },
+          body: JSON.stringify({ sessionId: savedSession }),
+        });
+      } catch { /* silent */ }
+    }
     setUser(null);
     setToken(null);
     setPermissions(null);
+    sessionIdRef.current = null;
     localStorage.removeItem('authToken');
+    localStorage.removeItem('sessionId');
   };
 
   const hasRole = (role: string): boolean => {

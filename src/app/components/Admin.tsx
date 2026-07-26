@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock } from 'lucide-react';
 
 interface User {
   id: number;
@@ -32,6 +32,272 @@ const LEAVE_ONLY_MODULE = {
   canDelete: false,
   overrideRolePermissions: true,
 };
+
+function fmtDT(s: string) {
+  if (!s) return '—';
+  return new Date(s).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function fmtDate(s: string) {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+const ACTION_COLORS: Record<string, string> = {
+  LOGIN: 'bg-blue-100 text-blue-700',
+  LOGOUT: 'bg-gray-100 text-gray-600',
+  CREATE: 'bg-green-100 text-green-700',
+  UPDATE: 'bg-amber-100 text-amber-700',
+  DELETE: 'bg-red-100 text-red-700',
+};
+
+function AuditLogsTab({ token }: { token: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [action, setAction] = useState('');
+  const [module, setModule] = useState('');
+  const inp = 'px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]';
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const qs = new URLSearchParams({ limit: '200' });
+      if (from) qs.set('from_date', from);
+      if (to) qs.set('to_date', to);
+      if (action) qs.set('action', action);
+      if (module) qs.set('module', module);
+      const r = await fetch(`/api/v1/admin/audit-logs?${qs}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      setLogs(d.data || []);
+      setTotal(d.total || 0);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">From</label>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">To</label>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Action</label>
+          <select value={action} onChange={e => setAction(e.target.value)} className={inp}>
+            <option value="">All</option>
+            {['LOGIN','LOGOUT','CREATE','UPDATE','DELETE'].map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Module</label>
+          <select value={module} onChange={e => setModule(e.target.value)} className={inp}>
+            <option value="">All</option>
+            {['Auth','Students','Donors','Sponsorships','Leaves','Accounting','Ledger'].map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        <button onClick={load} disabled={loading}
+          className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+          {loading ? 'Loading…' : 'Filter'}
+        </button>
+      </div>
+
+      <div className="text-xs text-gray-500">{total} total records</div>
+
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+            <tr>
+              <th className="px-4 py-3 text-left">Time</th>
+              <th className="px-4 py-3 text-left">User</th>
+              <th className="px-4 py-3 text-left">Action</th>
+              <th className="px-4 py-3 text-left">Module</th>
+              <th className="px-4 py-3 text-left">Resource</th>
+              <th className="px-4 py-3 text-left">IP</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {logs.length === 0 && (
+              <tr><td colSpan={6} className="text-center py-10 text-gray-400">No logs found</td></tr>
+            )}
+            {logs.map(l => (
+              <tr key={l.id} className="hover:bg-gray-50">
+                <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDT(l.created_at)}</td>
+                <td className="px-4 py-2.5">
+                  <p className="font-medium text-gray-900 text-xs">{l.full_name || l.username || '—'}</p>
+                  <p className="text-[10px] text-gray-400">{l.username}</p>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${ACTION_COLORS[l.action] || 'bg-gray-100 text-gray-600'}`}>{l.action}</span>
+                </td>
+                <td className="px-4 py-2.5 text-xs text-gray-600">{l.module || '—'}</td>
+                <td className="px-4 py-2.5 text-xs text-gray-600">{l.resource_name || l.resource_id || '—'}</td>
+                <td className="px-4 py-2.5 text-xs text-gray-400 font-mono">{l.ip_address || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function UserActivityTab({ token }: { token: string }) {
+  const [summary, setSummary] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [daily, setDaily] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const inp = 'px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]';
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const qs = new URLSearchParams();
+      if (from) qs.set('from_date', from);
+      if (to) qs.set('to_date', to);
+      const r = await fetch(`/api/v1/admin/user-activity?${qs}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      setSummary(d.summary || []); setSessions(d.sessions || []); setDaily(d.daily || []);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const fmtMin = (m: number | null) => {
+    if (!m) return '—';
+    if (m < 60) return `${m}m`;
+    return `${Math.floor(m / 60)}h ${m % 60}m`;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">From</label>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">To</label>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} />
+        </div>
+        <button onClick={load} disabled={loading}
+          className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+          {loading ? 'Loading…' : 'Filter'}
+        </button>
+      </div>
+
+      {/* User summary */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2"><Clock size={15} /> Time Spent by User</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="px-4 py-3 text-left">User</th>
+                <th className="px-4 py-3 text-right">Sessions</th>
+                <th className="px-4 py-3 text-right">Total Time</th>
+                <th className="px-4 py-3 text-right">Avg Session</th>
+                <th className="px-4 py-3 text-left">Last Seen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {summary.length === 0 && (
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400 text-xs">No sessions recorded</td></tr>
+              )}
+              {summary.map((u, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium text-gray-900 text-xs">{u.full_name || u.username}</p>
+                    <p className="text-[10px] text-gray-400">{u.username}</p>
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-gray-600">{u.total_sessions}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-[#14856E]">{fmtMin(u.total_minutes)}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-500">{fmtMin(u.avg_session_min)}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-500">{fmtDT(u.last_seen)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Daily active users */}
+      {daily.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">Daily Active Users (last 30 days)</h3>
+          <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                <tr>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-right">Active Users</th>
+                  <th className="px-4 py-3 text-right">Sessions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {daily.map((d, i) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 text-xs">{fmtDate(d.date)}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-[#14856E]">{d.active_users}</td>
+                    <td className="px-4 py-2 text-right text-gray-500">{d.sessions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent sessions */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">Recent Sessions</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="px-4 py-3 text-left">User</th>
+                <th className="px-4 py-3 text-left">Login</th>
+                <th className="px-4 py-3 text-left">Last Seen</th>
+                <th className="px-4 py-3 text-left">Logout</th>
+                <th className="px-4 py-3 text-right">Duration</th>
+                <th className="px-4 py-3 text-left">IP</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {sessions.slice(0, 50).map((s, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium text-gray-900 text-xs">{s.full_name || s.username}</p>
+                    <p className="text-[10px] text-gray-400">{s.username}</p>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDT(s.login_at)}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDT(s.last_seen_at)}</td>
+                  <td className="px-4 py-2.5 text-xs">
+                    {s.logout_at
+                      ? <span className="text-gray-500">{fmtDT(s.logout_at)}</span>
+                      : <span className="text-green-600 font-medium">Active</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-[#14856E]">{fmtMin(s.duration_min)}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-400 font-mono">{s.ip_address || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Admin() {
   const { token } = useAuth();
@@ -434,6 +700,26 @@ export function Admin() {
           >
             Roles & Permissions
           </button>
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`flex-1 px-6 py-3 font-medium transition-colors ${
+              activeTab === 'audit'
+                ? 'text-[#14856E] border-b-2 border-[#14856E]'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Audit Logs
+          </button>
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`flex-1 px-6 py-3 font-medium transition-colors ${
+              activeTab === 'activity'
+                ? 'text-[#14856E] border-b-2 border-[#14856E]'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            User Activity
+          </button>
         </div>
 
         <div className="p-6">
@@ -646,6 +932,9 @@ export function Admin() {
               </div>
             </div>
           )}
+
+          {activeTab === 'audit' && <AuditLogsTab token={token!} />}
+          {activeTab === 'activity' && <UserActivityTab token={token!} />}
         </div>
       </div>
 

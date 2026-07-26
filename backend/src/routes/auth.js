@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { generateToken, authMiddleware, roleMiddleware } from '../middleware/auth.js';
+import { logAudit } from '../middleware/audit.js';
 
 export const authRouter = express.Router();
 
@@ -100,10 +101,21 @@ authRouter.post('/login', async (req, res) => {
 
     // Generate token
     const token = generateToken(user.id, user.username);
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress;
+
+    // Create session record
+    const sessionResult = await pool.query(
+      `INSERT INTO user_sessions (user_id, username, full_name, ip_address) VALUES ($1,$2,$3,$4) RETURNING id`,
+      [user.id, user.username, user.full_name, ip]
+    );
+
+    // Audit log
+    logAudit({ userId: user.id, username: user.username, fullName: user.full_name, action: 'LOGIN', module: 'Auth', ip });
 
     res.json({
       message: 'Login successful',
       token,
+      sessionId: sessionResult.rows[0].id,
       user: {
         id: user.id,
         username: user.username,
@@ -115,6 +127,40 @@ authRouter.post('/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Login failed' });
+  }
+});
+
+// Heartbeat — keeps session last_seen_at current
+authRouter.post('/heartbeat', authMiddleware, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (sessionId) {
+      await pool.query(
+        `UPDATE user_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
+        [sessionId, req.user.userId]
+      );
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Heartbeat failed' });
+  }
+});
+
+// Logout — mark session end
+authRouter.post('/logout', authMiddleware, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (sessionId) {
+      await pool.query(
+        `UPDATE user_sessions SET logout_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
+        [sessionId, req.user.userId]
+      );
+    }
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress;
+    logAudit({ userId: req.user.userId, username: req.user.username, action: 'LOGOUT', module: 'Auth', ip });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Logout failed' });
   }
 });
 
