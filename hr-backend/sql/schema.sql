@@ -140,27 +140,18 @@ INSERT INTO hr_departments (name, code) VALUES
   ('Field & Outreach', 'FIELD')
 ON CONFLICT (name) DO NOTHING;
 
--- Seed designations
-INSERT INTO hr_designations (title, department_id, grade)
-SELECT 'Executive Director',      id, 'G-1' FROM hr_departments WHERE code = 'ADMIN'   LIMIT 1
-ON CONFLICT DO NOTHING;
-INSERT INTO hr_designations (title, department_id, grade)
-SELECT 'HR Manager',              id, 'G-2' FROM hr_departments WHERE code = 'HR'      LIMIT 1
-ON CONFLICT DO NOTHING;
-INSERT INTO hr_designations (title, department_id, grade)
-SELECT 'Accounts Officer',        id, 'G-3' FROM hr_departments WHERE code = 'FINANCE' LIMIT 1
-ON CONFLICT DO NOTHING;
-INSERT INTO hr_designations (title, department_id, grade)
-SELECT 'Program Coordinator',     id, 'G-3' FROM hr_departments WHERE code = 'PROGRAMS' LIMIT 1
-ON CONFLICT DO NOTHING;
-INSERT INTO hr_designations (title, department_id, grade)
-SELECT 'ICT Trainer',             id, 'G-4' FROM hr_departments WHERE code = 'ICT'     LIMIT 1
-ON CONFLICT DO NOTHING;
-INSERT INTO hr_designations (title, department_id, grade)
-SELECT 'Field Officer',           id, 'G-4' FROM hr_departments WHERE code = 'FIELD'   LIMIT 1
-ON CONFLICT DO NOTHING;
-INSERT INTO hr_designations (title, department_id, grade)
-SELECT 'Office Assistant',        id, 'G-5' FROM hr_departments WHERE code = 'ADMIN'   LIMIT 1
+-- Seed designations (cross-department, ordered by seniority)
+INSERT INTO hr_designations (title, grade) VALUES
+  ('Managing Director',  'G-1'),
+  ('Executive Director', 'G-1'),
+  ('General Manager',    'G-2'),
+  ('Assistant Manager',  'G-3'),
+  ('Senior Executive',   'G-3'),
+  ('Executive',          'G-4'),
+  ('Officer',            'G-4'),
+  ('Junior Officer',     'G-5'),
+  ('Office Assistant',   'G-5'),
+  ('Staff',              'G-6')
 ON CONFLICT DO NOTHING;
 
 -- Seed salary components
