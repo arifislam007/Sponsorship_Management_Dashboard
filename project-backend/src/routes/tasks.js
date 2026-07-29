@@ -3,7 +3,22 @@ import { query } from '../db.js';
 
 export const tasksRouter = Router();
 
-// ── helper ────────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+async function recalcProjectProgress(projectId) {
+  await query(
+    `UPDATE pm_projects SET
+       progress = (
+         SELECT CASE WHEN COUNT(*) = 0 THEN 0
+                ELSE ROUND(COUNT(*) FILTER (WHERE status = 'Completed') * 100.0 / COUNT(*))
+                END
+         FROM pm_tasks WHERE project_id = $1
+       ),
+       updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1`,
+    [projectId]
+  );
+}
 
 async function logActivity(projectId, taskId, userId, userName, action, details) {
   await query(
@@ -147,6 +162,12 @@ tasksRouter.put('/:id', async (req, res, next) => {
     if (!result.rows.length) return res.status(404).json({ message: 'Task not found.' });
 
     const task = result.rows[0];
+
+    // Recalculate project progress whenever status or progress changes
+    if (status !== undefined || progress !== undefined) {
+      await recalcProjectProgress(task.project_id);
+    }
+
     await logActivity(task.project_id, id, req.user?.userId, req.user?.username, 'task_updated', { status, progress });
     res.json(task);
   } catch (err) { next(err); }
@@ -157,7 +178,9 @@ tasksRouter.delete('/:id', async (req, res, next) => {
     const id = Number(req.params.id);
     const existing = await query('SELECT project_id, name FROM pm_tasks WHERE id = $1', [id]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Task not found.' });
+    const { project_id } = existing.rows[0];
     await query('DELETE FROM pm_tasks WHERE id = $1', [id]);
+    await recalcProjectProgress(project_id);
     res.json({ message: 'Task deleted.' });
   } catch (err) { next(err); }
 });
@@ -177,20 +200,37 @@ tasksRouter.get('/:id/comments', async (req, res, next) => {
 tasksRouter.post('/:id/comments', async (req, res, next) => {
   try {
     const taskId = Number(req.params.id);
-    const { comment } = req.body;
+    const { comment, progress } = req.body;
     if (!comment?.trim()) return res.status(400).json({ message: 'comment is required.' });
 
-    const taskResult = await query('SELECT project_id FROM pm_tasks WHERE id = $1', [taskId]);
+    const taskResult = await query('SELECT project_id, status, progress FROM pm_tasks WHERE id = $1', [taskId]);
     if (!taskResult.rows.length) return res.status(404).json({ message: 'Task not found.' });
 
+    const projectId = taskResult.rows[0].project_id;
+    const newProgress = (progress !== undefined && progress !== null) ? Math.min(100, Math.max(0, Number(progress))) : null;
+
+    // Insert comment with optional progress snapshot
     const result = await query(
-      `INSERT INTO pm_task_comments (task_id, user_id, user_name, comment)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO pm_task_comments (task_id, user_id, user_name, comment, progress)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [taskId, req.user?.userId || 0, req.user?.username || 'Unknown', comment.trim()]
+      [taskId, req.user?.userId || 0, req.user?.username || 'Unknown', comment.trim(), newProgress]
     );
 
-    await logActivity(taskResult.rows[0].project_id, taskId, req.user?.userId, req.user?.username, 'comment_added', null);
+    // If progress was set, update the task progress + auto-derive status
+    if (newProgress !== null) {
+      const autoStatus = newProgress === 0 ? 'To Do' : newProgress === 100 ? 'Completed' : 'In Progress';
+      await query(
+        `UPDATE pm_tasks SET progress = $2, status = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [taskId, newProgress, autoStatus]
+      );
+
+      // Recalculate project progress = completed tasks / total tasks
+      await recalcProjectProgress(projectId);
+    }
+
+    await logActivity(projectId, taskId, req.user?.userId, req.user?.username, 'comment_added',
+      newProgress !== null ? { progress: newProgress } : null);
     res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
 });

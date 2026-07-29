@@ -1,0 +1,1 @@
+ALTER TABLE pm_task_comments ADD COLUMN IF NOT EXISTS progress INTEGER;

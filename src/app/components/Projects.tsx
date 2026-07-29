@@ -91,6 +91,7 @@ interface TaskComment {
   id: number;
   user_name: string;
   comment: string;
+  progress?: number | null;
   created_at: string;
 }
 
@@ -218,6 +219,11 @@ function ProgressBar({ value, color = 'bg-[#14856E]', className = '' }: { value:
   );
 }
 
+function projectProgress(p: Project): number {
+  if (!p.task_count || p.task_count === 0) return 0;
+  return Math.round(((p.completed_tasks ?? 0) / p.task_count) * 100);
+}
+
 // ── Dashboard Tab ─────────────────────────────────────────────────────────────
 
 function DashboardTab() {
@@ -292,12 +298,12 @@ function DashboardTab() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[p.status as ProjectStatus]}`}>{p.status}</span>
-                      <span className="text-xs font-semibold text-gray-600">{p.progress}%</span>
+                      <span className="text-xs font-semibold text-gray-600">{projectProgress(p)}%</span>
                     </div>
                   </div>
-                  <ProgressBar value={p.progress} color={p.status === 'On Hold' ? 'bg-amber-400' : p.status === 'Completed' ? 'bg-purple-500' : 'bg-[#14856E]'} />
+                  <ProgressBar value={projectProgress(p)} color={p.status === 'On Hold' ? 'bg-amber-400' : p.status === 'Completed' ? 'bg-purple-500' : 'bg-[#14856E]'} />
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    <span>{p.completed_tasks ?? 0}/{p.task_count ?? 0} tasks</span>
+                    <span>{p.completed_tasks ?? 0}/{p.task_count ?? 0} tasks done</span>
                     {p.end_date && <span>Due {fmtDate(p.end_date)}</span>}
                   </div>
                 </div>
@@ -806,14 +812,14 @@ function ProjectsTab() {
                 <div className="mt-auto space-y-3">
                   <div>
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Progress</span>
-                      <span className="font-semibold text-gray-800">{p.progress}%</span>
+                      <span>{p.completed_tasks ?? 0}/{p.task_count ?? 0} tasks completed</span>
+                      <span className="font-semibold text-gray-800">{projectProgress(p)}%</span>
                     </div>
-                    <ProgressBar value={p.progress} color={p.status === 'On Hold' ? 'bg-amber-400' : p.status === 'Completed' ? 'bg-purple-500' : 'bg-[#14856E]'} />
+                    <ProgressBar value={projectProgress(p)} color={p.status === 'On Hold' ? 'bg-amber-400' : p.status === 'Completed' ? 'bg-purple-500' : 'bg-[#14856E]'} />
                   </div>
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <span className="flex items-center gap-1">
-                      <ListTodo size={12} />{p.completed_tasks ?? 0}/{p.task_count ?? 0} tasks
+                      <ListTodo size={12} />{p.task_count ?? 0} total tasks
                     </span>
                     <span className="flex items-center gap-1">
                       <Users size={12} />{p.member_count ?? 0} members
@@ -1017,19 +1023,12 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
                 className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-600">Status</label>
-              <select value={form.status} onChange={f('status')}
-                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
-                {TASK_STATUSES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600">Progress ({form.progress}%)</label>
-              <input type="range" min="0" max="100" value={form.progress} onChange={f('progress')}
-                className="mt-2 w-full accent-[#14856E]" />
-            </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Status</label>
+            <select value={form.status} onChange={f('status')}
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
+              {TASK_STATUSES.map((s) => <option key={s}>{s}</option>)}
+            </select>
           </div>
         </div>
         <div className="flex gap-3 p-5 border-t border-gray-200">
@@ -1054,7 +1053,9 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
 
   const load = () => {
     setLoading(true);
-    pmFetch<Task>(`/tasks/${taskId}`).then(setTask).catch(console.error).finally(() => setLoading(false));
+    pmFetch<Task>(`/tasks/${taskId}`).then(t => {
+      setTask(t);
+    }).catch(console.error).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, [taskId]);
@@ -1095,26 +1096,23 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-3 gap-3 text-sm">
             <div><p className="text-xs text-gray-500">Assigned</p><p className="font-medium">{task.assigned_user_name || '—'}</p></div>
             <div><p className="text-xs text-gray-500">Due Date</p>
               <p className={`font-medium ${isOverdue(task.due_date, task.status) ? 'text-red-600' : ''}`}>{fmtDate(task.due_date)}</p>
             </div>
             <div><p className="text-xs text-gray-500">Est. Hours</p><p className="font-medium">{task.estimated_hours ?? '—'}</p></div>
-            <div><p className="text-xs text-gray-500">Progress</p><p className="font-medium">{task.progress}%</p></div>
           </div>
-
-          <ProgressBar value={task.progress} />
 
           {/* Comments */}
           <div>
             <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <MessageSquare size={14} />Comments ({task.comments?.length ?? 0})
+              <MessageSquare size={14} />Updates ({task.comments?.length ?? 0})
             </h4>
-            <div className="space-y-3 max-h-40 overflow-y-auto mb-3">
+            <div className="space-y-2.5 max-h-52 overflow-y-auto mb-3 pr-1">
               {(task.comments ?? []).map((c) => (
                 <div key={c.id} className="bg-gray-50 rounded-lg px-3 py-2.5">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-xs font-semibold text-gray-800">{c.user_name}</span>
                     <span className="text-xs text-gray-400">{timeSince(c.created_at)}</span>
                   </div>
@@ -1122,17 +1120,18 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
                 </div>
               ))}
               {(task.comments?.length ?? 0) === 0 && (
-                <p className="text-xs text-gray-400 text-center py-3">No comments yet</p>
+                <p className="text-xs text-gray-400 text-center py-3">No updates yet</p>
               )}
             </div>
+
             <div className="flex gap-2">
               <input value={comment} onChange={(e) => setComment(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && postComment()}
                 placeholder="Add a comment…"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
               <button onClick={postComment} disabled={posting || !comment.trim()}
-                className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
-                {posting ? '…' : 'Send'}
+                className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-xs font-semibold hover:bg-[#0f6b5a] disabled:opacity-50">
+                {posting ? '…' : 'Post'}
               </button>
             </div>
           </div>
@@ -1239,7 +1238,6 @@ function TasksTab() {
                   <th className="px-4 py-3 text-center">Priority</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3 text-left">Due Date</th>
-                  <th className="px-4 py-3 text-center">Progress</th>
                   <th className="px-4 py-3 text-center">Actions</th>
                 </tr>
               </thead>
@@ -1265,18 +1263,21 @@ function TasksTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TASK_STATUS_COLORS[t.status]}`}>{t.status}</span>
+                      <select
+                        value={t.status}
+                        onChange={async (e) => {
+                          await pmFetch(`/tasks/${t.id}`, { method: 'PUT', body: JSON.stringify({ status: e.target.value }) });
+                          load();
+                        }}
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#14856E] ${TASK_STATUS_COLORS[t.status]}`}
+                      >
+                        {TASK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-sm ${isOverdue(t.due_date, t.status) ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
                         {fmtDate(t.due_date)}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <ProgressBar value={t.progress} className="w-16" />
-                        <span className="text-xs text-gray-500 w-8">{t.progress}%</span>
-                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
@@ -1288,7 +1289,7 @@ function TasksTab() {
                   </tr>
                 ))}
                 {tasks.length === 0 && (
-                  <tr><td colSpan={8} className="text-center py-10 text-gray-400">No tasks found</td></tr>
+                  <tr><td colSpan={7} className="text-center py-10 text-gray-400">No tasks found</td></tr>
                 )}
               </tbody>
             </table>
