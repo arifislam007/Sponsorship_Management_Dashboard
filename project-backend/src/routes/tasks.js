@@ -20,6 +20,18 @@ async function recalcProjectProgress(projectId) {
   );
 }
 
+async function notifyUser(userId, eventType, title, body, url) {
+  const secret = process.env.INTERNAL_SECRET;
+  if (!secret || !userId) return;
+  try {
+    await fetch('http://backend:8000/api/v1/notifications/internal/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+      body: JSON.stringify({ userId, eventType, title, body, url }),
+    });
+  } catch { /* non-fatal */ }
+}
+
 async function logActivity(projectId, taskId, userId, userName, action, details) {
   await query(
     `INSERT INTO pm_activity_logs (project_id, task_id, user_id, user_name, action, details)
@@ -128,6 +140,16 @@ tasksRouter.post('/', async (req, res, next) => {
     );
 
     await logActivity(Number(project_id), result.rows[0].id, req.user?.userId, req.user?.username, 'task_created', { name, priority });
+
+    if (assigned_user_id && Number(assigned_user_id) !== req.user?.userId) {
+      notifyUser(
+        Number(assigned_user_id), 'task_assigned',
+        'Task Assigned to You',
+        `You have been assigned: "${name}" (${priority} priority)`,
+        '/dashboard/projects'
+      );
+    }
+
     res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
 });
@@ -169,6 +191,17 @@ tasksRouter.put('/:id', async (req, res, next) => {
     }
 
     await logActivity(task.project_id, id, req.user?.userId, req.user?.username, 'task_updated', { status, progress });
+
+    // Notify newly assigned user (if assignee changed)
+    if (assigned_user_id && task.assigned_user_id && Number(assigned_user_id) !== req.user?.userId) {
+      notifyUser(
+        task.assigned_user_id, 'task_assigned',
+        'Task Assigned to You',
+        `You have been assigned: "${task.name}"`,
+        '/dashboard/projects'
+      );
+    }
+
     res.json(task);
   } catch (err) { next(err); }
 });

@@ -16,6 +16,8 @@ import { accountingRouter } from './routes/accounting.js';
 import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
 import { auditMiddleware } from './middleware/audit.js';
 import { startBillingScheduler } from './services/sponsorshipBilling.js';
+import { notificationsRouter } from './routes/notifications.js';
+import { initVapidKeys } from './services/notificationService.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -59,6 +61,7 @@ app.use(`${config.apiPrefix}/ledger`, authMiddleware, moduleAccessMiddleware('Ac
 app.use(`${config.apiPrefix}/exports`, authMiddleware, moduleAccessMiddleware('Export'), exportsRouter);
 app.use(`${config.apiPrefix}/letters`, authMiddleware, moduleAccessMiddleware('Export'), acknowledgmentsRouter);
 app.use(`${config.apiPrefix}/accounting`, authMiddleware, moduleAccessMiddleware('Accounting'), auditMiddleware('Accounting'), accountingRouter);
+app.use(`${config.apiPrefix}/notifications`, notificationsRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) {
@@ -79,6 +82,7 @@ async function start() {
   });
 
   startBillingScheduler();
+  await initVapidKeys();
 }
 
 start().catch(async (error) => {

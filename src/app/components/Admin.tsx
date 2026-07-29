@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer, Bell, Mail, Send, Globe, TestTube } from 'lucide-react';
 
 interface User {
   id: number;
@@ -435,6 +435,238 @@ function UserActivityTab({ token }: { token: string }) {
         )}
       </div>
     </>
+  );
+}
+
+// ── Notifications Tab ─────────────────────────────────────────────────────────
+function NotificationsTab({ token }: { token: string }) {
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const API = '/api/v1/notifications';
+
+  const [cfg, setCfg] = useState<any>({});
+  const [prefs, setPrefs] = useState<any>({});
+  const [cfgSaving, setCfgSaving] = useState(false);
+  const [prefSaving, setPrefSaving] = useState(false);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch(`${API}/config`, { headers }).then(r => r.ok ? r.json() : {}).then(d => setCfg(d || {})).catch(() => {});
+    fetch(`${API}/preferences`, { headers }).then(r => r.ok ? r.json() : {}).then(d => setPrefs(d || {})).catch(() => {});
+  }, []);
+
+  const saveCfg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCfgSaving(true);
+    setMsg('');
+    try {
+      const r = await fetch(`${API}/config`, { method: 'PUT', headers, body: JSON.stringify(cfg) });
+      setMsg(r.ok ? '✅ Server config saved.' : '❌ Failed to save.');
+    } finally { setCfgSaving(false); }
+  };
+
+  const savePrefs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPrefSaving(true);
+    setMsg('');
+    try {
+      const r = await fetch(`${API}/preferences`, { method: 'PUT', headers, body: JSON.stringify(prefs) });
+      setMsg(r.ok ? '✅ Preferences saved.' : '❌ Failed to save.');
+    } finally { setPrefSaving(false); }
+  };
+
+  const test = async (channel: string) => {
+    setTesting(channel);
+    setMsg('');
+    try {
+      const r = await fetch(`${API}/test`, { method: 'POST', headers, body: JSON.stringify({ channel }) });
+      const data = await r.json();
+      setMsg(r.ok ? `✅ Test ${channel} sent!` : `❌ ${data.message || 'Failed'}`);
+    } finally { setTesting(null); }
+  };
+
+  const f = (key: string, val?: any) => {
+    if (val !== undefined) setCfg((p: any) => ({ ...p, [key]: val }));
+    return { value: cfg[key] ?? '', onChange: (e: any) => setCfg((p: any) => ({ ...p, [key]: e.target.value })) };
+  };
+
+  const pf = (key: string) => ({
+    checked: !!prefs[key],
+    onChange: (e: any) => setPrefs((p: any) => ({ ...p, [key]: e.target.checked })),
+  });
+
+  return (
+    <div className="space-y-6">
+      {msg && <div className={`px-4 py-2 rounded-lg text-sm ${msg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg}</div>}
+
+      {/* ── Email (SMTP) ── */}
+      <div className="border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Mail size={16} className="text-blue-500" />
+          <h3 className="font-semibold text-gray-900">Email (SMTP) Configuration</h3>
+        </div>
+        <form onSubmit={saveCfg} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500">SMTP Host</label>
+              <input {...f('smtp_host')} placeholder="smtp.gmail.com"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Port</label>
+              <input {...f('smtp_port')} placeholder="587" type="number"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Username / Email</label>
+              <input {...f('smtp_user')} placeholder="you@gmail.com"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Password / App Password</label>
+              <input {...f('smtp_pass')} placeholder="Leave blank to keep existing" type="password"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">From Address</label>
+              <input {...f('smtp_from')} placeholder="Sombhabona <noreply@sombhabona.org>"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <div className="flex items-center gap-2 mt-5">
+              <input type="checkbox" id="smtp_secure" checked={!!cfg.smtp_secure}
+                onChange={e => f('smtp_secure', e.target.checked)}
+                className="accent-[#14856E]" />
+              <label htmlFor="smtp_secure" className="text-sm text-gray-700">Use SSL (port 465)</label>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <button type="submit" disabled={cfgSaving}
+              className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50 flex items-center gap-2">
+              <Save size={14} /> Save SMTP Config
+            </button>
+            <button type="button" onClick={() => test('email')} disabled={!!testing}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2">
+              <TestTube size={14} /> {testing === 'email' ? 'Sending…' : 'Send Test Email'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* ── Telegram ── */}
+      <div className="border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Send size={16} className="text-sky-500" />
+          <h3 className="font-semibold text-gray-900">Telegram Bot Configuration</h3>
+        </div>
+        <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 mb-4 text-xs text-sky-800 space-y-1">
+          <p><strong>Setup:</strong> Create a bot via <code>@BotFather</code> on Telegram → get the Bot Token.</p>
+          <p>Users get their Chat ID by messaging <code>@userinfobot</code> or <code>@get_id_bot</code>.</p>
+        </div>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="text-xs text-gray-500">Bot Token</label>
+            <input {...f('telegram_bot_token')} placeholder="1234567890:ABCdef..."
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mt-3">
+          <button onClick={saveCfg} disabled={cfgSaving}
+            className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50 flex items-center gap-2">
+            <Save size={14} /> Save Token
+          </button>
+          <button onClick={() => test('telegram')} disabled={!!testing}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2">
+            <TestTube size={14} /> {testing === 'telegram' ? 'Sending…' : 'Send Test Message'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Web Push ── */}
+      <div className="border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <Globe size={16} className="text-green-500" />
+          <h3 className="font-semibold text-gray-900">Web Push (Browser Notifications)</h3>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          VAPID keys are auto-generated on first run and stored securely. Users click "Enable browser notifications" in the bell menu to subscribe.
+        </p>
+        {cfg.vapid_public_key && (
+          <div className="bg-gray-50 rounded-lg p-3 text-xs font-mono text-gray-600 break-all mb-3">
+            Public key: {cfg.vapid_public_key}
+          </div>
+        )}
+        <button onClick={() => test('web')} disabled={!!testing}
+          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2">
+          <TestTube size={14} /> {testing === 'web' ? 'Sending…' : 'Send Test Push'}
+        </button>
+      </div>
+
+      {/* ── My Notification Preferences ── */}
+      <div className="border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Bell size={16} className="text-[#14856E]" />
+          <h3 className="font-semibold text-gray-900">My Notification Preferences</h3>
+          <span className="text-xs text-gray-400">(applies to your account)</span>
+        </div>
+        <form onSubmit={savePrefs} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Email prefs */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="email_enabled" {...pf('email_enabled')} className="accent-[#14856E]" />
+                <label htmlFor="email_enabled" className="text-sm font-medium text-gray-700">Email Notifications</label>
+              </div>
+              {prefs.email_enabled && (
+                <input value={prefs.email_address || ''} onChange={e => setPrefs((p: any) => ({ ...p, email_address: e.target.value }))}
+                  placeholder="your@email.com" type="email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+              )}
+            </div>
+            {/* Telegram prefs */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="tg_enabled" {...pf('telegram_enabled')} className="accent-[#14856E]" />
+                <label htmlFor="tg_enabled" className="text-sm font-medium text-gray-700">Telegram Notifications</label>
+              </div>
+              {prefs.telegram_enabled && (
+                <input value={prefs.telegram_chat_id || ''} onChange={e => setPrefs((p: any) => ({ ...p, telegram_chat_id: e.target.value }))}
+                  placeholder="Your Chat ID (e.g. 123456789)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+              )}
+            </div>
+            {/* Web push prefs */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="wp_enabled" {...pf('web_push_enabled')} className="accent-[#14856E]" />
+                <label htmlFor="wp_enabled" className="text-sm font-medium text-gray-700">Browser Push Notifications</label>
+              </div>
+              <p className="text-xs text-gray-400">Subscribe via the bell icon in the sidebar.</p>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-2">Notify me when:</p>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" {...pf('notify_task_assigned')} className="accent-[#14856E]" />
+                A task is assigned to me
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" {...pf('notify_leave_update')} className="accent-[#14856E]" />
+                My leave request status changes
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" {...pf('notify_system')} className="accent-[#14856E]" />
+                System notifications
+              </label>
+            </div>
+          </div>
+          <button type="submit" disabled={prefSaving}
+            className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50 flex items-center gap-2">
+            <Save size={14} /> Save My Preferences
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -909,6 +1141,16 @@ export function Admin() {
           >
             User Activity
           </button>
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`flex-1 px-6 py-3 font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === 'notifications'
+                ? 'text-[#14856E] border-b-2 border-[#14856E]'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Bell size={14} /> Notifications
+          </button>
         </div>
 
         <div className="p-6">
@@ -1217,6 +1459,7 @@ export function Admin() {
 
           {activeTab === 'audit' && <AuditLogsTab token={token!} />}
           {activeTab === 'activity' && <UserActivityTab token={token!} />}
+          {activeTab === 'notifications' && <NotificationsTab token={token!} />}
         </div>
       </div>
 

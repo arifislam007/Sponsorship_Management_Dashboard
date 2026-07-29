@@ -3,6 +3,7 @@ import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, Chevr
 import logo from '../../../logo.png';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
+import { NotificationBell } from './NotificationBell';
 
 export function RootLayout() {
   const { user, logout, canAccess } = useAuth();
@@ -220,6 +221,12 @@ export function RootLayout() {
         </nav>
 
         <footer className="p-4 border-t border-gray-200">
+          {user && (
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex-1" />
+              <NotificationBell />
+            </div>
+          )}
           {user && (
             <div className="relative">
               <button

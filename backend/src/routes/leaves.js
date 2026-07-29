@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { requirePermission } from '../middleware/auth.js';
+import { notify } from '../services/notificationService.js';
 
 export const leavesRouter = Router();
 
@@ -292,6 +293,16 @@ leavesRouter.patch('/requests/:id/status', requirePermission('edit'), async (req
     );
 
     const updatedRequest = await getLeaveRequests('WHERE lr.id = $1', [requestId]);
+
+    // Notify the leave requester
+    const icon = status === 'Approved' ? '✅' : '❌';
+    notify(
+      leaveRequest.user_id,
+      'leave_update',
+      `Leave Request ${status}`,
+      `${icon} Your ${leaveRequest.leave_type} leave request (${leaveRequest.days_requested} day(s)) has been ${status.toLowerCase()}.${remarks ? ` Remarks: ${remarks}` : ''}`,
+      '/dashboard/leaves'
+    ).catch(() => {});
 
     return res.json({ request: updatedRequest[0] });
   } catch (error) {
