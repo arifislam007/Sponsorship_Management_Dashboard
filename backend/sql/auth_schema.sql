@@ -146,9 +146,86 @@ FROM roles r, modules m
 WHERE r.name = 'operator' AND m.name IN ('Leave Management')
 ON CONFLICT (role_id, module_id) DO NOTHING;
 
--- Insert permissions for ICT role (full ICT module access)
+-- Insert permissions for ICT role (full ICT module access + Leave Management)
 INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
 SELECT r.id, m.id, true, true, true, true
 FROM roles r, modules m
-WHERE r.name = 'ict' AND m.name IN ('ICT')
+WHERE r.name = 'ict' AND m.name IN ('ICT', 'Dashboard')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, false
+FROM roles r, modules m
+WHERE r.name = 'ict' AND m.name IN ('Leave Management')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- accountant: also access Dashboard, Donors, Students view
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, false, false, false
+FROM roles r, modules m
+WHERE r.name = 'accountant' AND m.name IN ('Dashboard', 'Students', 'Donors')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- operator: access Dashboard + Students (view/create only)
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, false, false, false
+FROM roles r, modules m
+WHERE r.name = 'operator' AND m.name IN ('Dashboard')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, false, false
+FROM roles r, modules m
+WHERE r.name = 'operator' AND m.name IN ('Students', 'Donors', 'Sponsorships')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- New role: school (full School module access)
+INSERT INTO roles (name, description) VALUES
+  ('school', 'School coordinator with access to School and School Operations modules')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, true
+FROM roles r, modules m
+WHERE r.name = 'school' AND m.name IN ('School', 'School Operations', 'Dashboard')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, false
+FROM roles r, modules m
+WHERE r.name = 'school' AND m.name IN ('Leave Management')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- New role: hr (full HR module access)
+INSERT INTO roles (name, description) VALUES
+  ('hr', 'HR manager with access to HR and payroll modules')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, true
+FROM roles r, modules m
+WHERE r.name = 'hr' AND m.name IN ('HR', 'Dashboard')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, false
+FROM roles r, modules m
+WHERE r.name = 'hr' AND m.name IN ('Leave Management')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- New role: project_manager (full Projects module access)
+INSERT INTO roles (name, description) VALUES
+  ('project_manager', 'Project manager with access to Projects module')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, true
+FROM roles r, modules m
+WHERE r.name = 'project_manager' AND m.name IN ('Projects', 'Dashboard')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, false
+FROM roles r, modules m
+WHERE r.name = 'project_manager' AND m.name IN ('Leave Management')
 ON CONFLICT (role_id, module_id) DO NOTHING;

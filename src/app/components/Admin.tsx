@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer } from 'lucide-react';
 
 interface User {
   id: number;
@@ -153,10 +153,18 @@ function UserActivityTab({ token }: { token: string }) {
   const [summary, setSummary] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [daily, setDaily] = useState<any[]>([]);
+  const [perUserDaily, setPerUserDaily] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [expandedUser, setExpandedUser] = useState<number | null>(null);
+  const [activeView, setActiveView] = useState<'summary' | 'daily' | 'sessions'>('summary');
   const inp = 'px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]';
+
+  // Default to current month
+  const now = new Date();
+  const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const today = now.toISOString().slice(0, 10);
+  const [from, setFrom] = useState(firstOfMonth);
+  const [to, setTo] = useState(today);
 
   const load = async () => {
     setLoading(true);
@@ -166,7 +174,10 @@ function UserActivityTab({ token }: { token: string }) {
       if (to) qs.set('to_date', to);
       const r = await fetch(`/api/v1/admin/user-activity?${qs}`, { headers: { Authorization: `Bearer ${token}` } });
       const d = await r.json();
-      setSummary(d.summary || []); setSessions(d.sessions || []); setDaily(d.daily || []);
+      setSummary(d.summary || []);
+      setSessions(d.sessions || []);
+      setDaily(d.daily || []);
+      setPerUserDaily(d.per_user_daily || []);
     } catch { /* silent */ }
     finally { setLoading(false); }
   };
@@ -174,128 +185,256 @@ function UserActivityTab({ token }: { token: string }) {
   useEffect(() => { load(); }, []);
 
   const fmtMin = (m: number | null) => {
-    if (!m) return '—';
+    if (!m || m <= 0) return '—';
     if (m < 60) return `${m}m`;
     return `${Math.floor(m / 60)}h ${m % 60}m`;
   };
 
+  const totalMinutes = summary.reduce((s, u) => s + (u.total_minutes || 0), 0);
+  const totalSessions = summary.reduce((s, u) => s + (u.total_sessions || 0), 0);
+  const totalActiveDays = daily.length;
+  const maxDayMinutes = Math.max(...daily.map(d => d.total_minutes || 0), 1);
+
+  const printReport = () => window.print();
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">From</label>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">To</label>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} />
-        </div>
-        <button onClick={load} disabled={loading}
-          className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
-          {loading ? 'Loading…' : 'Filter'}
-        </button>
-      </div>
+    <>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #activity-report, #activity-report * { visibility: visible; }
+          #activity-report { position: fixed; top: 0; left: 0; width: 100%; padding: 24px; background: white; }
+          .no-print { display: none !important; }
+        }
+      `}</style>
 
-      {/* User summary */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2"><Clock size={15} /> Time Spent by User</h3>
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-3 text-left">User</th>
-                <th className="px-4 py-3 text-right">Sessions</th>
-                <th className="px-4 py-3 text-right">Total Time</th>
-                <th className="px-4 py-3 text-right">Avg Session</th>
-                <th className="px-4 py-3 text-left">Last Seen</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {summary.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-8 text-gray-400 text-xs">No sessions recorded</td></tr>
-              )}
-              {summary.map((u, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium text-gray-900 text-xs">{u.full_name || u.username}</p>
-                    <p className="text-[10px] text-gray-400">{u.username}</p>
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">{u.total_sessions}</td>
-                  <td className="px-4 py-2.5 text-right font-semibold text-[#14856E]">{fmtMin(u.total_minutes)}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-500">{fmtMin(u.avg_session_min)}</td>
-                  <td className="px-4 py-2.5 text-xs text-gray-500">{fmtDT(u.last_seen)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div id="activity-report">
+        {/* Report header (visible on print) */}
+        <div className="hidden print:block mb-6 border-b-2 border-[#14856E] pb-4">
+          <h1 className="text-xl font-bold text-[#14856E]">Sombhabona Foundation</h1>
+          <p className="text-sm text-gray-600 mt-1">User Activity Report · {fmtDate(from)} – {fmtDate(to)}</p>
         </div>
-      </div>
 
-      {/* Daily active users */}
-      {daily.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">Daily Active Users (last 30 days)</h3>
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                <tr>
-                  <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-right">Active Users</th>
-                  <th className="px-4 py-3 text-right">Sessions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {daily.map((d, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 text-xs">{fmtDate(d.date)}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-[#14856E]">{d.active_users}</td>
-                    <td className="px-4 py-2 text-right text-gray-500">{d.sessions}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Controls */}
+        <div className="no-print flex flex-wrap gap-3 items-end mb-6">
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">From</label>
+            <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} />
           </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">To</label>
+            <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} />
+          </div>
+          <button onClick={load} disabled={loading}
+            className="px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+            {loading ? 'Loading…' : 'Apply'}
+          </button>
+          {/* Quick presets */}
+          {[
+            { label: 'This Month', from: firstOfMonth, to: today },
+            { label: 'Last Month', from: (() => { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1); return d.toISOString().slice(0, 10); })(), to: (() => { const d = new Date(now.getFullYear(), now.getMonth(), 0); return d.toISOString().slice(0, 10); })() },
+            { label: 'Last 7 Days', from: new Date(now.getTime() - 6 * 86400000).toISOString().slice(0, 10), to: today },
+          ].map(p => (
+            <button key={p.label} onClick={() => { setFrom(p.from); setTo(p.to); }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:border-[#14856E] hover:text-[#14856E]">
+              {p.label}
+            </button>
+          ))}
+          <button onClick={printReport}
+            className="ml-auto flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+            <Printer size={13} />Export PDF
+          </button>
         </div>
-      )}
 
-      {/* Recent sessions */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">Recent Sessions</h3>
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-3 text-left">User</th>
-                <th className="px-4 py-3 text-left">Login</th>
-                <th className="px-4 py-3 text-left">Last Seen</th>
-                <th className="px-4 py-3 text-left">Logout</th>
-                <th className="px-4 py-3 text-right">Duration</th>
-                <th className="px-4 py-3 text-left">IP</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {sessions.slice(0, 50).map((s, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium text-gray-900 text-xs">{s.full_name || s.username}</p>
-                    <p className="text-[10px] text-gray-400">{s.username}</p>
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDT(s.login_at)}</td>
-                  <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDT(s.last_seen_at)}</td>
-                  <td className="px-4 py-2.5 text-xs">
-                    {s.logout_at
-                      ? <span className="text-gray-500">{fmtDT(s.logout_at)}</span>
-                      : <span className="text-green-600 font-medium">Active</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-semibold text-[#14856E]">{fmtMin(s.duration_min)}</td>
-                  <td className="px-4 py-2.5 text-xs text-gray-400 font-mono">{s.ip_address || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: 'Total Users', value: summary.length, sub: 'with activity' },
+            { label: 'Total Sessions', value: totalSessions, sub: 'logins recorded' },
+            { label: 'Active Days', value: totalActiveDays, sub: 'days with activity' },
+            { label: 'Total Time', value: fmtMin(totalMinutes), sub: 'combined usage' },
+          ].map(c => (
+            <div key={c.label} className="bg-white border border-gray-200 rounded-xl p-4">
+              <p className="text-xs text-gray-400 uppercase tracking-wide">{c.label}</p>
+              <p className="text-2xl font-bold text-[#14856E] mt-1">{c.value}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{c.sub}</p>
+            </div>
+          ))}
         </div>
+
+        {/* View tabs */}
+        <div className="no-print flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+          {(['summary', 'daily', 'sessions'] as const).map(v => (
+            <button key={v} onClick={() => setActiveView(v)}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${activeView === v ? 'bg-white text-[#14856E] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {v === 'summary' ? 'User Summary' : v === 'daily' ? 'Daily Trend' : 'Session Log'}
+            </button>
+          ))}
+        </div>
+
+        {/* ── User Summary ── */}
+        {(activeView === 'summary' || true) && (
+          <div className={activeView !== 'summary' ? 'hidden print:block' : ''}>
+            {activeView === 'summary' && <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2"><Clock size={15} />User Activity Summary</h3>}
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-4 py-3 text-left">#</th>
+                    <th className="px-4 py-3 text-left">User</th>
+                    <th className="px-4 py-3 text-right">Active Days</th>
+                    <th className="px-4 py-3 text-right">Sessions</th>
+                    <th className="px-4 py-3 text-right">Total Time</th>
+                    <th className="px-4 py-3 text-right">Avg Session</th>
+                    <th className="px-4 py-3 text-left">Last Seen</th>
+                    <th className="no-print px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {summary.length === 0 && (
+                    <tr><td colSpan={8} className="text-center py-8 text-gray-400 text-xs">No sessions recorded for this period</td></tr>
+                  )}
+                  {summary.map((u, i) => {
+                    const userDays = perUserDaily.filter(r => r.user_id === u.user_id);
+                    return (
+                      <>
+                        <tr key={u.user_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-2.5 text-xs text-gray-400">{i + 1}</td>
+                          <td className="px-4 py-2.5">
+                            <p className="font-semibold text-gray-900">{u.full_name || u.username}</p>
+                            <p className="text-[10px] text-gray-400">{u.username}</p>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-gray-700">{u.active_days}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-600">{u.total_sessions}</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-[#14856E]">{fmtMin(u.total_minutes)}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-500">{fmtMin(u.avg_session_min)}</td>
+                          <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDT(u.last_seen)}</td>
+                          <td className="no-print px-4 py-2.5">
+                            <button onClick={() => setExpandedUser(expandedUser === u.user_id ? null : u.user_id)}
+                              className="text-xs text-[#14856E] hover:underline whitespace-nowrap">
+                              {expandedUser === u.user_id ? 'Hide' : 'Daily →'}
+                            </button>
+                          </td>
+                        </tr>
+                        {expandedUser === u.user_id && (
+                          <tr key={`exp-${u.user_id}`}>
+                            <td colSpan={8} className="bg-green-50 px-6 py-3">
+                              <p className="text-xs font-semibold text-gray-600 mb-2">Daily breakdown — {u.full_name || u.username}</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                                {userDays.map((d: any) => (
+                                  <div key={d.date} className="bg-white rounded-lg p-2 border border-green-100 text-center">
+                                    <p className="text-[10px] text-gray-400">{fmtDate(d.date)}</p>
+                                    <p className="text-sm font-bold text-[#14856E] mt-0.5">{fmtMin(d.minutes)}</p>
+                                    <p className="text-[10px] text-gray-400">{d.sessions} session{d.sessions !== 1 ? 's' : ''}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Daily Trend ── */}
+        {activeView === 'daily' && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Daily Activity Trend</h3>
+            {daily.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8 border border-dashed border-gray-200 rounded-xl">No data for this period</p>
+            ) : (
+              <>
+                {/* Bar chart */}
+                <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+                  <div className="flex items-end gap-1.5 h-28 overflow-x-auto">
+                    {daily.map(d => {
+                      const pct = Math.round(((d.total_minutes || 0) / maxDayMinutes) * 100);
+                      return (
+                        <div key={d.date} className="flex flex-col items-center flex-shrink-0" style={{ minWidth: '28px' }}>
+                          <div title={`${fmtDate(d.date)}: ${fmtMin(d.total_minutes)}`}
+                            className="w-full bg-[#14856E] rounded-t-sm hover:bg-[#0f6b5a] transition-colors"
+                            style={{ height: `${Math.max(pct, 4)}%` }} />
+                          <p className="text-[8px] text-gray-400 mt-1 rotate-45 origin-left whitespace-nowrap">
+                            {new Date(d.date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-6 text-center">Total time per day (bar height = relative usage)</p>
+                </div>
+                {/* Daily table */}
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-right">Active Users</th>
+                        <th className="px-4 py-3 text-right">Sessions</th>
+                        <th className="px-4 py-3 text-right">Total Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {[...daily].reverse().map((d, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 font-medium text-gray-800">{fmtDate(d.date)}</td>
+                          <td className="px-4 py-2 text-right text-[#14856E] font-semibold">{d.active_users}</td>
+                          <td className="px-4 py-2 text-right text-gray-500">{d.sessions}</td>
+                          <td className="px-4 py-2 text-right font-semibold text-gray-700">{fmtMin(d.total_minutes)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Session Log ── */}
+        {activeView === 'sessions' && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Session Log ({sessions.length} sessions)</h3>
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-4 py-3 text-left">User</th>
+                    <th className="px-4 py-3 text-left">Login</th>
+                    <th className="px-4 py-3 text-left">Logout</th>
+                    <th className="px-4 py-3 text-right">Duration</th>
+                    <th className="px-4 py-3 text-left">IP</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sessions.map((s, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-gray-900 text-xs">{s.full_name || s.username}</p>
+                        <p className="text-[10px] text-gray-400">{s.username}</p>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDT(s.login_at)}</td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                        {s.logout_at
+                          ? <span className="text-gray-500">{fmtDT(s.logout_at)}</span>
+                          : <span className="text-green-600 font-medium">● Active</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-[#14856E]">{fmtMin(s.duration_min)}</td>
+                      <td className="px-4 py-2.5 text-xs text-gray-400 font-mono">{s.ip_address || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -317,6 +456,13 @@ export function Admin() {
     password: '',
   });
   const [newUserForm, setNewUserForm] = useState({ username: '', email: '', password: '', fullName: '', roles: [] as string[] });
+
+  // Roles & Permissions state
+  const [activeRole, setActiveRole] = useState<Role | null>(null);
+  const [rolePerms, setRolePerms] = useState<{ id: number; name: string; can_view: boolean; can_create: boolean; can_edit: boolean; can_delete: boolean }[]>([]);
+  const [roleUserIds, setRoleUserIds] = useState<number[]>([]);
+  const [addUserDropdown, setAddUserDropdown] = useState(false);
+  const [permSaving, setPermSaving] = useState<string | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -387,6 +533,49 @@ export function Admin() {
     } catch (err) {
       console.error('Failed to load modules:', err);
     }
+  };
+
+  const openRole = async (role: Role) => {
+    setActiveRole(role);
+    setAddUserDropdown(false);
+    const [permRes, usersRes] = await Promise.all([
+      fetch(`/api/v1/admin/roles/${role.name}/permissions`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch('/api/v1/admin/users', { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    if (permRes.ok) { const d = await permRes.json(); setRolePerms(d.permissions || []); }
+    if (usersRes.ok) {
+      const d = await usersRes.json();
+      const tagged = (d.users || []).filter((u: User) => (u.roles || []).some(r => r.name === role.name)).map((u: User) => u.id);
+      setRoleUserIds(tagged);
+    }
+  };
+
+  const savePermission = async (moduleName: string, field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete', value: boolean) => {
+    if (!activeRole) return;
+    setPermSaving(moduleName + field);
+    const updated = rolePerms.map(p => p.name === moduleName ? { ...p, [field]: value } : p);
+    setRolePerms(updated);
+    const perm = updated.find(p => p.name === moduleName)!;
+    await fetch(`/api/v1/admin/roles/${activeRole.name}/permissions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ moduleName, canView: perm.can_view, canCreate: perm.can_create, canEdit: perm.can_edit, canDelete: perm.can_delete }),
+    });
+    setPermSaving(null);
+  };
+
+  const tagUser = async (user: User, add: boolean) => {
+    if (!activeRole) return;
+    const currentRoles = (user.roles || []).map(r => r.name);
+    const newRoles = add ? [...currentRoles, activeRole.name] : currentRoles.filter(r => r !== activeRole.name);
+    await fetch(`/api/v1/admin/users/${user.id}/roles`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ roleNames: newRoles }),
+    });
+    setRoleUserIds(prev => add ? [...prev, user.id] : prev.filter(id => id !== user.id));
+    loadUsers();
+    setAddUserDropdown(false);
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -897,39 +1086,132 @@ export function Admin() {
           )}
 
           {activeTab === 'roles' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Available Roles</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {roles.map((role) => (
-                    <div key={role.id} className="p-4 border border-gray-200 rounded-lg">
-                      <h4 className="font-semibold text-gray-900 mb-2 capitalize">{role.name}</h4>
-                      <p className="text-sm text-gray-600 mb-3">{role.description}</p>
-                      <button
-                        onClick={() => {
-                          /* Show role permissions editor */
-                        }}
-                        className="text-sm text-[#14856E] hover:underline font-medium"
-                      >
-                        Manage Permissions →
-                      </button>
-                    </div>
-                  ))}
-                </div>
+            <div className="flex gap-6 min-h-[500px]">
+              {/* Role list */}
+              <div className="w-56 flex-shrink-0 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Roles</p>
+                {roles.map(role => (
+                  <button
+                    key={role.id}
+                    onClick={() => openRole(role)}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                      activeRole?.id === role.id
+                        ? 'bg-[#14856E] text-white border-[#14856E]'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-[#14856E] hover:text-[#14856E]'
+                    }`}
+                  >
+                    <span className="capitalize">{role.name}</span>
+                    <span className={`block text-xs mt-0.5 font-normal ${activeRole?.id === role.id ? 'text-green-100' : 'text-gray-400'}`}>
+                      {users.filter(u => (u.roles || []).some(r => r.name === role.name)).length} users
+                    </span>
+                  </button>
+                ))}
               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Available Modules</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {modules.map((module) => (
-                    <div key={module.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <h4 className="font-semibold text-gray-900 mb-1">{module.name}</h4>
-                      <p className="text-sm text-gray-600 mb-2">{module.description}</p>
-                      <p className="text-xs text-gray-500">Route: {module.route_name}</p>
+              {/* Role detail panel */}
+              {activeRole ? (
+                <div className="flex-1 min-w-0 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 capitalize">{activeRole.name}</h3>
+                      <p className="text-sm text-gray-500">{activeRole.description}</p>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Users tagged to this role */}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 mb-2">Users with this role</p>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {users.filter(u => roleUserIds.includes(u.id)).map(u => (
+                        <span key={u.id}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 border border-green-200 text-sm text-green-800 font-medium">
+                          {u.full_name || u.username}
+                          {u.username !== 'admin' && (
+                            <button onClick={() => tagUser(u, false)}
+                              className="ml-1 text-green-400 hover:text-red-500 transition-colors">
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+
+                      {/* Add user dropdown */}
+                      <div className="relative">
+                        <button onClick={() => setAddUserDropdown(v => !v)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-dashed border-gray-300 text-sm text-gray-500 hover:border-[#14856E] hover:text-[#14856E] transition-colors">
+                          <Plus size={13} />Add user
+                        </button>
+                        {addUserDropdown && (
+                          <div className="absolute top-8 left-0 z-20 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[200px] py-1">
+                            {users.filter(u => !roleUserIds.includes(u.id) && u.username !== 'admin').length === 0 ? (
+                              <p className="px-4 py-2 text-xs text-gray-400">All users already tagged</p>
+                            ) : (
+                              users.filter(u => !roleUserIds.includes(u.id) && u.username !== 'admin').map(u => (
+                                <button key={u.id} onClick={() => tagUser(u, true)}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-[#14856E]">
+                                  {u.full_name || u.username}
+                                  <span className="block text-xs text-gray-400">{u.username}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {roleUserIds.length === 0 && !addUserDropdown && (
+                        <span className="text-sm text-gray-400 italic">No users assigned</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Permissions matrix */}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 mb-3">Module Permissions</p>
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left font-medium text-gray-600">Module</th>
+                            {(['can_view', 'can_create', 'can_edit', 'can_delete'] as const).map(f => (
+                              <th key={f} className="px-3 py-2.5 text-center font-medium text-gray-600 w-20">
+                                {f.replace('can_', '').charAt(0).toUpperCase() + f.replace('can_', '').slice(1)}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {rolePerms.map(perm => (
+                            <tr key={perm.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-2.5 font-medium text-gray-800">{perm.name}</td>
+                              {(['can_view', 'can_create', 'can_edit', 'can_delete'] as const).map(field => (
+                                <td key={field} className="px-3 py-2.5 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!perm[field]}
+                                    disabled={permSaving === perm.name + field}
+                                    onChange={e => savePermission(perm.name, field, e.target.checked)}
+                                    className="w-4 h-4 rounded accent-[#14856E] cursor-pointer disabled:opacity-50"
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                          {rolePerms.length === 0 && (
+                            <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400 text-sm">No permissions found for this role</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-gray-400">
+                  <div className="text-center">
+                    <KeyRound size={36} className="mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">Select a role to manage permissions and users</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

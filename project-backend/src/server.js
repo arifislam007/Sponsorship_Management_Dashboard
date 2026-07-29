@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './config.js';
 import { ensureSchema } from './db.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import { projectsRouter } from './routes/projects.js';
 import { tasksRouter } from './routes/tasks.js';
 import { dashboardRouter } from './routes/dashboard.js';
@@ -17,10 +17,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'project-service', timestamp: new Date() });
 });
 
-// All project routes require JWT authentication
-app.use('/api/projects/dashboard', authMiddleware, dashboardRouter);
-app.use('/api/projects/tasks', authMiddleware, tasksRouter);
-app.use('/api/projects', authMiddleware, projectsRouter);
+const projectAccess = moduleAccessMiddleware('Projects');
+app.use('/api/projects/dashboard', authMiddleware, projectAccess, dashboardRouter);
+app.use('/api/projects/tasks',     authMiddleware, projectAccess, tasksRouter);
+app.use('/api/projects',           authMiddleware, projectAccess, projectsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });

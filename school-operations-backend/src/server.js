@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { ensureSchema } from './db.js';
+import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import classRoutinesRouter from './routes/classRoutines.js';
 import teachersRouter from './routes/teachers.js';
 import curriculumRouter from './routes/curriculum.js';
@@ -24,11 +25,12 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
-app.use('/api/school-operations', classRoutinesRouter);
-app.use('/api/school-operations', teachersRouter);
-app.use('/api/school-operations', curriculumRouter);
-app.use('/api/school-operations', attendanceRouter);
-app.use('/api/school-operations', examsRouter);
+const schoolOpsAccess = moduleAccessMiddleware('School Operations');
+app.use('/api/school-operations', authMiddleware, schoolOpsAccess, classRoutinesRouter);
+app.use('/api/school-operations', authMiddleware, schoolOpsAccess, teachersRouter);
+app.use('/api/school-operations', authMiddleware, schoolOpsAccess, curriculumRouter);
+app.use('/api/school-operations', authMiddleware, schoolOpsAccess, attendanceRouter);
+app.use('/api/school-operations', authMiddleware, schoolOpsAccess, examsRouter);
 
 // 404 handler
 app.use((req, res) => {

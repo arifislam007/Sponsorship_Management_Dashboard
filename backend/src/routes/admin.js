@@ -396,18 +396,20 @@ adminRouter.get('/user-activity', authMiddleware, roleMiddleware('admin'), async
     if (to_date)   { params.push(to_date + 'T23:59:59');  conds.push(`login_at <= $${params.length}`); }
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
-    const [summaryR, sessionsR, dailyR] = await Promise.all([
+    const [summaryR, sessionsR, dailyR, perUserDailyR] = await Promise.all([
       // Per-user summary
       pool.query(`
         SELECT user_id, username, full_name,
                COUNT(*)::int AS total_sessions,
+               COUNT(DISTINCT DATE(login_at))::int AS active_days,
                ROUND(AVG(
                  EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60
                ))::int AS avg_session_min,
                ROUND(SUM(
                  EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60
                ))::int AS total_minutes,
-               MAX(last_seen_at) AS last_seen
+               MAX(last_seen_at) AS last_seen,
+               MIN(login_at) AS first_seen
         FROM user_sessions ${where}
         GROUP BY user_id, username, full_name
         ORDER BY total_minutes DESC NULLS LAST
@@ -417,18 +419,28 @@ adminRouter.get('/user-activity', authMiddleware, roleMiddleware('admin'), async
         SELECT id, user_id, username, full_name, login_at, last_seen_at, logout_at, ip_address,
                ROUND(EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60)::int AS duration_min
         FROM user_sessions ${where}
-        ORDER BY login_at DESC LIMIT 100
+        ORDER BY login_at DESC LIMIT 200
       `, params),
       // Daily active users
       pool.query(`
         SELECT DATE(login_at) AS date,
                COUNT(DISTINCT user_id)::int AS active_users,
-               COUNT(*)::int AS sessions
+               COUNT(*)::int AS sessions,
+               ROUND(SUM(EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60))::int AS total_minutes
         FROM user_sessions ${where}
-        GROUP BY DATE(login_at) ORDER BY date DESC LIMIT 30
+        GROUP BY DATE(login_at) ORDER BY date ASC LIMIT 31
+      `, params),
+      // Per-user per-day breakdown
+      pool.query(`
+        SELECT user_id, username, full_name, DATE(login_at) AS date,
+               COUNT(*)::int AS sessions,
+               ROUND(SUM(EXTRACT(EPOCH FROM (COALESCE(logout_at, last_seen_at) - login_at)) / 60))::int AS minutes
+        FROM user_sessions ${where}
+        GROUP BY user_id, username, full_name, DATE(login_at)
+        ORDER BY date DESC, minutes DESC
       `, params),
     ]);
-    res.json({ summary: summaryR.rows, sessions: sessionsR.rows, daily: dailyR.rows });
+    res.json({ summary: summaryR.rows, sessions: sessionsR.rows, daily: dailyR.rows, per_user_daily: perUserDailyR.rows });
   } catch (err) {
     console.error('User activity error:', err);
     res.status(500).json({ message: 'Failed to fetch user activity' });

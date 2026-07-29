@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { ensureSchema } from './db.js';
+import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import studentsRouter from './routes/students.js';
 import admissionsRouter from './routes/admissions.js';
 
@@ -21,8 +22,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
-app.use('/api/ict', studentsRouter);
-app.use('/api/ict', admissionsRouter);
+const ictAccess = moduleAccessMiddleware('ICT');
+app.use('/api/ict', authMiddleware, ictAccess, studentsRouter);
+app.use('/api/ict', authMiddleware, ictAccess, admissionsRouter);
 
 // 404 handler
 app.use((req, res) => {

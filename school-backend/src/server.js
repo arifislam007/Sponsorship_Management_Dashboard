@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './config.js';
 import { ensureSchema } from './db.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { classesRouter } from './routes/classes.js';
 import { studentsRouter } from './routes/students.js';
@@ -19,12 +19,13 @@ app.get('/api/health', (req, res) =>
   res.json({ status: 'ok', service: 'school-service', timestamp: new Date() })
 );
 
-app.use('/api/school/dashboard',   authMiddleware, dashboardRouter);
-app.use('/api/school/classes',     authMiddleware, classesRouter);
-app.use('/api/school/students',    authMiddleware, studentsRouter);
-app.use('/api/school/attendance',  authMiddleware, attendanceRouter);
-app.use('/api/school/monitoring',  authMiddleware, monitoringRouter);
-app.use('/api/school/class-attendance', authMiddleware, classAttendanceRouter);
+const schoolAccess = moduleAccessMiddleware('School');
+app.use('/api/school/dashboard',        authMiddleware, schoolAccess, dashboardRouter);
+app.use('/api/school/classes',          authMiddleware, schoolAccess, classesRouter);
+app.use('/api/school/students',         authMiddleware, schoolAccess, studentsRouter);
+app.use('/api/school/attendance',       authMiddleware, schoolAccess, attendanceRouter);
+app.use('/api/school/monitoring',       authMiddleware, schoolAccess, monitoringRouter);
+app.use('/api/school/class-attendance', authMiddleware, schoolAccess, classAttendanceRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((err, req, res, next) => {

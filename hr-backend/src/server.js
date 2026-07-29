@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './config.js';
 import { ensureSchema } from './db.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { departmentsRouter } from './routes/departments.js';
 import { employeesRouter } from './routes/employees.js';
@@ -17,11 +17,11 @@ app.get('/api/health', (req, res) =>
   res.json({ status: 'ok', service: 'hr-service', timestamp: new Date() })
 );
 
-// All routes require JWT
-app.use('/api/hr/dashboard',    authMiddleware, dashboardRouter);
-app.use('/api/hr/departments',  authMiddleware, departmentsRouter);
-app.use('/api/hr/employees',    authMiddleware, employeesRouter);
-app.use('/api/hr/payroll',      authMiddleware, payrollRouter);
+const hrAccess = moduleAccessMiddleware('HR');
+app.use('/api/hr/dashboard',    authMiddleware, hrAccess, dashboardRouter);
+app.use('/api/hr/departments',  authMiddleware, hrAccess, departmentsRouter);
+app.use('/api/hr/employees',    authMiddleware, hrAccess, employeesRouter);
+app.use('/api/hr/payroll',      authMiddleware, hrAccess, payrollRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((err, req, res, next) => {
