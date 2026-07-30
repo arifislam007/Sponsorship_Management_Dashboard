@@ -1100,60 +1100,32 @@ export function Admin() {
       )}
 
       <div className="bg-white rounded-lg shadow border border-gray-200 mb-6">
-        <div className="flex border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`flex-1 px-6 py-3 font-medium transition-colors ${
-              activeTab === 'users'
-                ? 'text-[#14856E] border-b-2 border-[#14856E]'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            User Management
-          </button>
-          <button
-            onClick={() => setActiveTab('roles')}
-            className={`flex-1 px-6 py-3 font-medium transition-colors ${
-              activeTab === 'roles'
-                ? 'text-[#14856E] border-b-2 border-[#14856E]'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Roles & Permissions
-          </button>
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`flex-1 px-6 py-3 font-medium transition-colors ${
-              activeTab === 'audit'
-                ? 'text-[#14856E] border-b-2 border-[#14856E]'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Audit Logs
-          </button>
-          <button
-            onClick={() => setActiveTab('activity')}
-            className={`flex-1 px-6 py-3 font-medium transition-colors ${
-              activeTab === 'activity'
-                ? 'text-[#14856E] border-b-2 border-[#14856E]'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            User Activity
-          </button>
-          <button
-            onClick={() => setActiveTab('notifications')}
-            className={`flex-1 px-6 py-3 font-medium transition-colors flex items-center justify-center gap-1.5 ${
-              activeTab === 'notifications'
-                ? 'text-[#14856E] border-b-2 border-[#14856E]'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Bell size={14} /> Notifications
-          </button>
+        <div className="overflow-x-auto border-b border-gray-200">
+          <div className="flex min-w-max">
+            {[
+              { id: 'users', label: 'Users' },
+              { id: 'roles', label: 'Roles & Perms' },
+              { id: 'audit', label: 'Audit Logs' },
+              { id: 'activity', label: 'Activity' },
+              { id: 'notifications', label: 'Notifications' },
+            ].map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`px-4 md:px-6 py-3 text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  activeTab === id
+                    ? 'text-[#14856E] border-b-2 border-[#14856E]'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {id === 'notifications' && <Bell size={13} />}
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-3 md:p-6">
           {activeTab === 'users' && (
             <div className="space-y-6">
               <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
@@ -1240,24 +1212,24 @@ export function Admin() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Existing Users</h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm min-w-[560px]">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="px-6 py-3 text-left font-medium text-gray-700">Username</th>
-                        <th className="px-6 py-3 text-left font-medium text-gray-700">Email</th>
-                        <th className="px-6 py-3 text-left font-medium text-gray-700">Full Name</th>
-                        <th className="px-6 py-3 text-left font-medium text-gray-700">Roles</th>
-                        <th className="px-6 py-3 text-left font-medium text-gray-700">Status</th>
-                        <th className="px-6 py-3 text-left font-medium text-gray-700">Actions</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Username</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700 hidden md:table-cell">Email</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Roles</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {users.map((user) => (
                         <tr key={user.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-3 text-gray-900 font-medium">{user.username}</td>
-                          <td className="px-6 py-3 text-gray-600">{user.email}</td>
-                          <td className="px-6 py-3 text-gray-600">{user.full_name}</td>
-                          <td className="px-6 py-3">
+                          <td className="px-4 py-3 text-gray-900 font-medium">{user.username}</td>
+                          <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{user.email}</td>
+                          <td className="px-4 py-3 text-gray-600">{user.full_name}</td>
+                          <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-1">
                               {user.roles && user.roles.length > 0 ? (
                                 user.roles.filter(Boolean).map((role) => (
@@ -1273,9 +1245,9 @@ export function Admin() {
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-3">
+                          <td className="px-4 py-3">
                             <span
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                 user.is_active
                                   ? 'bg-green-50 text-green-700'
                                   : 'bg-red-50 text-red-700'
@@ -1284,37 +1256,38 @@ export function Admin() {
                               {user.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </td>
-                          <td className="px-6 py-3">
-                            <div className="flex gap-2">
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1 flex-wrap">
                               <button
                                 onClick={() => setSelectedUser(user)}
                                 className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                                title="Edit user"
                               >
-                                <Edit2 size={16} />
+                                <Edit2 size={15} />
                               </button>
                               <button
                                 onClick={() => handleGrantLeaveOnlyAccess(user.id, user.roles || [])}
                                 disabled={isLoading || user.username === 'admin'}
-                                title={user.username === 'admin' ? 'Cannot modify admin user' : ''}
-                                className="px-3 py-2 text-xs font-medium rounded-lg border border-[#14856E] text-[#14856E] hover:bg-[#14856E] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Grant leave-only access"
+                                className="p-2 text-[#14856E] border border-[#14856E] hover:bg-[#14856E] hover:text-white rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium hidden md:flex items-center"
                               >
-                                Leave only
+                                Leave
                               </button>
                               <button
                                 onClick={() => handleDeleteSelectedUser(user.id)}
                                 disabled={isLoading || user.username === 'admin'}
-                                title={user.username === 'admin' ? 'Admin user cannot be deleted' : ''}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                title="Delete user"
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               >
-                                {isLoading ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                {isLoading ? <Loader size={15} className="animate-spin" /> : <Trash2 size={15} />}
                               </button>
                               <button
                                 onClick={() => handleToggleUserStatus(user.id, user.is_active)}
                                 disabled={isLoading || (user.username === 'admin' && user.is_active)}
-                                title={user.username === 'admin' && user.is_active ? 'Cannot deactivate admin user' : ''}
-                                className="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                title={user.is_active ? 'Deactivate' : 'Activate'}
+                                className={`p-2 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${user.is_active ? 'border-orange-300 text-orange-600 hover:bg-orange-50' : 'border-green-300 text-green-700 hover:bg-green-50'}`}
                               >
-                                {user.is_active ? 'Deactivate' : 'Activate'}
+                                {user.is_active ? 'Off' : 'On'}
                               </button>
                             </div>
                           </td>
@@ -1328,22 +1301,22 @@ export function Admin() {
           )}
 
           {activeTab === 'roles' && (
-            <div className="flex gap-6 min-h-[500px]">
+            <div className="flex flex-col md:flex-row gap-4 md:gap-6 min-h-[400px]">
               {/* Role list */}
-              <div className="w-56 flex-shrink-0 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Roles</p>
+              <div className="flex flex-row md:flex-col gap-2 md:w-56 md:flex-shrink-0 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
+                <p className="hidden md:block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Roles</p>
                 {roles.map(role => (
                   <button
                     key={role.id}
                     onClick={() => openRole(role)}
-                    className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                    className={`flex-shrink-0 md:flex-shrink text-left px-3 py-2 md:py-2.5 rounded-lg border text-sm font-medium transition-colors ${
                       activeRole?.id === role.id
                         ? 'bg-[#14856E] text-white border-[#14856E]'
                         : 'bg-white text-gray-700 border-gray-200 hover:border-[#14856E] hover:text-[#14856E]'
                     }`}
                   >
-                    <span className="capitalize">{role.name}</span>
-                    <span className={`block text-xs mt-0.5 font-normal ${activeRole?.id === role.id ? 'text-green-100' : 'text-gray-400'}`}>
+                    <span className="capitalize whitespace-nowrap">{role.name}</span>
+                    <span className={`hidden md:block text-xs mt-0.5 font-normal ${activeRole?.id === role.id ? 'text-green-100' : 'text-gray-400'}`}>
                       {users.filter(u => (u.roles || []).some(r => r.name === role.name)).length} users
                     </span>
                   </button>
@@ -1409,8 +1382,8 @@ export function Admin() {
                   {/* Permissions matrix */}
                   <div>
                     <p className="text-sm font-semibold text-gray-700 mb-3">Module Permissions</p>
-                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <table className="w-full text-sm">
+                    <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-sm min-w-[420px]">
                         <thead className="bg-gray-50 border-b border-gray-200">
                           <tr>
                             <th className="px-4 py-2.5 text-left font-medium text-gray-600">Module</th>
