@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { NotificationBell } from './NotificationBell';
 
 export function RootLayout() {
-  const { user, logout, canAccess } = useAuth();
+  const { user, logout, canAccess, showIdleWarning, stayLoggedIn } = useAuth();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -328,6 +328,33 @@ export function RootLayout() {
           </button>
         </div>
       </nav>
+      {showIdleWarning && (
+        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <LogOut size={26} className="text-orange-500" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Session Expiring Soon</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              You've been idle for 18 minutes. You'll be automatically logged out in <strong>2 minutes</strong>.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { logout(); navigate('/login'); }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Log out now
+              </button>
+              <button
+                onClick={stayLoggedIn}
+                className="flex-1 px-4 py-2.5 bg-[#14856E] text-white rounded-xl text-sm font-semibold hover:bg-[#0f6b5a] transition-colors"
+              >
+                Stay logged in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

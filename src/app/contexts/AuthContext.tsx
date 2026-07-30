@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { api } from './api';
 
 interface User {
@@ -18,13 +18,18 @@ interface Permissions {
   };
 }
 
+const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+const IDLE_WARN_MS   = 18 * 60 * 1000; // warn at 18 minutes
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   permissions: Permissions | null;
   isLoading: boolean;
+  showIdleWarning: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  stayLoggedIn: () => void;
   hasRole: (role: string) => boolean;
   canAccess: (module: string, action: string) => boolean;
 }
@@ -36,8 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
   const sessionIdRef = useRef<number | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
 
   // Load user from localStorage on mount
   useEffect(() => {
@@ -145,7 +154,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 3 * 60 * 1000);
   };
 
+  const clearIdleTimers = () => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
+  };
+
+  const startIdleTimers = useCallback(() => {
+    clearIdleTimers();
+    setShowIdleWarning(false);
+    warnTimerRef.current = setTimeout(() => setShowIdleWarning(true), IDLE_WARN_MS);
+    idleTimerRef.current = setTimeout(() => {
+      // Auto logout — clear state then redirect
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      const savedToken = localStorage.getItem('authToken');
+      const savedSession = Number(localStorage.getItem('sessionId'));
+      if (savedToken && savedSession) {
+        fetch('/api/v1/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${savedToken}` },
+          body: JSON.stringify({ sessionId: savedSession }),
+        }).catch(() => {});
+      }
+      setUser(null); setToken(null); setPermissions(null);
+      sessionIdRef.current = null;
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('sessionId');
+      setShowIdleWarning(false);
+      window.location.replace('/login');
+    }, IDLE_TIMEOUT_MS);
+  }, []);
+
+  // Attach activity listeners when logged in
+  useEffect(() => {
+    if (!user) return;
+    const THROTTLE = 10_000; // only reset once per 10 s max
+    const onActivity = () => {
+      if (Date.now() - lastActivityRef.current < THROTTLE) return;
+      lastActivityRef.current = Date.now();
+      startIdleTimers();
+    };
+    const events = ['mousemove', 'keydown', 'mousedown', 'scroll', 'touchstart'] as const;
+    events.forEach(e => window.addEventListener(e, onActivity, { passive: true }));
+    startIdleTimers(); // start on login
+    return () => {
+      events.forEach(e => window.removeEventListener(e, onActivity));
+      clearIdleTimers();
+    };
+  }, [user, startIdleTimers]);
+
+  const stayLoggedIn = () => {
+    lastActivityRef.current = Date.now();
+    startIdleTimers();
+  };
+
   const logout = async () => {
+    clearIdleTimers();
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     const savedToken = token || localStorage.getItem('authToken');
     const savedSession = sessionIdRef.current || Number(localStorage.getItem('sessionId'));
@@ -186,8 +249,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         permissions,
         isLoading,
+        showIdleWarning,
         login,
         logout,
+        stayLoggedIn,
         hasRole,
         canAccess,
       }}
