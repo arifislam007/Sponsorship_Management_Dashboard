@@ -3,8 +3,9 @@ import {
   Users, Plus, Search, X, Edit2, Trash2, Eye, ChevronDown,
   Briefcase, DollarSign, Building2, UserCheck, AlertTriangle,
   CheckCircle2, Clock, TrendingUp, FileText, Printer, Download,
-  BarChart2, RefreshCw, ChevronRight, UserMinus, Banknote, CalendarDays, Camera
+  BarChart2, RefreshCw, ChevronRight, UserMinus, Banknote, CalendarDays, Camera, Mail
 } from 'lucide-react';
+import { ShareEmailModal } from './ShareEmailModal';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -498,6 +499,7 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
   const fileRef = useRef<HTMLInputElement>(null);
   const [docType, setDocType] = useState('NID');
   const printRef = useRef<HTMLDivElement>(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -760,13 +762,43 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
             <button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2 border border-[#14856E] text-[#14856E] rounded-lg text-sm font-medium hover:bg-green-50">
               <Edit2 size={14} />Edit Employee
             </button>
-            <button onClick={exportPdf}
-              className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a]">
-              <Printer size={14} />Export PDF
-            </button>
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => setShowEmailModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
+                <Mail size={14} />Email
+              </button>
+              <button onClick={exportPdf}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a]">
+                <Printer size={14} />Export PDF
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {showEmailModal && emp && (
+        <ShareEmailModal
+          defaultSubject={`Employee Profile – ${emp.full_name}`}
+          defaultTo={emp.work_email || emp.email || ''}
+          getHtml={() => {
+            const row = (label: string, value?: string | null) =>
+              value ? `<tr><th style="text-align:left;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;width:40%;font-size:13px">${label}</th><td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:13px">${value}</td></tr>` : '';
+            return `
+              <h2 style="margin:0 0 4px;font-size:20px;color:#14856E">${emp.full_name}</h2>
+              <p style="margin:0 0 16px;color:#6b7280;font-size:13px">${emp.employee_code} · ${emp.designation_title || ''} · ${emp.department_name || ''}</p>
+              <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+                ${row('Employment Type', emp.employee_type)}
+                ${row('Status', emp.employment_status)}
+                ${row('Join Date', emp.join_date ? new Date(emp.join_date).toLocaleDateString() : undefined)}
+                ${row('Mobile', emp.mobile)}
+                ${row('Email', emp.email)}
+                ${row('Work Email', emp.work_email)}
+                ${row('Office', emp.office_location)}
+              </table>`;
+          }}
+          onClose={() => setShowEmailModal(false)}
+        />
+      )}
     </>
   );
 }

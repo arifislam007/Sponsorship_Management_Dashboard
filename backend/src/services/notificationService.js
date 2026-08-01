@@ -153,6 +153,26 @@ export async function notifyMany(userIds, eventType, title, body, url = '/') {
   await Promise.allSettled(userIds.map((id) => notify(id, eventType, title, body, url)));
 }
 
+// Send an email to any address (not limited to user prefs)
+export async function sendDirectEmail(to, subject, html) {
+  const cfg = await getConfig();
+  if (!cfg.smtp_host || !cfg.smtp_user) {
+    throw new Error('SMTP not configured. Please set up email in Admin → Notifications.');
+  }
+  const transporter = nodemailer.createTransport({
+    host: cfg.smtp_host,
+    port: Number(cfg.smtp_port) || 587,
+    secure: cfg.smtp_secure || false,
+    auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
+  });
+  await transporter.sendMail({
+    from: cfg.smtp_from || cfg.smtp_user,
+    to,
+    subject,
+    html,
+  });
+}
+
 // Test a single channel for an admin
 export async function testChannel(userId, channel) {
   const title = 'Test Notification';

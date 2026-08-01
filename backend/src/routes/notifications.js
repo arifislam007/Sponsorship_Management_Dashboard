@@ -5,6 +5,7 @@ import {
   getVapidPublicKey,
   testChannel,
   notify,
+  sendDirectEmail,
 } from '../services/notificationService.js';
 
 const adminOnly = roleMiddleware('admin');
@@ -168,6 +169,18 @@ notificationsRouter.post('/log/read-all', async (req, res, next) => {
     );
     res.json({ ok: true });
   } catch (err) { next(err); }
+});
+
+// ── Direct email send (share report / profile) ────────────────────────────────
+notificationsRouter.post('/send-email', async (req, res, next) => {
+  try {
+    const { to, subject, html } = req.body;
+    if (!to || !subject) return res.status(400).json({ message: 'to and subject are required' });
+    await sendDirectEmail(to, subject, html || '<p>(No content)</p>');
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── Test notifications ─────────────────────────────────────────────────────────

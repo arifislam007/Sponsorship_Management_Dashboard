@@ -4,6 +4,7 @@ import { Heart, Share2, Copy, Check, ArrowLeft, Mail } from 'lucide-react';
 import { api, StudentApi } from '../services/api';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddDonorModal } from './AddDonorModal';
+import { ShareEmailModal } from './ShareEmailModal';
 
 export function StudentProfile() {
   const { id } = useParams();
@@ -15,6 +16,7 @@ export function StudentProfile() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [showDonorModal, setShowDonorModal] = useState(false);
   const [isSubmittingDonor, setIsSubmittingDonor] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -47,11 +49,25 @@ export function StudentProfile() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleShareEmail = () => {
+  const getStudentEmailHtml = () => {
+    if (!student) return '';
     const url = `${window.location.origin}/student/${id}`;
-    const subject = `Support ${student?.name} - Student Sponsorship`;
-    const body = `Check out ${student?.name}'s profile and consider sponsoring their education:\n\n${url}`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const rows = [
+      ['Class', `Class ${student.class}`],
+      ['Age', `${student.age} years`],
+      ['School', student.school || '—'],
+      ['District', student.district || '—'],
+      ['Sponsorship Status', student.sponsorship_status || '—'],
+    ].filter(([, v]) => v && v !== '—');
+    return `
+      <h2 style="margin:0 0 4px;font-size:22px;color:#14856E">${student.name}</h2>
+      <p style="margin:0 0 16px;color:#6b7280;font-size:14px">Student Sponsorship Profile</p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        ${rows.map(([l, v]) => `<tr><th style="text-align:left;padding:7px 10px;background:#f9fafb;border:1px solid #e5e7eb;width:40%;font-size:13px;color:#374151">${l}</th><td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px">${v}</td></tr>`).join('')}
+      </table>
+      ${student.story ? `<p style="background:#f0fdf4;border-left:3px solid #14856E;padding:10px 14px;margin:0 0 16px;border-radius:4px;font-size:13px;color:#374151">${student.story}</p>` : ''}
+      <p style="margin:0"><a href="${url}" style="display:inline-block;padding:10px 22px;background:#14856E;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">View Full Profile</a></p>
+    `;
   };
 
   const handleDonorSubmit = async (payload: { name: string; email: string; phone?: string; country?: string }) => {
@@ -135,7 +151,7 @@ export function StudentProfile() {
                   )}
                 </button>
                 <button
-                  onClick={handleShareEmail}
+                  onClick={() => { setShowEmailModal(true); setShowShareMenu(false); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3"
                 >
                   <Mail size={18} className="text-gray-600" />
@@ -242,10 +258,17 @@ export function StudentProfile() {
 
         {/* Add Donor Modal */}
         {showDonorModal && (
-          <AddDonorModal 
-            isOpen={showDonorModal} 
-            onClose={() => setShowDonorModal(false)} 
+          <AddDonorModal
+            isOpen={showDonorModal}
+            onClose={() => setShowDonorModal(false)}
             onSubmit={handleDonorSubmit}
+          />
+        )}
+        {showEmailModal && (
+          <ShareEmailModal
+            defaultSubject={`Support ${student?.name} - Student Sponsorship`}
+            getHtml={getStudentEmailHtml}
+            onClose={() => setShowEmailModal(false)}
           />
         )}
       </div>

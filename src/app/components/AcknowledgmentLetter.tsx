@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { Plus, Trash2, Download, Save, Printer, History, ChevronDown, FileText, Archive, DollarSign, Users, Eye, X, Upload, PenLine } from 'lucide-react';
+import { Plus, Trash2, Download, Save, Printer, History, ChevronDown, FileText, Archive, DollarSign, Users, Eye, X, Upload, PenLine, Mail } from 'lucide-react';
+import { ShareEmailModal } from './ShareEmailModal';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import html2canvas from 'html2canvas';
@@ -112,6 +113,7 @@ export function AcknowledgmentLetter() {
   const [isLoadingSponsorships, setIsLoadingSponsorships] = useState(false);
   const [isSavingToDb, setIsSavingToDb] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewingLetter, setViewingLetter] = useState<SavedLetterRecord | null>(null);
   const [showSignatureEditor, setShowSignatureEditor] = useState(false);
@@ -899,33 +901,43 @@ export function AcknowledgmentLetter() {
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-200">
+            <div className="pt-4 border-t border-gray-200 space-y-2">
               <button
                 type="button"
-                onClick={handlePrint}
-                disabled={isSavingToDb}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+                onClick={() => setShowEmailModal(true)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-[#14856E] text-[#14856E] rounded-lg hover:bg-green-50 transition-colors"
               >
-                <Printer size={16} />
-                <span className="hidden sm:inline">Print</span>
+                <Mail size={16} />
+                <span>Send via Email</span>
               </button>
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <Save size={16} />
-                <span className="hidden sm:inline">Save Draft</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveToDB}
-                disabled={isSavingToDb}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-50"
-              >
-                <Save size={16} />
-                <span className="hidden sm:inline">{isSavingToDb ? 'Saving...' : 'Save to DB'}</span>
-              </button>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  disabled={isSavingToDb}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+                >
+                  <Printer size={16} />
+                  <span className="hidden sm:inline">Print</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <Save size={16} />
+                  <span className="hidden sm:inline">Save Draft</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveToDB}
+                  disabled={isSavingToDb}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-50"
+                >
+                  <Save size={16} />
+                  <span className="hidden sm:inline">{isSavingToDb ? 'Saving...' : 'Save to DB'}</span>
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -1119,6 +1131,14 @@ export function AcknowledgmentLetter() {
             </div>
           </div>
         </div>
+      )}
+
+      {showEmailModal && (
+        <ShareEmailModal
+          defaultSubject={`Acknowledgment Letter – ${formData.donorName || 'Donor'}`}
+          getHtml={() => printableLetterRef.current?.innerHTML || ''}
+          onClose={() => setShowEmailModal(false)}
+        />
       )}
     </div>
   );

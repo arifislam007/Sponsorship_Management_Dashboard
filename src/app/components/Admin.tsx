@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer, Bell, Mail, Send, Globe, TestTube } from 'lucide-react';
+import { ShareEmailModal } from './ShareEmailModal';
 
 interface User {
   id: number;
@@ -196,6 +197,7 @@ function UserActivityTab({ token }: { token: string }) {
   const maxDayMinutes = Math.max(...daily.map(d => d.total_minutes || 0), 1);
 
   const printReport = () => window.print();
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   return (
     <>
@@ -240,10 +242,16 @@ function UserActivityTab({ token }: { token: string }) {
               {p.label}
             </button>
           ))}
-          <button onClick={printReport}
-            className="ml-auto flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
-            <Printer size={13} />Export PDF
-          </button>
+          <div className="ml-auto flex gap-2">
+            <button onClick={() => setShowEmailModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+              <Mail size={13} />Share Email
+            </button>
+            <button onClick={printReport}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+              <Printer size={13} />Export PDF
+            </button>
+          </div>
         </div>
 
         {/* KPI cards */}
@@ -434,6 +442,14 @@ function UserActivityTab({ token }: { token: string }) {
           </div>
         )}
       </div>
+
+      {showEmailModal && (
+        <ShareEmailModal
+          defaultSubject={`User Activity Report – ${from} to ${to}`}
+          getHtml={() => document.getElementById('activity-report')?.innerHTML || ''}
+          onClose={() => setShowEmailModal(false)}
+        />
+      )}
     </>
   );
 }
