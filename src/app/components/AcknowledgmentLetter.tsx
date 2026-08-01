@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { Plus, Trash2, Download, Save, Printer, History, ChevronDown, FileText, Archive, DollarSign, Users, Eye, X, Upload, PenLine, Mail } from 'lucide-react';
-import { ShareEmailModal } from './ShareEmailModal';
+import { ShareEmailModal, wrapSimpleHtml } from './ShareEmailModal';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import html2canvas from 'html2canvas';
@@ -1136,7 +1136,7 @@ export function AcknowledgmentLetter() {
       {showEmailModal && (
         <ShareEmailModal
           defaultSubject={`Acknowledgment Letter – ${formData.donorName || 'Donor'}`}
-          getHtml={() => printableLetterRef.current?.innerHTML || ''}
+          getHtml={(_logo) => wrapSimpleHtml(printableLetterRef.current?.innerHTML || '')}
           onClose={() => setShowEmailModal(false)}
         />
       )}

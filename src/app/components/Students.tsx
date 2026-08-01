@@ -3,7 +3,7 @@ import { Search, Upload, Plus, User, X, Mail } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddStudentModal } from './AddStudentModal';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
-import { ShareEmailModal } from './ShareEmailModal';
+import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { api, CreateStudentPayload } from '../services/api';
 
 interface Student {
@@ -324,28 +324,86 @@ export function Students() {
       {showEmailModal && selectedStudent && (
         <ShareEmailModal
           defaultSubject={`Student Profile – ${selectedStudent.name}`}
-          getHtml={() => {
+          getHtml={(logoDataUrl) => {
             const url = `${window.location.origin}/student/${selectedStudent.id}`;
-            const rows: [string, string | number | undefined][] = [
-              ['Class', `Class ${selectedStudent.class}`],
-              ['Age', `${selectedStudent.age} years`],
-              ['Father', selectedStudent.father_name],
-              ['Mother', selectedStudent.mother_name],
-              ['Phone', selectedStudent.phone],
-              ['Family Income', selectedStudent.family_income ? `৳${selectedStudent.family_income.toLocaleString()}` : undefined],
-              ['Status', selectedStudent.status === 'sponsored' ? '✅ Sponsored' : '⏳ Needs Sponsor'],
-            ];
-            const tableRows = rows
-              .filter(([, v]) => v)
-              .map(([l, v]) => `<tr><th style="text-align:left;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;width:40%;font-size:13px">${l}</th><td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:13px">${v}</td></tr>`)
-              .join('');
-            return `
-              <h2 style="margin:0 0 4px;font-size:20px;color:#14856E">${selectedStudent.name}</h2>
-              <p style="margin:0 0 16px;color:#6b7280;font-size:13px">Student Sponsorship Profile</p>
-              <table style="width:100%;border-collapse:collapse;margin-bottom:16px">${tableRows}</table>
-              ${selectedStudent.bio ? `<p style="background:#f0fdf4;border-left:3px solid #14856E;padding:10px 14px;margin:0 0 16px;border-radius:4px;font-size:13px;color:#374151">${selectedStudent.bio}</p>` : ''}
-              <p style="margin:0"><a href="${url}" style="display:inline-block;padding:10px 22px;background:#14856E;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">View Public Profile</a></p>
+            const isSponsored = selectedStudent.status === 'sponsored';
+            const statusColor = isSponsored ? '#16a34a' : '#d97706';
+            const statusBg   = isSponsored ? '#f0fdf4'  : '#fffbeb';
+            const statusText = isSponsored ? 'Sponsored' : 'Needs a Sponsor';
+
+            const photoBlock = selectedStudent.photo
+              ? `<img src="${selectedStudent.photo}" alt="${selectedStudent.name}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #14856E;display:block;margin:0 auto 16px" />`
+              : `<div style="width:120px;height:120px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:40px;font-weight:700;color:#9ca3af;line-height:120px;text-align:center">${selectedStudent.name.charAt(0)}</div>`;
+
+            const infoItems: [string, string][] = [
+              ['📚 Class',          `Class ${selectedStudent.class}`],
+              ['🎂 Age',            `${selectedStudent.age} years old`],
+              ['👨 Father',         selectedStudent.father_name || ''],
+              ['👩 Mother',         selectedStudent.mother_name || ''],
+              ['📞 Phone',          selectedStudent.phone || ''],
+              ['💰 Family Income',  selectedStudent.family_income ? `৳${selectedStudent.family_income.toLocaleString()}` : ''],
+            ].filter(([, v]) => v);
+
+            const infoRows = infoItems.map(([label, value]) => `
+              <tr>
+                <td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#6b7280;width:42%;font-weight:500">${label}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#111827;font-weight:600">${value}</td>
+              </tr>`).join('');
+
+            const sponsorsBlock = selectedStudent.sponsors?.length
+              ? `<p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px">Current Sponsors</p>
+                 <p style="margin:0;font-size:14px;color:#14856E;font-weight:600">${selectedStudent.sponsors.map(s => s.donor_name).join(', ')}</p>`
+              : '';
+
+            const bioBlock = selectedStudent.bio
+              ? `<div style="background:#f8fafc;border-left:3px solid #14856E;border-radius:0 8px 8px 0;padding:14px 18px;margin-bottom:24px">
+                   <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#14856E;text-transform:uppercase;letter-spacing:0.8px">Student Story</p>
+                   <p style="margin:0;font-size:14px;color:#374151;line-height:1.6">${selectedStudent.bio}</p>
+                 </div>`
+              : '';
+
+            const body = `
+              <!-- NOTE_PLACEHOLDER -->
+
+              <!-- Profile Card -->
+              <div style="text-align:center;margin-bottom:28px">
+                ${photoBlock}
+                <h2 style="margin:0 0 6px;font-size:26px;font-weight:800;color:#111827;letter-spacing:-0.5px">${selectedStudent.name}</h2>
+                <span style="display:inline-block;padding:4px 14px;border-radius:999px;font-size:12px;font-weight:700;background:${statusBg};color:${statusColor};border:1px solid ${statusColor}30">
+                  ${isSponsored ? '✅' : '🔶'} ${statusText}
+                </span>
+              </div>
+
+              <!-- Divider -->
+              <div style="border-top:1px solid #e5e7eb;margin-bottom:24px"></div>
+
+              <!-- Info Table -->
+              <p style="margin:0 0 10px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px">Personal Details</p>
+              <table style="width:100%;border-collapse:collapse;background:#f9fafb;border-radius:10px;overflow:hidden;margin-bottom:24px;border:1px solid #e5e7eb">
+                <tbody>${infoRows}</tbody>
+              </table>
+
+              <!-- Bio -->
+              ${bioBlock}
+
+              <!-- Sponsors -->
+              ${sponsorsBlock ? `<div style="background:#f0fdf4;border-radius:10px;padding:14px 18px;margin-bottom:24px">${sponsorsBlock}</div>` : ''}
+
+              <!-- CTA -->
+              <div style="text-align:center;margin-top:8px">
+                <a href="${url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#14856E,#0d6b59);color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;letter-spacing:0.3px;box-shadow:0 4px 12px rgba(20,133,110,0.35)">
+                  View Full Profile →
+                </a>
+                ${!isSponsored ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7280">Help change a child's future — consider sponsoring ${selectedStudent.name} today.</p>` : ''}
+              </div>
             `;
+
+            return buildEmailHtml(
+              `Student Profile – ${selectedStudent.name}`,
+              'Student Sponsorship Profile',
+              body,
+              logoDataUrl,
+            );
           }}
           onClose={() => setShowEmailModal(false)}
         />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer, Bell, Mail, Send, Globe, TestTube } from 'lucide-react';
-import { ShareEmailModal } from './ShareEmailModal';
+import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 
 interface User {
   id: number;
@@ -446,7 +446,7 @@ function UserActivityTab({ token }: { token: string }) {
       {showEmailModal && (
         <ShareEmailModal
           defaultSubject={`User Activity Report – ${from} to ${to}`}
-          getHtml={() => document.getElementById('activity-report')?.innerHTML || ''}
+          getHtml={(logo) => buildEmailHtml('User Activity Report', `${from} – ${to}`, `<!-- NOTE_PLACEHOLDER -->${document.getElementById('activity-report')?.innerHTML || ''}`, logo)}
           onClose={() => setShowEmailModal(false)}
         />
       )}

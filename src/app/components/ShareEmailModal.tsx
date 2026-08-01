@@ -1,52 +1,87 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Props {
   defaultSubject: string;
-  /** Return the HTML body to send. Called at send time. */
-  getHtml: () => string;
-  /** Pre-fill the To field (e.g. donor email) */
+  getHtml: (logoDataUrl: string) => string;
   defaultTo?: string;
   onClose: () => void;
 }
 
-const EMAIL_WRAPPER = (title: string, body: string) => `
-<!DOCTYPE html>
-<html>
+async function fetchLogoBase64(): Promise<string> {
+  try {
+    const res = await fetch('/logo.png');
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return '';
+  }
+}
+
+export function wrapSimpleHtml(body: string) {
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/>
+<style>body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;padding:24px;background:#fff}
+table{width:100%;border-collapse:collapse;margin:10px 0}
+th,td{border:1px solid #e5e7eb;padding:8px 12px;font-size:13px;text-align:left}
+th{background:#f9fafb;font-weight:600;color:#374151}img{max-width:100%;height:auto}</style>
+</head><body>${body}</body></html>`;
+}
+
+export function buildEmailHtml(title: string, subtitle: string, body: string, logoDataUrl: string) {
+  const logoImg = logoDataUrl
+    ? `<img src="${logoDataUrl}" alt="Sombhabona Foundation" style="height:52px;width:auto;display:block;margin:0 auto 10px" />`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width"/>
-<style>
-  body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;margin:0;padding:0;background:#f9fafb}
-  .wrap{max-width:680px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
-  .hdr{background:#14856E;padding:24px 32px;color:#fff}
-  .hdr h1{margin:0;font-size:20px;font-weight:700}
-  .hdr p{margin:4px 0 0;font-size:13px;opacity:.8}
-  .body{padding:28px 32px}
-  .ftr{background:#f3f4f6;padding:16px 32px;font-size:12px;color:#6b7280;text-align:center}
-  table{width:100%;border-collapse:collapse;margin:12px 0}
-  th,td{border:1px solid #e5e7eb;padding:8px 12px;font-size:13px;text-align:left}
-  th{background:#f9fafb;font-weight:600;color:#374151}
-  img{max-width:100%;height:auto}
-</style>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${title}</title>
 </head>
-<body>
-<div class="wrap">
-  <div class="hdr">
-    <h1>Sombhabona Foundation</h1>
-    <p>${title}</p>
-  </div>
-  <div class="body">${body}</div>
-  <div class="ftr">
-    <p>This email was sent from the Sombhabona Foundation Management Portal</p>
-    <p>📞 01737243447 &nbsp;|&nbsp; 📍 Mirpur, Dhaka &nbsp;|&nbsp; © 2026 Sombhabona Foundation</p>
-  </div>
-</div>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1f2937">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0">
+  <tr><td align="center">
+    <table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%">
+
+      <!-- HEADER -->
+      <tr>
+        <td style="background:linear-gradient(135deg,#14856E 0%,#0d6b59 100%);border-radius:16px 16px 0 0;padding:32px 40px 28px;text-align:center">
+          ${logoImg}
+          <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px">Sombhabona Foundation</h1>
+          <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,0.75);letter-spacing:0.5px;text-transform:uppercase">${subtitle}</p>
+        </td>
+      </tr>
+
+      <!-- BODY -->
+      <tr>
+        <td style="background:#ffffff;padding:32px 40px">
+          ${body}
+        </td>
+      </tr>
+
+      <!-- FOOTER -->
+      <tr>
+        <td style="background:#f9fafb;border-top:1px solid #e5e7eb;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center">
+          <p style="margin:0 0 4px;font-size:12px;color:#6b7280">This email was sent from the Sombhabona Foundation Management Portal</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af">
+            📞 01737243447 &nbsp;·&nbsp; 📍 756 West Sewrapara, Mirpur, Dhaka &nbsp;·&nbsp; ✉️ info@sombhabona.org
+          </p>
+          <p style="margin:8px 0 0;font-size:11px;color:#d1d5db">© 2026 Sombhabona Foundation. All rights reserved.</p>
+        </td>
+      </tr>
+
+    </table>
+  </td></tr>
+</table>
 </body>
 </html>`;
-
-export function wrapEmailHtml(title: string, body: string) {
-  return EMAIL_WRAPPER(title, body);
 }
 
 export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClose }: Props) {
@@ -56,15 +91,22 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClo
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errMsg, setErrMsg] = useState('');
+  const [logoDataUrl, setLogoDataUrl] = useState('');
+
+  useEffect(() => {
+    fetchLogoBase64().then(setLogoDataUrl);
+  }, []);
 
   const send = async () => {
     if (!to.trim()) return;
     setSending(true);
     setStatus('idle');
     try {
-      const contentHtml = getHtml();
-      const noteHtml = note.trim() ? `<p style="background:#f0fdf4;border-left:4px solid #14856E;padding:10px 14px;border-radius:4px;margin-bottom:16px"><em>${note}</em></p>` : '';
-      const html = wrapEmailHtml(subject, noteHtml + contentHtml);
+      const contentHtml = getHtml(logoDataUrl);
+      const noteHtml = note.trim()
+        ? `<div style="background:#f0fdf4;border-left:3px solid #14856E;padding:12px 16px;border-radius:6px;margin-bottom:20px;font-size:14px;color:#374151;font-style:italic">${note}</div>`
+        : '';
+      const html = noteHtml ? contentHtml.replace('<!-- NOTE_PLACEHOLDER -->', noteHtml) : contentHtml.replace('<!-- NOTE_PLACEHOLDER -->', '');
 
       const token = localStorage.getItem('authToken');
       const res = await fetch('/api/v1/notifications/send-email', {
@@ -86,7 +128,7 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClo
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -137,7 +179,9 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClo
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Personal note <span className="text-gray-400">(optional)</span></label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Personal note <span className="text-gray-400">(optional)</span>
+              </label>
               <textarea
                 value={note}
                 onChange={e => setNote(e.target.value)}

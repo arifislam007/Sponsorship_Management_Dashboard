@@ -5,7 +5,7 @@ import {
   CheckCircle2, Clock, TrendingUp, FileText, Printer, Download,
   BarChart2, RefreshCw, ChevronRight, UserMinus, Banknote, CalendarDays, Camera, Mail
 } from 'lucide-react';
-import { ShareEmailModal } from './ShareEmailModal';
+import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -780,21 +780,28 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
         <ShareEmailModal
           defaultSubject={`Employee Profile – ${emp.full_name}`}
           defaultTo={emp.work_email || emp.email || ''}
-          getHtml={() => {
+          getHtml={(logo) => {
             const row = (label: string, value?: string | null) =>
-              value ? `<tr><th style="text-align:left;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;width:40%;font-size:13px">${label}</th><td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:13px">${value}</td></tr>` : '';
-            return `
-              <h2 style="margin:0 0 4px;font-size:20px;color:#14856E">${emp.full_name}</h2>
-              <p style="margin:0 0 16px;color:#6b7280;font-size:13px">${emp.employee_code} · ${emp.designation_title || ''} · ${emp.department_name || ''}</p>
-              <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-                ${row('Employment Type', emp.employee_type)}
-                ${row('Status', emp.employment_status)}
-                ${row('Join Date', emp.join_date ? new Date(emp.join_date).toLocaleDateString() : undefined)}
-                ${row('Mobile', emp.mobile)}
-                ${row('Email', emp.email)}
-                ${row('Work Email', emp.work_email)}
-                ${row('Office', emp.office_location)}
+              value ? `<tr><td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#6b7280;width:42%;font-weight:500">${label}</td><td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#111827;font-weight:600">${value}</td></tr>` : '';
+            const body = `
+              <!-- NOTE_PLACEHOLDER -->
+              <div style="text-align:center;margin-bottom:24px">
+                <h2 style="margin:0 0 4px;font-size:24px;font-weight:800;color:#111827">${emp.full_name}</h2>
+                <p style="margin:0;font-size:14px;color:#6b7280">${[emp.employee_code, emp.designation_title, emp.department_name].filter(Boolean).join(' · ')}</p>
+              </div>
+              <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px">Employment Details</p>
+              <table style="width:100%;border-collapse:collapse;background:#f9fafb;border-radius:10px;overflow:hidden;margin-bottom:20px;border:1px solid #e5e7eb">
+                <tbody>
+                  ${row('Type', emp.employee_type)}
+                  ${row('Status', emp.employment_status)}
+                  ${row('Join Date', emp.join_date ? new Date(emp.join_date).toLocaleDateString() : undefined)}
+                  ${row('Mobile', emp.mobile)}
+                  ${row('Email', emp.email)}
+                  ${row('Work Email', emp.work_email)}
+                  ${row('Office', emp.office_location)}
+                </tbody>
               </table>`;
+            return buildEmailHtml(`Employee Profile – ${emp.full_name}`, 'Employee Profile', body, logo);
           }}
           onClose={() => setShowEmailModal(false)}
         />

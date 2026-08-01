@@ -4,7 +4,7 @@ import { Heart, Share2, Copy, Check, ArrowLeft, Mail } from 'lucide-react';
 import { api, StudentApi } from '../services/api';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddDonorModal } from './AddDonorModal';
-import { ShareEmailModal } from './ShareEmailModal';
+import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 
 export function StudentProfile() {
   const { id } = useParams();
@@ -49,25 +49,62 @@ export function StudentProfile() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const getStudentEmailHtml = () => {
+  const getStudentEmailHtml = (logoDataUrl: string) => {
     if (!student) return '';
     const url = `${window.location.origin}/student/${id}`;
-    const rows = [
-      ['Class', `Class ${student.class}`],
-      ['Age', `${student.age} years`],
-      ['School', student.school || '—'],
-      ['District', student.district || '—'],
-      ['Sponsorship Status', student.sponsorship_status || '—'],
-    ].filter(([, v]) => v && v !== '—');
-    return `
-      <h2 style="margin:0 0 4px;font-size:22px;color:#14856E">${student.name}</h2>
-      <p style="margin:0 0 16px;color:#6b7280;font-size:14px">Student Sponsorship Profile</p>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-        ${rows.map(([l, v]) => `<tr><th style="text-align:left;padding:7px 10px;background:#f9fafb;border:1px solid #e5e7eb;width:40%;font-size:13px;color:#374151">${l}</th><td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:13px">${v}</td></tr>`).join('')}
+    const isSponsored = !!student.is_sponsored;
+    const statusColor = isSponsored ? '#16a34a' : '#d97706';
+    const statusBg   = isSponsored ? '#f0fdf4'  : '#fffbeb';
+    const statusText = isSponsored ? 'Sponsored' : 'Needs a Sponsor';
+
+    const photoBlock = student.photo_url
+      ? `<img src="${student.photo_url}" alt="${student.name}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #14856E;display:block;margin:0 auto 16px"/>`
+      : `<div style="width:120px;height:120px;border-radius:50%;background:#e5e7eb;display:block;margin:0 auto 16px;line-height:120px;text-align:center;font-size:48px;font-weight:700;color:#9ca3af">${student.name.charAt(0)}</div>`;
+
+    const infoItems: [string, string][] = [
+      ['📚 Class',    `Class ${student.class}`],
+      ['🎂 Age',      `${student.age} years old`],
+      ['🏫 School',   student.school || ''],
+      ['📍 District', student.district || ''],
+    ].filter(([, v]) => v);
+
+    const infoRows = infoItems.map(([label, value]) => `
+      <tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#6b7280;width:42%;font-weight:500">${label}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#111827;font-weight:600">${value}</td>
+      </tr>`).join('');
+
+    const bioBlock = student.story
+      ? `<div style="background:#f8fafc;border-left:3px solid #14856E;border-radius:0 8px 8px 0;padding:14px 18px;margin-bottom:24px">
+           <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#14856E;text-transform:uppercase;letter-spacing:0.8px">Student Story</p>
+           <p style="margin:0;font-size:14px;color:#374151;line-height:1.6">${student.story}</p>
+         </div>`
+      : '';
+
+    const body = `
+      <!-- NOTE_PLACEHOLDER -->
+      <div style="text-align:center;margin-bottom:28px">
+        ${photoBlock}
+        <h2 style="margin:0 0 8px;font-size:26px;font-weight:800;color:#111827;letter-spacing:-0.5px">${student.name}</h2>
+        <span style="display:inline-block;padding:4px 14px;border-radius:999px;font-size:12px;font-weight:700;background:${statusBg};color:${statusColor};border:1px solid ${statusColor}30">
+          ${isSponsored ? '✅' : '🔶'} ${statusText}
+        </span>
+      </div>
+      <div style="border-top:1px solid #e5e7eb;margin-bottom:24px"></div>
+      <p style="margin:0 0 10px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px">Profile Details</p>
+      <table style="width:100%;border-collapse:collapse;background:#f9fafb;border-radius:10px;overflow:hidden;margin-bottom:24px;border:1px solid #e5e7eb">
+        <tbody>${infoRows}</tbody>
       </table>
-      ${student.story ? `<p style="background:#f0fdf4;border-left:3px solid #14856E;padding:10px 14px;margin:0 0 16px;border-radius:4px;font-size:13px;color:#374151">${student.story}</p>` : ''}
-      <p style="margin:0"><a href="${url}" style="display:inline-block;padding:10px 22px;background:#14856E;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">View Full Profile</a></p>
+      ${bioBlock}
+      <div style="text-align:center;margin-top:8px">
+        <a href="${url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#14856E,#0d6b59);color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;letter-spacing:0.3px">
+          View Full Profile →
+        </a>
+        ${!isSponsored ? `<p style="margin:14px 0 0;font-size:13px;color:#6b7280">Help change a child's future — consider sponsoring ${student.name} today.</p>` : ''}
+      </div>
     `;
+
+    return buildEmailHtml(`Student Profile – ${student.name}`, 'Student Sponsorship Profile', body, logoDataUrl);
   };
 
   const handleDonorSubmit = async (payload: { name: string; email: string; phone?: string; country?: string }) => {
