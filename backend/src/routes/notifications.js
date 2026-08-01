@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { query } from '../db.js';
-import { authMiddleware, requirePermission } from '../middleware/auth.js';
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 import {
   getVapidPublicKey,
   testChannel,
   notify,
 } from '../services/notificationService.js';
+
+const adminOnly = roleMiddleware('admin');
 
 export const notificationsRouter = Router();
 
@@ -35,14 +37,14 @@ notificationsRouter.post('/internal/send', async (req, res, next) => {
 notificationsRouter.use(authMiddleware);
 
 // ── Admin: notification server config (SMTP + Telegram) ───────────────────────
-notificationsRouter.get('/config', requirePermission('edit'), async (req, res, next) => {
+notificationsRouter.get('/config', adminOnly, async (req, res, next) => {
   try {
     const r = await query('SELECT id, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_from, telegram_bot_token, vapid_public_key, vapid_subject, updated_at FROM notification_config WHERE id = 1');
     res.json(r.rows[0] || {});
   } catch (err) { next(err); }
 });
 
-notificationsRouter.put('/config', requirePermission('edit'), async (req, res, next) => {
+notificationsRouter.put('/config', adminOnly, async (req, res, next) => {
   try {
     const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, telegram_bot_token, vapid_subject } = req.body;
     // Only update smtp_pass if provided (non-empty)
