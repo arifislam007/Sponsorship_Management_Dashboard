@@ -13,6 +13,11 @@ const fileToDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
+function ictHeaders(extra?: Record<string, string>) {
+  const token = localStorage.getItem('authToken');
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };
+}
+
 const DEFAULT_STUDENT_FORM = {
   student_name: '',
   phone: '',
@@ -134,8 +139,8 @@ export function ICT() {
     try {
       // Fetch ICT students and admissions from ICT backend
       const [studentsRes, admissionsRes] = await Promise.all([
-        fetch('/api/ict/students'),
-        fetch('/api/ict/admissions'),
+        fetch('/api/ict/students', { headers: ictHeaders() }),
+        fetch('/api/ict/admissions', { headers: ictHeaders() }),
       ]);
 
       if (!studentsRes.ok) throw new Error('Failed to load students');
@@ -189,7 +194,7 @@ export function ICT() {
     try {
       const res = await fetch('/api/ict/students', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(studentForm),
       });
 
@@ -220,7 +225,7 @@ export function ICT() {
       const url = admissionEditId ? `/api/ict/admissions/${admissionEditId}` : '/api/ict/admissions';
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(admissionForm),
       });
 
@@ -266,7 +271,7 @@ export function ICT() {
     if (!confirm('Delete this admission? This action cannot be undone.')) return;
     try {
       setError('');
-      const res = await fetch(`/api/ict/admissions/${admissionId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/ict/admissions/${admissionId}`, { method: 'DELETE', headers: ictHeaders() });
       if (!res.ok) throw new Error('Failed to delete admission');
       setSuccess('Admission deleted');
       await loadData();
@@ -279,7 +284,7 @@ export function ICT() {
     if (!confirm('Process this admission into a student profile?')) return;
     try {
       setError('');
-      const res = await fetch(`/api/ict/admissions/${admissionId}/process`, { method: 'POST' });
+      const res = await fetch(`/api/ict/admissions/${admissionId}/process`, { method: 'POST', headers: ictHeaders() });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || 'Failed to process admission');
@@ -298,7 +303,7 @@ export function ICT() {
       setError('');
       const res = await fetch(`/api/ict/admissions/${admissionId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ admission_status: newStatus, admission_notes: '' }),
       });
       if (!res.ok) {
@@ -333,8 +338,8 @@ export function ICT() {
 
     try {
       const [studentRes, earningsRes] = await Promise.all([
-        fetch(`/api/ict/students/${student.id}`),
-        fetch(`/api/ict/students/${student.id}/earnings`),
+        fetch(`/api/ict/students/${student.id}`, { headers: ictHeaders() }),
+        fetch(`/api/ict/students/${student.id}/earnings`, { headers: ictHeaders() }),
       ]);
 
       if (!studentRes.ok) throw new Error('Failed to load student profile');
@@ -480,7 +485,7 @@ export function ICT() {
     try {
       const res = await fetch(`/api/ict/students/${selectedStudentProfile.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(editProfileForm),
       });
       if (!res.ok) throw new Error('Failed to update profile');
@@ -507,7 +512,7 @@ export function ICT() {
     try {
       const res = await fetch(`/api/ict/students/${selectedStudentProfile.id}/earnings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(earningForm),
       });
 
