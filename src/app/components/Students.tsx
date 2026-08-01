@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Search, Upload, Plus, User, X } from 'lucide-react';
+import { Search, Upload, Plus, User, X, Mail } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddStudentModal } from './AddStudentModal';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
+import { ShareEmailModal } from './ShareEmailModal';
 import { api, CreateStudentPayload } from '../services/api';
 
 interface Student {
@@ -28,6 +29,7 @@ export function Students() {
   const [isSponsorshipModalOpen, setIsSponsorshipModalOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
 
@@ -278,14 +280,14 @@ export function Students() {
               <div className="space-y-3">
                 <p className="text-sm text-gray-600">Class {selectedStudent.class} · Age {selectedStudent.age}</p>
                 <p className="text-sm text-gray-700">{selectedStudent.bio || 'No story has been added for this student yet.'}</p>
-                <div className="flex gap-3 pt-2">
+                <div className="flex flex-wrap gap-2 pt-2">
                   <button
                     onClick={() => {
                       setEditingStudent(selectedStudent);
                       setIsDetailsOpen(false);
                       setIsModalOpen(true);
                     }}
-                    className="px-4 py-2 rounded-lg border border-[#14856E] text-[#14856E] hover:bg-[#14856E] hover:text-white transition-colors"
+                    className="px-4 py-2 rounded-lg border border-[#14856E] text-[#14856E] hover:bg-[#14856E] hover:text-white transition-colors text-sm"
                   >
                     Edit
                   </button>
@@ -295,11 +297,17 @@ export function Students() {
                         setIsDetailsOpen(false);
                         setIsSponsorshipModalOpen(true);
                       }}
-                      className="px-4 py-2 rounded-lg bg-[#14856E] text-white hover:bg-[#0f6b5a] transition-colors"
+                      className="px-4 py-2 rounded-lg bg-[#14856E] text-white hover:bg-[#0f6b5a] transition-colors text-sm"
                     >
                       Sponsor
                     </button>
                   )}
+                  <button
+                    onClick={() => setShowEmailModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors text-sm"
+                  >
+                    <Mail size={14} />Share Profile
+                  </button>
                 </div>
               </div>
             </div>
@@ -311,6 +319,36 @@ export function Students() {
         <div className="bg-white rounded-lg shadow p-12 text-center">
           <p className="text-gray-500">No students found matching your criteria.</p>
         </div>
+      )}
+
+      {showEmailModal && selectedStudent && (
+        <ShareEmailModal
+          defaultSubject={`Student Profile – ${selectedStudent.name}`}
+          getHtml={() => {
+            const url = `${window.location.origin}/student/${selectedStudent.id}`;
+            const rows: [string, string | number | undefined][] = [
+              ['Class', `Class ${selectedStudent.class}`],
+              ['Age', `${selectedStudent.age} years`],
+              ['Father', selectedStudent.father_name],
+              ['Mother', selectedStudent.mother_name],
+              ['Phone', selectedStudent.phone],
+              ['Family Income', selectedStudent.family_income ? `৳${selectedStudent.family_income.toLocaleString()}` : undefined],
+              ['Status', selectedStudent.status === 'sponsored' ? '✅ Sponsored' : '⏳ Needs Sponsor'],
+            ];
+            const tableRows = rows
+              .filter(([, v]) => v)
+              .map(([l, v]) => `<tr><th style="text-align:left;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;width:40%;font-size:13px">${l}</th><td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:13px">${v}</td></tr>`)
+              .join('');
+            return `
+              <h2 style="margin:0 0 4px;font-size:20px;color:#14856E">${selectedStudent.name}</h2>
+              <p style="margin:0 0 16px;color:#6b7280;font-size:13px">Student Sponsorship Profile</p>
+              <table style="width:100%;border-collapse:collapse;margin-bottom:16px">${tableRows}</table>
+              ${selectedStudent.bio ? `<p style="background:#f0fdf4;border-left:3px solid #14856E;padding:10px 14px;margin:0 0 16px;border-radius:4px;font-size:13px;color:#374151">${selectedStudent.bio}</p>` : ''}
+              <p style="margin:0"><a href="${url}" style="display:inline-block;padding:10px 22px;background:#14856E;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">View Public Profile</a></p>
+            `;
+          }}
+          onClose={() => setShowEmailModal(false)}
+        />
       )}
     </div>
   );
