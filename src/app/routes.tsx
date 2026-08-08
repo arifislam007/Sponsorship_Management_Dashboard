@@ -17,17 +17,27 @@ import { Projects } from "./components/Projects";
 import { HR } from "./components/HR";
 import { School } from "./components/School";
 import { PublicICTAdmission } from "./components/PublicICTAdmission";
-import { Navigate } from "react-router";
 import { useAuth } from "./contexts/AuthContext";
+import { AttendancePanel } from "./components/AttendancePanel";
 
 function DashboardLanding() {
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
 
   if (hasRole('admin')) {
     return <Dashboard />;
   }
 
-  return <Navigate to="/dashboard/leaves" replace />;
+  return (
+    <div className="p-4 md:p-8">
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Welcome, {user?.fullName}</h1>
+        <p className="text-sm text-gray-500 mt-1">Sombhabona Foundation</p>
+      </div>
+      <div className="max-w-sm">
+        <AttendancePanel />
+      </div>
+    </div>
+  );
 }
 
 export const router = createBrowserRouter([

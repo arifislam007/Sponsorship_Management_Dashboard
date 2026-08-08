@@ -26,7 +26,7 @@ export function RootLayout() {
         </div>
 
         <nav className="flex-1 p-4">
-          {canAccess('Dashboard') && (
+          {user && (
             <NavLink
               to="/dashboard"
               end
@@ -262,7 +262,7 @@ export function RootLayout() {
 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
         <div className="flex justify-around items-center h-14">
-          {canAccess('Dashboard') && (
+          {user && (
             <NavLink to="/dashboard" end
               className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
               <LayoutDashboard size={22} />

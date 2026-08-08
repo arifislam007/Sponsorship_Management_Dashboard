@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 
-export const attendanceRouter = Router();
+// Self-service: any authenticated employee (login / logout / today)
+export const attendanceSelfRouter = Router();
+
+// Admin: HR module access required (list / report / link)
+export const attendanceAdminRouter = Router();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,7 +55,7 @@ function fmtDuration(mins) {
 
 // ── Today status ──────────────────────────────────────────────────────────────
 
-attendanceRouter.get('/today', async (req, res, next) => {
+attendanceSelfRouter.get('/today', async (req, res, next) => {
   try {
     const emp = await findEmployee(req.user.userId);
     if (!emp) return res.json({ mapped: false });
@@ -71,7 +75,7 @@ attendanceRouter.get('/today', async (req, res, next) => {
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-attendanceRouter.post('/login', async (req, res, next) => {
+attendanceSelfRouter.post('/login', async (req, res, next) => {
   try {
     const emp = await findEmployee(req.user.userId);
     if (!emp) return res.status(400).json({ message: 'Your account is not linked to an employee profile. Ask HR to link your account.' });
@@ -122,7 +126,7 @@ attendanceRouter.post('/login', async (req, res, next) => {
 
 // ── Logout ────────────────────────────────────────────────────────────────────
 
-attendanceRouter.post('/logout', async (req, res, next) => {
+attendanceSelfRouter.post('/logout', async (req, res, next) => {
   try {
     const emp = await findEmployee(req.user.userId);
     if (!emp) return res.status(400).json({ message: 'Account not linked to an employee profile.' });
@@ -157,7 +161,7 @@ attendanceRouter.post('/logout', async (req, res, next) => {
 
 // ── Admin list ────────────────────────────────────────────────────────────────
 
-attendanceRouter.get('/', async (req, res, next) => {
+attendanceAdminRouter.get('/', async (req, res, next) => {
   try {
     const { from_date, to_date, employee_id, department_id, status, search, limit = 50, offset = 0 } = req.query;
 
@@ -203,7 +207,7 @@ attendanceRouter.get('/', async (req, res, next) => {
 
 // ── Monthly summary ───────────────────────────────────────────────────────────
 
-attendanceRouter.get('/report/monthly', async (req, res, next) => {
+attendanceAdminRouter.get('/report/monthly', async (req, res, next) => {
   try {
     const { year, month, department_id } = req.query;
     const y = Number(year)  || new Date().getFullYear();
@@ -240,7 +244,7 @@ attendanceRouter.get('/report/monthly', async (req, res, next) => {
 
 // ── Link user → employee (admin) ──────────────────────────────────────────────
 
-attendanceRouter.post('/link', async (req, res, next) => {
+attendanceAdminRouter.post('/link', async (req, res, next) => {
   try {
     const { employee_id, user_id } = req.body;
     if (!employee_id || !user_id) return res.status(400).json({ message: 'employee_id and user_id required' });
@@ -249,7 +253,7 @@ attendanceRouter.post('/link', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-attendanceRouter.delete('/link/:employee_id', async (req, res, next) => {
+attendanceAdminRouter.delete('/link/:employee_id', async (req, res, next) => {
   try {
     await query(`UPDATE hr_employees SET linked_user_id = NULL WHERE id = $1`, [req.params.employee_id]);
     res.json({ ok: true });
