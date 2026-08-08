@@ -229,3 +229,14 @@ SELECT r.id, m.id, true, true, true, false
 FROM roles r, modules m
 WHERE r.name = 'project_manager' AND m.name IN ('Leave Management')
 ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- Dedicated leave role (Leave Management access only)
+INSERT INTO roles (name, description) VALUES
+  ('leave', 'Access to Leave Management module')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, false
+FROM roles r, modules m
+WHERE r.name = 'leave' AND m.name = 'Leave Management'
+ON CONFLICT (role_id, module_id) DO NOTHING;

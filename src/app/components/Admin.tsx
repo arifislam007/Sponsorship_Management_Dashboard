@@ -3,15 +3,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer, Bell, Mail, Send, Globe, TestTube } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 
-interface UserModuleAccess {
-  module_id: number;
-  name: string;
-  can_view: boolean;
-  can_create: boolean;
-  can_edit: boolean;
-  can_delete: boolean;
-}
-
 interface User {
   id: number;
   username: string;
@@ -19,7 +10,6 @@ interface User {
   full_name: string;
   is_active: boolean;
   roles: { id: number; name: string }[];
-  moduleAccess?: UserModuleAccess[];
 }
 
 interface Role {
@@ -715,10 +705,6 @@ export function Admin() {
   });
   const [newUserForm, setNewUserForm] = useState({ username: '', email: '', password: '', fullName: '', roles: [] as string[] });
 
-  // Per-user module access state (for the edit modal)
-  const [userModuleAccess, setUserModuleAccess] = useState<UserModuleAccess[]>([]);
-  const [moduleAccessSaving, setModuleAccessSaving] = useState<string | null>(null);
-
   // Roles & Permissions state
   const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [rolePerms, setRolePerms] = useState<{ id: number; name: string; can_view: boolean; can_create: boolean; can_edit: boolean; can_delete: boolean }[]>([]);
@@ -743,12 +729,9 @@ export function Admin() {
         roleNames: (selectedUser.roles || []).map((role) => role?.name).filter(Boolean),
         password: '',
       });
-      setUserModuleAccess(selectedUser.moduleAccess || []);
       return;
     }
-
     setEditForm({ username: '', email: '', fullName: '', roleNames: [], password: '' });
-    setUserModuleAccess([]);
   }, [selectedUser]);
 
   const loadUsers = async () => {
@@ -927,47 +910,6 @@ export function Admin() {
       setError(err instanceof Error ? err.message : 'Failed to update user status');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const openEditUser = async (user: User) => {
-    try {
-      const r = await fetch(`/api/v1/admin/users/${user.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (r.ok) {
-        const data = await r.json();
-        setSelectedUser({ ...user, ...data.user });
-      } else {
-        setSelectedUser(user);
-      }
-    } catch {
-      setSelectedUser(user);
-    }
-  };
-
-  const toggleModuleAccess = async (moduleName: string, currentlyEnabled: boolean) => {
-    if (!selectedUser) return;
-    setModuleAccessSaving(moduleName);
-    try {
-      if (currentlyEnabled) {
-        await fetch(`/api/v1/admin/users/${selectedUser.id}/module-access/${encodeURIComponent(moduleName)}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUserModuleAccess(prev => prev.filter(m => m.name !== moduleName));
-      } else {
-        await fetch(`/api/v1/admin/users/${selectedUser.id}/module-access`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ moduleName, canView: true, canCreate: true, canEdit: true, canDelete: false, overrideRolePermissions: true }),
-        });
-        setUserModuleAccess(prev => [...prev, { module_id: 0, name: moduleName, can_view: true, can_create: true, can_edit: true, can_delete: false }]);
-      }
-    } catch {
-      setError('Failed to update module access');
-    } finally {
-      setModuleAccessSaving(null);
     }
   };
 
@@ -1326,7 +1268,7 @@ export function Admin() {
                           <td className="px-4 py-3">
                             <div className="flex gap-1 flex-wrap">
                               <button
-                                onClick={() => openEditUser(user)}
+                                onClick={() => setSelectedUser(user)}
                                 className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
                                 title="Edit user"
                               >
@@ -1578,45 +1520,6 @@ export function Admin() {
                   ))}
                 </div>
               </div>
-
-              {/* Per-user module access */}
-              {selectedUser?.username !== 'admin' && (
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 mb-1">Module Access</p>
-                  <p className="text-xs text-gray-400 mb-3">Toggle direct module access for this user. These override role permissions.</p>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-100">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500">Module</th>
-                          <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500 w-24">Access</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {modules.filter(m => !['Admin', 'Dashboard'].includes(m.name)).map(mod => {
-                          const enabled = userModuleAccess.some(a => a.name === mod.name && a.can_view);
-                          const saving  = moduleAccessSaving === mod.name;
-                          return (
-                            <tr key={mod.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-2.5 text-gray-800 font-medium">{mod.name}</td>
-                              <td className="px-4 py-2.5 text-center">
-                                <button
-                                  type="button"
-                                  disabled={saving}
-                                  onClick={() => toggleModuleAccess(mod.name, enabled)}
-                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${enabled ? 'bg-[#14856E]' : 'bg-gray-200'}`}
-                                >
-                                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
 
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                 <p className="text-sm font-semibold text-gray-900">Reset password</p>
