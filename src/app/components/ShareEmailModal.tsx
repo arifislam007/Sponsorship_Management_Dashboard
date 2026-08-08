@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Mail, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import logoUrl from '../../../logo.png';
 
 interface Props {
   defaultSubject: string;
@@ -10,15 +11,17 @@ interface Props {
 
 async function fetchLogoBase64(): Promise<string> {
   try {
-    const res = await fetch('/logo.png');
+    const res = await fetch(logoUrl);   // logoUrl = Vite-processed hashed asset URL
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
-    return await new Promise((resolve, reject) => {
+    return await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  } catch {
+  } catch (e) {
+    console.error('[ShareEmailModal] logo fetch failed:', e);
     return '';
   }
 }
@@ -102,17 +105,28 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClo
     setSending(true);
     setStatus('idle');
     try {
-      const contentHtml = getHtml(logoDataUrl);
+      const rawHtml = getHtml(logoDataUrl);
       const noteHtml = note.trim()
         ? `<div style="background:#f0fdf4;border-left:3px solid #14856E;padding:12px 16px;border-radius:6px;margin-bottom:20px;font-size:14px;color:#374151;font-style:italic">${note}</div>`
         : '';
-      const html = noteHtml ? contentHtml.replace('<!-- NOTE_PLACEHOLDER -->', noteHtml) : contentHtml.replace('<!-- NOTE_PLACEHOLDER -->', '');
+      const withNote = rawHtml.replace('<!-- NOTE_PLACEHOLDER -->', noteHtml);
+
+      // Extract every data: URL, replace with cid: reference, send image as MIME attachment
+      type Attachment = { cid: string; content: string; contentType: string; filename: string };
+      const attachments: Attachment[] = [];
+      let n = 0;
+      const html = withNote.replace(/src="data:([^;]+);base64,([^"]+)"/g, (_m, type, b64) => {
+        const cid = `img${n}@sombhabona`;
+        const ext = type.split('/')[1]?.split('+')[0] || 'png';
+        attachments.push({ cid, content: b64, contentType: type, filename: `img${n++}.${ext}` });
+        return `src="cid:${cid}"`;
+      });
 
       const token = localStorage.getItem('authToken');
       const res = await fetch('/api/v1/notifications/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ to: to.trim(), subject, html }),
+        body: JSON.stringify({ to: to.trim(), subject, html, attachments }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));

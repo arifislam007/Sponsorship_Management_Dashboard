@@ -3,13 +3,13 @@ import {
   Users, Plus, Search, X, Edit2, Trash2, Eye, ChevronDown,
   Briefcase, DollarSign, Building2, UserCheck, AlertTriangle,
   CheckCircle2, Clock, TrendingUp, FileText, Printer, Download,
-  BarChart2, RefreshCw, ChevronRight, UserMinus, Banknote, CalendarDays, Camera, Mail
+  BarChart2, RefreshCw, ChevronRight, UserMinus, Banknote, CalendarDays, Camera, Mail, LogIn, LogOut, Filter
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'employees' | 'payroll' | 'departments' | 'reports';
+type Tab = 'dashboard' | 'employees' | 'payroll' | 'departments' | 'reports' | 'attendance';
 type EmpStatus = 'Active' | 'Probation' | 'Resigned' | 'Terminated' | 'Retired';
 type EmpType = 'Permanent' | 'Contract' | 'Volunteer' | 'Consultant';
 type PayStatus = 'Draft' | 'Approved' | 'Paid';
@@ -1848,6 +1848,246 @@ function ReportsTab() {
   );
 }
 
+// ── Attendance Tab ────────────────────────────────────────────────────────────
+
+interface AttRow {
+  id: number; employee_id: number; full_name: string; employee_code: string; department_name: string;
+  date: string; login_time: string; logout_time: string | null;
+  login_ip: string; logout_ip: string | null;
+  working_minutes: number; session_count: number; is_active: boolean; status: string;
+}
+
+const ATT_STATUS_COLORS: Record<string, string> = {
+  Present:    'text-green-700 bg-green-100',
+  Late:       'text-yellow-700 bg-yellow-100',
+  'Half-Day': 'text-blue-700 bg-blue-100',
+  Incomplete: 'text-orange-700 bg-orange-100',
+  Absent:     'text-red-700 bg-red-100',
+};
+
+function fmtTime(ts: string | null) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function fmtMins(m: number | null) {
+  if (!m) return '—';
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function AttendanceTab() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate, setToDate] = useState(today);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [rows, setRows] = useState<AttRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [view, setView] = useState<'detail' | 'monthly'>('detail');
+  const [monthYear, setMonthYear] = useState(() => new Date().toISOString().slice(0, 7));
+  const [monthly, setMonthly] = useState<any[]>([]);
+  const [monthLoading, setMonthLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ from_date: fromDate, to_date: toDate, limit: '200', offset: '0' });
+      if (search) params.set('search', search);
+      if (status) params.set('status', status);
+      const d = await hrFetch<{ data: AttRow[]; total: number }>(`/attendance?${params}`);
+      setRows(d.data);
+      setTotal(d.total);
+    } catch { setRows([]); setTotal(0); }
+    finally { setLoading(false); }
+  }, [fromDate, toDate, search, status]);
+
+  useEffect(() => { if (view === 'detail') load(); }, [load, view]);
+
+  const loadMonthly = useCallback(async () => {
+    setMonthLoading(true);
+    try {
+      const [y, m] = monthYear.split('-');
+      const d = await hrFetch<{ data: any[] }>(`/attendance/report/monthly?year=${y}&month=${m}`);
+      setMonthly(d.data);
+    } catch { setMonthly([]); }
+    finally { setMonthLoading(false); }
+  }, [monthYear]);
+
+  useEffect(() => { if (view === 'monthly') loadMonthly(); }, [loadMonthly, view]);
+
+  const exportCSV = (data: any[], filename: string) => {
+    if (!data.length) return;
+    const headers = Object.keys(data[0]);
+    const csv = [headers.join(','), ...data.map(r => headers.map(h => `"${r[h] ?? ''}"`).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = filename;
+    a.click();
+  };
+
+  return (
+    <div>
+      {/* View toggle */}
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setView('detail')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${view === 'detail' ? 'bg-[#14856E] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          Daily Records
+        </button>
+        <button onClick={() => setView('monthly')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${view === 'monthly' ? 'bg-[#14856E] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          Monthly Report
+        </button>
+      </div>
+
+      {view === 'detail' && (
+        <>
+          {/* Filters */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">From</label>
+                <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">To</label>
+                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Status</label>
+                <select value={status} onChange={e => setStatus(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
+                  <option value="">All Status</option>
+                  {['Present','Late','Half-Day','Incomplete','Absent'].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-xs text-gray-500 mb-1">Search</label>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Name or code…"
+                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+                </div>
+              </div>
+              <button onClick={load}
+                className="flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a]">
+                <Filter size={14} /> Search
+              </button>
+              <button onClick={() => exportCSV(rows, `attendance_${fromDate}_${toDate}.csv`)}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
+                <Download size={14} /> CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+              <span className="text-sm font-semibold text-gray-700">Records ({total})</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    {['Employee','Code','Dept','Date','First In','Last Out','Login IP','Logout IP','Sessions','Total Time','Status'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loading && (
+                    <tr><td colSpan={11} className="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+                  )}
+                  {!loading && rows.length === 0 && (
+                    <tr><td colSpan={11} className="text-center py-8 text-gray-400 text-sm">No records found</td></tr>
+                  )}
+                  {rows.map(r => (
+                    <tr key={r.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2.5 font-medium text-gray-900 whitespace-nowrap">{r.full_name}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.employee_code}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.department_name || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.date}</td>
+                      <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{fmtTime(r.login_time)}</td>
+                      <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.is_active ? <span className="text-green-600 font-medium">Active</span> : fmtTime(r.logout_time)}</td>
+                      <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap font-mono">{r.login_ip}</td>
+                      <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap font-mono">{r.logout_ip || '—'}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-600">{r.session_count}</td>
+                      <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{fmtMins(r.working_minutes)}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ATT_STATUS_COLORS[r.status] || 'text-gray-600 bg-gray-100'}`}>
+                          {r.is_active ? 'Active' : r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {view === 'monthly' && (
+        <>
+          {/* Month picker */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Month</label>
+              <input type="month" value={monthYear} onChange={e => setMonthYear(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <button onClick={loadMonthly}
+              className="flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a]">
+              <RefreshCw size={14} /> Load
+            </button>
+            <button onClick={() => exportCSV(monthly, `monthly_report_${monthYear}.csv`)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
+              <Download size={14} /> CSV
+            </button>
+          </div>
+
+          {/* Monthly summary table */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    {['Employee','Code','Department','Present','Late','Half-Day','Incomplete','Total Hours'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {monthLoading && (
+                    <tr><td colSpan={8} className="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+                  )}
+                  {!monthLoading && monthly.length === 0 && (
+                    <tr><td colSpan={8} className="text-center py-8 text-gray-400 text-sm">No data</td></tr>
+                  )}
+                  {monthly.map(r => (
+                    <tr key={r.employee_id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2.5 font-medium text-gray-900 whitespace-nowrap">{r.full_name}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.employee_code}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.department_name || '—'}</td>
+                      <td className="px-3 py-2.5"><span className="text-green-700 font-semibold">{r.present_days}</span></td>
+                      <td className="px-3 py-2.5"><span className="text-yellow-700 font-semibold">{r.late_days}</span></td>
+                      <td className="px-3 py-2.5"><span className="text-blue-700 font-semibold">{r.half_days}</span></td>
+                      <td className="px-3 py-2.5"><span className="text-orange-700 font-semibold">{r.incomplete_days}</span></td>
+                      <td className="px-3 py-2.5 text-gray-700">{fmtMins(r.total_minutes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
@@ -1855,6 +2095,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'employees', label: 'Employees', icon: Users },
   { id: 'payroll', label: 'Payroll', icon: Banknote },
   { id: 'departments', label: 'Departments', icon: Building2 },
+  { id: 'attendance', label: 'Attendance', icon: CalendarDays },
   { id: 'reports', label: 'Reports', icon: FileText },
 ];
 
@@ -1888,6 +2129,7 @@ export function HR() {
       {tab === 'employees'   && <EmployeesTab />}
       {tab === 'payroll'     && <PayrollTab />}
       {tab === 'departments' && <DepartmentsTab />}
+      {tab === 'attendance'  && <AttendanceTab />}
       {tab === 'reports'     && <ReportsTab />}
     </div>
   );

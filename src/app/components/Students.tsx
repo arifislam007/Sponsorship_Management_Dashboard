@@ -30,8 +30,40 @@ export function Students() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [studentPhotoDataUrl, setStudentPhotoDataUrl] = useState('');
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+
+  const resolvePhotoForEmail = async (photo: string): Promise<string> => {
+    if (!photo) return '';
+    // Already a data URL — use directly, no fetch needed
+    if (photo.startsWith('data:')) return photo;
+    // External HTTPS URL — usable directly in email HTML
+    if (photo.startsWith('http')) return photo;
+    // Relative path served by our own server — fetch and convert to base64
+    try {
+      const res = await fetch(`${window.location.origin}${photo}`);
+      if (!res.ok) return '';
+      const blob = await res.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const openShareEmail = async (student: Student) => {
+    setStudentPhotoDataUrl('');
+    if (student.photo) {
+      const resolved = await resolvePhotoForEmail(student.photo);
+      setStudentPhotoDataUrl(resolved);
+    }
+    setShowEmailModal(true);
+  };
 
   const loadStudents = async () => {
     try {
@@ -303,7 +335,7 @@ export function Students() {
                     </button>
                   )}
                   <button
-                    onClick={() => setShowEmailModal(true)}
+                    onClick={() => openShareEmail(selectedStudent)}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors text-sm"
                   >
                     <Mail size={14} />Share Profile
@@ -331,17 +363,15 @@ export function Students() {
             const statusBg   = isSponsored ? '#f0fdf4'  : '#fffbeb';
             const statusText = isSponsored ? 'Sponsored' : 'Needs a Sponsor';
 
-            const photoBlock = selectedStudent.photo
-              ? `<img src="${selectedStudent.photo}" alt="${selectedStudent.name}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #14856E;display:block;margin:0 auto 16px" />`
-              : `<div style="width:120px;height:120px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:40px;font-weight:700;color:#9ca3af;line-height:120px;text-align:center">${selectedStudent.name.charAt(0)}</div>`;
+            const photoSrc = studentPhotoDataUrl || '';
+            const photoBlock = photoSrc
+              ? `<img src="${photoSrc}" alt="${selectedStudent.name}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #14856E;display:block;margin:0 auto 16px"/>`
+              : `<div style="width:120px;height:120px;border-radius:50%;background:#e5e7eb;display:block;margin:0 auto 16px;line-height:120px;text-align:center;font-size:48px;font-weight:700;color:#9ca3af">${selectedStudent.name.charAt(0)}</div>`;
 
             const infoItems: [string, string][] = [
-              ['📚 Class',          `Class ${selectedStudent.class}`],
-              ['🎂 Age',            `${selectedStudent.age} years old`],
-              ['👨 Father',         selectedStudent.father_name || ''],
-              ['👩 Mother',         selectedStudent.mother_name || ''],
-              ['📞 Phone',          selectedStudent.phone || ''],
-              ['💰 Family Income',  selectedStudent.family_income ? `৳${selectedStudent.family_income.toLocaleString()}` : ''],
+              ['📚 Class',         `Class ${selectedStudent.class}`],
+              ['🎂 Age',           `${selectedStudent.age} years old`],
+              ['💰 Family Income', selectedStudent.family_income ? `৳${selectedStudent.family_income.toLocaleString()}` : ''],
             ].filter(([, v]) => v);
 
             const infoRows = infoItems.map(([label, value]) => `

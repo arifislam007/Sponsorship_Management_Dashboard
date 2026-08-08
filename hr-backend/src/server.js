@@ -7,6 +7,7 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { departmentsRouter } from './routes/departments.js';
 import { employeesRouter } from './routes/employees.js';
 import { payrollRouter } from './routes/payroll.js';
+import { attendanceRouter } from './routes/attendance.js';
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -22,6 +23,7 @@ app.use('/api/hr/dashboard',    authMiddleware, hrAccess, dashboardRouter);
 app.use('/api/hr/departments',  authMiddleware, hrAccess, departmentsRouter);
 app.use('/api/hr/employees',    authMiddleware, hrAccess, employeesRouter);
 app.use('/api/hr/payroll',      authMiddleware, hrAccess, payrollRouter);
+app.use('/api/hr/attendance',   authMiddleware, hrAccess, attendanceRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((err, req, res, next) => {

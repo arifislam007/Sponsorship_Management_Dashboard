@@ -57,8 +57,14 @@ export function StudentProfile() {
     const statusBg   = isSponsored ? '#f0fdf4'  : '#fffbeb';
     const statusText = isSponsored ? 'Sponsored' : 'Needs a Sponsor';
 
-    const photoBlock = student.photo_url
-      ? `<img src="${student.photo_url}" alt="${student.name}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #14856E;display:block;margin:0 auto 16px"/>`
+    // photo_url may be a data URL, an https URL, or a relative path — all work as img src
+    const photoSrc = student.photo_url
+      ? (student.photo_url.startsWith('data:') || student.photo_url.startsWith('http')
+          ? student.photo_url
+          : `${window.location.origin}${student.photo_url}`)
+      : '';
+    const photoBlock = photoSrc
+      ? `<img src="${photoSrc}" alt="${student.name}" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #14856E;display:block;margin:0 auto 16px"/>`
       : `<div style="width:120px;height:120px;border-radius:50%;background:#e5e7eb;display:block;margin:0 auto 16px;line-height:120px;text-align:center;font-size:48px;font-weight:700;color:#9ca3af">${student.name.charAt(0)}</div>`;
 
     const infoItems: [string, string][] = [

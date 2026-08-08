@@ -121,6 +121,40 @@ CREATE TABLE IF NOT EXISTS hr_payroll_items (
   amount NUMERIC(12,2) NOT NULL DEFAULT 0
 );
 
+-- ── Attendance ────────────────────────────────────────────────────────────────
+
+-- Drop old structure if it still has the session_number column (migration guard)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'hr_attendance' AND column_name = 'session_number'
+  ) THEN
+    DROP TABLE IF EXISTS hr_attendance CASCADE;
+  END IF;
+END $$;
+
+-- One row per employee per day; sessions accumulate into working_minutes
+CREATE TABLE IF NOT EXISTS hr_attendance (
+  id               SERIAL PRIMARY KEY,
+  employee_id      INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+  user_id          INTEGER NOT NULL,
+  date             DATE NOT NULL,
+  login_time       TIMESTAMPTZ NOT NULL,   -- first login of the day
+  current_login    TIMESTAMPTZ,            -- start of current/last session
+  logout_time      TIMESTAMPTZ,            -- last logout of the day
+  login_ip         VARCHAR(45),            -- IP at first login
+  logout_ip        VARCHAR(45),            -- IP at last logout
+  is_active        BOOLEAN NOT NULL DEFAULT TRUE,
+  working_minutes  INTEGER  NOT NULL DEFAULT 0,  -- cumulative completed minutes
+  session_count    INTEGER  NOT NULL DEFAULT 1,
+  status           VARCHAR(20) NOT NULL DEFAULT 'Incomplete',
+  notes            TEXT,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT uq_hr_attendance_daily UNIQUE (employee_id, date)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_hr_emp_status     ON hr_employees(employment_status) WHERE NOT is_deleted;
 CREATE INDEX IF NOT EXISTS idx_hr_emp_dept        ON hr_employees(department_id)     WHERE NOT is_deleted;
@@ -128,6 +162,8 @@ CREATE INDEX IF NOT EXISTS idx_hr_emp_code        ON hr_employees(employee_code)
 CREATE INDEX IF NOT EXISTS idx_hr_payroll_month   ON hr_payrolls(payroll_month);
 CREATE INDEX IF NOT EXISTS idx_hr_payroll_emp     ON hr_payrolls(employee_id);
 CREATE INDEX IF NOT EXISTS idx_hr_payroll_status  ON hr_payrolls(payment_status);
+CREATE INDEX IF NOT EXISTS idx_hr_att_date        ON hr_attendance(date);
+CREATE INDEX IF NOT EXISTS idx_hr_att_emp_date    ON hr_attendance(employee_id, date);
 
 -- Seed departments
 INSERT INTO hr_departments (name, code) VALUES

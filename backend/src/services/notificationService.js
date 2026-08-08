@@ -154,7 +154,8 @@ export async function notifyMany(userIds, eventType, title, body, url = '/') {
 }
 
 // Send an email to any address (not limited to user prefs)
-export async function sendDirectEmail(to, subject, html) {
+// attachments: [{cid, content (base64 string), contentType, filename}]
+export async function sendDirectEmail(to, subject, html, attachments = []) {
   const cfg = await getConfig();
   if (!cfg.smtp_host || !cfg.smtp_user) {
     throw new Error('SMTP not configured. Please set up email in Admin → Notifications.');
@@ -165,11 +166,18 @@ export async function sendDirectEmail(to, subject, html) {
     secure: cfg.smtp_secure || false,
     auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
   });
+  const mailAttachments = attachments.map(a => ({
+    cid: a.cid,
+    filename: a.filename,
+    content: Buffer.from(a.content, 'base64'),
+    contentType: a.contentType,
+  }));
   await transporter.sendMail({
     from: cfg.smtp_from || cfg.smtp_user,
     to,
     subject,
     html,
+    attachments: mailAttachments,
   });
 }
 

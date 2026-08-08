@@ -174,9 +174,9 @@ notificationsRouter.post('/log/read-all', async (req, res, next) => {
 // ── Direct email send (share report / profile) ────────────────────────────────
 notificationsRouter.post('/send-email', async (req, res, next) => {
   try {
-    const { to, subject, html } = req.body;
+    const { to, subject, html, attachments } = req.body;
     if (!to || !subject) return res.status(400).json({ message: 'to and subject are required' });
-    await sendDirectEmail(to, subject, html || '<p>(No content)</p>');
+    await sendDirectEmail(to, subject, html || '<p>(No content)</p>', attachments || []);
     res.json({ ok: true });
   } catch (err) {
     next(err);

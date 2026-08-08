@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Users, Heart, TrendingUp, DollarSign, Activity, Award, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import { AttendancePanel } from './AttendancePanel';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -134,6 +135,11 @@ export function Dashboard() {
             <p className="text-xs text-gray-400 mt-1 leading-snug">{stat.sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* Attendance Panel */}
+      <div className="mb-6 max-w-sm">
+        <AttendancePanel />
       </div>
 
       {/* Sponsorship rate progress bar */}
