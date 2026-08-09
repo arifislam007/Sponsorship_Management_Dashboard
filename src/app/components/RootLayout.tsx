@@ -17,7 +17,7 @@ export function RootLayout() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <aside className="hidden md:flex w-64 bg-white border-r border-gray-200 flex-col">
+      <aside className="hidden md:flex w-64 bg-white border-r border-gray-200 flex-col overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
           <img src={logo} alt="Sombhabona" className="h-14 w-auto" />
           <p className="mt-3 text-xs text-gray-600">📞 01737243447</p>
