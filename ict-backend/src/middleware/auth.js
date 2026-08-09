@@ -14,6 +14,28 @@ export function authMiddleware(req, res, next) {
   }
 }
 
+export function requireRole(...allowedRoles) {
+  return async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ message: 'Authentication required' });
+    try {
+      const result = await pool.query(
+        `SELECT r.name FROM user_roles ur
+         JOIN roles r ON ur.role_id = r.id
+         WHERE ur.user_id = $1`,
+        [req.user.userId]
+      );
+      const userRoles = result.rows.map((row) => row.name);
+      if (!allowedRoles.some((role) => userRoles.includes(role))) {
+        return res.status(403).json({ message: 'Insufficient permissions' });
+      }
+      next();
+    } catch (err) {
+      console.error('[requireRole]', err.message);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+}
+
 export function moduleAccessMiddleware(moduleName) {
   return async (req, res, next) => {
     if (!req.user) return res.status(401).json({ message: 'Authentication required' });

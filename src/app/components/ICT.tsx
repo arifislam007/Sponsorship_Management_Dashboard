@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, FileText, Plus, AlertCircle, CheckCircle2, Loader2, X, Pencil } from 'lucide-react';
+import { Users, FileText, Plus, AlertCircle, CheckCircle2, Loader2, X, Pencil, Package, Printer, Trash2, Power } from 'lucide-react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatDate } from '../utils/dateFormat';
+import { useAuth } from '../contexts/AuthContext';
 import logo from '../../../logo.png';
 
-type ICTTab = 'student-profile' | 'admission-form';
+type ICTTab = 'student-profile' | 'admission-form' | 'inventory';
 
 const fileToDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -23,6 +25,32 @@ const DEFAULT_STUDENT_FORM = {
   phone: '',
   course: '',
 };
+
+const DEFAULT_INVENTORY_FORM = {
+  category_id: '',
+  cpu: '',
+  ram: '',
+  ssd: '',
+  hdd: '',
+  device_serial_no: '',
+  quantity: '1',
+  unit: '',
+  location: '',
+  notes: '',
+  purchase_date: '',
+  vendor_name: '',
+  warranty_period: '',
+};
+
+const DEFAULT_CATEGORY_FORM = { name: '', prefix: '' };
+
+const CHART_CATEGORY_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+
+const SPEC_CATEGORIES = ['Laptop', 'Desktop'];
+const CPU_OPTIONS = ['Core i3', 'Core i5', 'Core i7', 'Core i9', 'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Other'];
+const RAM_OPTIONS = ['4GB', '8GB', '16GB', '32GB', '64GB'];
+const SSD_OPTIONS = ['None', '128GB', '256GB', '512GB', '1TB'];
+const HDD_OPTIONS = ['None', '500GB', '1TB', '2TB'];
 
 const DEFAULT_ADMISSION_FORM = {
   full_name: '',
@@ -101,6 +129,8 @@ const DEFAULT_ADMISSION_FORM = {
 };
 
 export function ICT() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('admin');
   const [activeTab, setActiveTab] = useState<ICTTab>('student-profile');
   const [students, setStudents] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
@@ -132,25 +162,53 @@ export function ICT() {
   const [studentForm, setStudentForm] = useState(DEFAULT_STUDENT_FORM);
   const [admissionForm, setAdmissionForm] = useState(DEFAULT_ADMISSION_FORM);
 
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [inventoryCategories, setInventoryCategories] = useState<any[]>([]);
+  const [isInventoryFormOpen, setIsInventoryFormOpen] = useState(false);
+  const [isAddingInventoryItem, setIsAddingInventoryItem] = useState(false);
+  const [inventoryForm, setInventoryForm] = useState(DEFAULT_INVENTORY_FORM);
+  const [lastAddedInventoryItem, setLastAddedInventoryItem] = useState<any | null>(null);
+  const [inventoryEditId, setInventoryEditId] = useState<number | null>(null);
+  const [inventoryEditSerial, setInventoryEditSerial] = useState('');
+  const [selectedInventoryIds, setSelectedInventoryIds] = useState<number[]>([]);
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('all');
+  const [inventoryLocationFilter, setInventoryLocationFilter] = useState('all');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categoryForm, setCategoryForm] = useState(DEFAULT_CATEGORY_FORM);
+
+  const selectedInventoryCategory = inventoryCategories.find(
+    (c) => String(c.id) === String(inventoryForm.category_id)
+  );
+  const showSpecFields = SPEC_CATEGORIES.includes(selectedInventoryCategory?.name);
+
   const loadData = async () => {
     setIsLoading(true);
     setError('');
 
     try {
-      // Fetch ICT students and admissions from ICT backend
-      const [studentsRes, admissionsRes] = await Promise.all([
+      // Fetch ICT students, admissions, inventory and inventory categories from ICT backend
+      const [studentsRes, admissionsRes, inventoryRes, categoriesRes] = await Promise.all([
         fetch('/api/ict/students', { headers: ictHeaders() }),
         fetch('/api/ict/admissions', { headers: ictHeaders() }),
+        fetch('/api/ict/inventory', { headers: ictHeaders() }),
+        fetch('/api/ict/inventory/categories', { headers: ictHeaders() }),
       ]);
 
       if (!studentsRes.ok) throw new Error('Failed to load students');
       if (!admissionsRes.ok) throw new Error('Failed to load admissions');
+      if (!inventoryRes.ok) throw new Error('Failed to load inventory');
+      if (!categoriesRes.ok) throw new Error('Failed to load inventory categories');
 
       const studentsJson = await studentsRes.json();
       const admissionsJson = await admissionsRes.json();
+      const inventoryJson = await inventoryRes.json();
+      const categoriesJson = await categoriesRes.json();
 
       setStudents(studentsJson.students || []);
       setAdmissions(admissionsJson.admissions || []);
+      setInventoryItems(inventoryJson.items || []);
+      setInventoryCategories(categoriesJson.categories || []);
     } catch {
       setError('Failed to load ICT data');
     } finally {
@@ -165,6 +223,10 @@ export function ICT() {
   useEffect(() => {
     setIsStudentFormOpen(false);
     setIsAdmissionFormOpen(false);
+    setIsInventoryFormOpen(false);
+    setIsAddingCategory(false);
+    setInventoryEditId(null);
+    setSelectedInventoryIds([]);
   }, [activeTab]);
 
   const stats = useMemo(
@@ -570,6 +632,401 @@ export function ICT() {
     }
   };
 
+  const handleAddInventoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAddingInventoryItem(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const isEditing = inventoryEditId !== null;
+      const url = isEditing ? `/api/ict/inventory/${inventoryEditId}` : '/api/ict/inventory';
+      const body = isEditing
+        ? {
+            cpu: inventoryForm.cpu,
+            ram: inventoryForm.ram,
+            ssd: inventoryForm.ssd,
+            hdd: inventoryForm.hdd,
+            device_serial_no: inventoryForm.device_serial_no,
+            quantity: inventoryForm.quantity,
+            unit: inventoryForm.unit,
+            location: inventoryForm.location,
+            notes: inventoryForm.notes,
+            purchase_date: inventoryForm.purchase_date,
+            vendor_name: inventoryForm.vendor_name,
+            warranty_period: inventoryForm.warranty_period,
+          }
+        : { ...inventoryForm, category_id: Number(inventoryForm.category_id) };
+
+      const res = await fetch(url, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to ${isEditing ? 'update' : 'add'} inventory item`);
+      }
+
+      const json = await res.json();
+      setSuccess(isEditing ? 'Inventory item updated successfully' : 'Inventory item added successfully');
+      if (!isEditing) setLastAddedInventoryItem(json.item);
+      closeInventoryForm();
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message || 'Failed to save inventory item');
+    } finally {
+      setIsAddingInventoryItem(false);
+    }
+  };
+
+  const closeInventoryForm = () => {
+    setIsInventoryFormOpen(false);
+    setIsAddingCategory(false);
+    setInventoryEditId(null);
+    setInventoryEditSerial('');
+    setInventoryForm(DEFAULT_INVENTORY_FORM);
+  };
+
+  const handleEditInventoryItem = (item: any) => {
+    setError('');
+    setSuccess('');
+    setInventoryEditId(item.id);
+    setInventoryEditSerial(item.serial_no || '');
+    setInventoryForm({
+      category_id: String(item.category_id || ''),
+      cpu: item.cpu || '',
+      ram: item.ram || '',
+      ssd: item.ssd || '',
+      hdd: item.hdd || '',
+      device_serial_no: item.device_serial_no || '',
+      quantity: item.quantity !== undefined && item.quantity !== null ? String(item.quantity) : '1',
+      unit: item.unit || '',
+      location: item.location || '',
+      notes: item.notes || '',
+      purchase_date: item.purchase_date ? new Date(item.purchase_date).toISOString().slice(0, 10) : '',
+      vendor_name: item.vendor_name || '',
+      warranty_period: item.warranty_period || '',
+    });
+    setIsAddingCategory(false);
+    setIsInventoryFormOpen(true);
+  };
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingCategory(true);
+    setError('');
+    try {
+      const res = await fetch('/api/ict/inventory/categories', {
+        method: 'POST',
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(categoryForm),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to add category');
+      }
+
+      const json = await res.json();
+      setInventoryCategories((prev) => [...prev, json.category].sort((a, b) => a.name.localeCompare(b.name)));
+      setInventoryForm((prev) => ({ ...prev, category_id: String(json.category.id) }));
+      setCategoryForm(DEFAULT_CATEGORY_FORM);
+      setIsAddingCategory(false);
+    } catch (err) {
+      setError((err as Error).message || 'Failed to add category');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleToggleInventoryStatus = async (item: any) => {
+    const nextActive = !item.is_active;
+    if (!confirm(`${nextActive ? 'Enable' : 'Disable'} inventory item ${item.serial_no}?`)) return;
+    try {
+      setError('');
+      const res = await fetch(`/api/ict/inventory/${item.id}/status`, {
+        method: 'PATCH',
+        headers: ictHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ is_active: nextActive }),
+      });
+      if (!res.ok) throw new Error('Failed to update inventory item status');
+      setSuccess(nextActive ? 'Inventory item enabled' : 'Inventory item disabled');
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message || 'Failed to update inventory item status');
+    }
+  };
+
+  const handleDeleteInventoryItem = async (itemId: number) => {
+    if (!confirm('Delete this inventory item? This action cannot be undone.')) return;
+    try {
+      setError('');
+      const res = await fetch(`/api/ict/inventory/${itemId}`, { method: 'DELETE', headers: ictHeaders() });
+      if (!res.ok) throw new Error('Failed to delete inventory item');
+      setSuccess('Inventory item deleted');
+      if (lastAddedInventoryItem?.id === itemId) setLastAddedInventoryItem(null);
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message || 'Failed to delete inventory item');
+    }
+  };
+
+  const buildInventorySlipHtml = (item: any) => {
+    const specLine = SPEC_CATEGORIES.includes(item.category_name)
+      ? [item.cpu, item.ram, item.ssd, item.hdd].filter(Boolean).join(' / ')
+      : '';
+
+    return `
+      <div class="slip">
+        <div class="hero">
+          <img src="${logo}" alt="Sombhabona logo" class="logo" />
+          <div>
+            <h1>${item.serial_no || ''}</h1>
+            <p>${item.category_name || 'N/A'}</p>
+          </div>
+        </div>
+        <div class="content">
+          ${specLine ? `<div class="row"><span class="label">Specs</span><span class="value">${specLine}</span></div>` : ''}
+          <div class="row"><span class="label">Device S/N</span><span class="value">${item.device_serial_no || 'N/A'}</span></div>
+          <div class="row"><span class="label">Lab</span><span class="value">${item.location || 'N/A'}</span></div>
+          <div class="row"><span class="label">Purchased</span><span class="value">${item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : 'N/A'}</span></div>
+          <div class="row"><span class="label">Vendor</span><span class="value">${item.vendor_name || 'N/A'}</span></div>
+          <div class="row"><span class="label">Warranty</span><span class="value">${item.warranty_period || 'N/A'}</span></div>
+        </div>
+      </div>
+    `;
+  };
+
+  const printInventorySlips = (items: any[]) => {
+    if (items.length === 0) return;
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) return;
+
+    const slipsHtml = items.map((item) => buildInventorySlipHtml(item)).join('');
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Inventory Slip${items.length > 1 ? 's' : ''}</title>
+          <style>
+            body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; color: #0f172a; background: #f8fafc; }
+            .slips { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+            .slip { width: 240px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+            .hero { padding: 10px 12px; background: linear-gradient(135deg, #14856E 0%, #0f6b5a 100%); color: #fff; display: flex; gap: 8px; align-items: center; }
+            .logo { width: 28px; height: 28px; background: rgba(255,255,255,0.12); border-radius: 6px; padding: 4px; object-fit: contain; flex-shrink: 0; }
+            .hero h1 { margin: 0; font-size: 13px; }
+            .hero p { margin: 1px 0 0; font-size: 10px; opacity: 0.9; }
+            .content { padding: 8px 12px; }
+            .row { display: flex; justify-content: space-between; gap: 6px; border-bottom: 1px dashed #e2e8f0; padding: 5px 0; font-size: 10.5px; }
+            .row:last-child { border-bottom: none; }
+            .label { color: #64748b; flex-shrink: 0; }
+            .value { font-weight: 600; color: #0f172a; text-align: right; }
+            @media print { body { background: #fff; padding: 4px; } .slip { border: 1px solid #cbd5e1; } }
+          </style>
+        </head>
+        <body>
+          <div class="slips">${slipsHtml}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+    };
+  };
+
+  const handlePrintInventorySlip = (item: any) => printInventorySlips([item]);
+
+  const handlePrintSelectedInventorySlips = () => {
+    const items = inventoryItems.filter((item) => selectedInventoryIds.includes(item.id));
+    printInventorySlips(items);
+  };
+
+  const toggleInventorySelection = (itemId: number) => {
+    setSelectedInventoryIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    );
+  };
+
+  const toggleSelectAllInventory = () => {
+    setSelectedInventoryIds((prev) =>
+      prev.length === filteredInventoryItems.length ? [] : filteredInventoryItems.map((item) => item.id)
+    );
+  };
+
+  const inventorySummary = useMemo(() => {
+    const total = inventoryItems.length;
+    const active = inventoryItems.filter((i) => i.is_active).length;
+    const disabled = total - active;
+
+    const countBy = (getKey: (item: any) => string) => {
+      const map = new Map<string, number>();
+      inventoryItems.forEach((item) => {
+        const key = getKey(item) || 'N/A';
+        map.set(key, (map.get(key) || 0) + 1);
+      });
+      return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+    };
+
+    return {
+      total,
+      active,
+      disabled,
+      byCategory: countBy((item) => item.category_name),
+      byLocation: countBy((item) => item.location),
+    };
+  }, [inventoryItems]);
+
+  const categoryChartData = useMemo(() => {
+    const entries = inventorySummary.byCategory;
+    const maxSlots = 7;
+    if (entries.length <= maxSlots) {
+      return entries.map(([name, value]) => ({ name, value }));
+    }
+    const top = entries.slice(0, maxSlots).map(([name, value]) => ({ name, value }));
+    const otherTotal = entries.slice(maxSlots).reduce((sum, [, value]) => sum + value, 0);
+    return [...top, { name: 'Other', value: otherTotal }];
+  }, [inventorySummary.byCategory]);
+
+  const locationChartData = useMemo(
+    () => inventorySummary.byLocation.map(([name, value]) => ({ name, value })),
+    [inventorySummary.byLocation]
+  );
+
+  const inventoryLocationOptions = useMemo(
+    () => inventorySummary.byLocation.map(([name]) => name),
+    [inventorySummary.byLocation]
+  );
+
+  const filteredInventoryItems = useMemo(() => {
+    return inventoryItems.filter((item) => {
+      if (inventoryCategoryFilter !== 'all' && String(item.category_id) !== inventoryCategoryFilter) return false;
+      if (inventoryLocationFilter !== 'all' && (item.location || 'N/A') !== inventoryLocationFilter) return false;
+      return true;
+    });
+  }, [inventoryItems, inventoryCategoryFilter, inventoryLocationFilter]);
+
+
+  const handlePrintInventoryFullReport = () => {
+    if (inventoryItems.length === 0) return;
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) return;
+
+    const categoryRows = inventorySummary.byCategory
+      .map(([name, count]) => `<div class="row"><span class="label">${name}</span><span class="value">${count}</span></div>`)
+      .join('');
+    const locationRows = inventorySummary.byLocation
+      .map(([name, count]) => `<div class="row"><span class="label">${name}</span><span class="value">${count}</span></div>`)
+      .join('');
+
+    const itemRows = inventoryItems
+      .map((item) => {
+        const specLine = SPEC_CATEGORIES.includes(item.category_name)
+          ? [item.cpu, item.ram, item.ssd, item.hdd].filter(Boolean).join(' / ') || '-'
+          : '-';
+        return `
+          <tr>
+            <td>${item.serial_no || ''}</td>
+            <td>${item.category_name || 'N/A'}</td>
+            <td>${specLine}</td>
+            <td>${item.device_serial_no || 'N/A'}</td>
+            <td>${item.quantity ?? 0} ${item.unit || ''}</td>
+            <td>${item.location || 'N/A'}</td>
+            <td>${item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : 'N/A'}</td>
+            <td>${item.vendor_name || 'N/A'}</td>
+            <td>${item.warranty_period || 'N/A'}</td>
+            <td>${item.is_active ? 'Active' : 'Disabled'}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>ICT Inventory Full Report</title>
+          <style>
+            body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 24px; color: #0f172a; }
+            .header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #14856E; padding-bottom: 12px; margin-bottom: 16px; }
+            .logo { width: 48px; height: 48px; object-fit: contain; }
+            h1 { margin: 0; font-size: 20px; color: #14856E; }
+            .meta { margin: 2px 0 0; font-size: 12px; color: #64748b; }
+            .stats { display: flex; gap: 16px; margin-bottom: 20px; }
+            .stat { flex: 1; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; text-align: center; }
+            .stat .num { font-size: 20px; font-weight: 700; color: #14856E; }
+            .stat .lbl { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+            .breakdown { display: flex; gap: 20px; margin-bottom: 20px; }
+            .breakdown > div { flex: 1; }
+            h2 { font-size: 12px; color: #14856E; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 8px; }
+            .row { display: flex; justify-content: space-between; border-bottom: 1px dashed #e2e8f0; padding: 4px 0; font-size: 12px; }
+            .label { color: #334155; }
+            .value { font-weight: 600; color: #0f172a; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; vertical-align: top; }
+            th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; color: #475569; }
+            @media print { body { padding: 8px; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <img src="${logo}" alt="Sombhabona logo" class="logo" />
+            <div>
+              <h1>ICT Inventory Full Report</h1>
+              <p class="meta">Sombhabona Foundation &middot; Generated ${new Date().toLocaleString()}</p>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="num">${inventorySummary.total}</div><div class="lbl">Total Items</div></div>
+            <div class="stat"><div class="num">${inventorySummary.active}</div><div class="lbl">Active</div></div>
+            <div class="stat"><div class="num">${inventorySummary.disabled}</div><div class="lbl">Disabled</div></div>
+          </div>
+          <div class="breakdown">
+            <div>
+              <h2>By Category</h2>
+              ${categoryRows || '<p>No data.</p>'}
+            </div>
+            <div>
+              <h2>By Lab</h2>
+              ${locationRows || '<p>No data.</p>'}
+            </div>
+          </div>
+          <h2>All Items</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Serial No</th>
+                <th>Category</th>
+                <th>Specs</th>
+                <th>Device S/N</th>
+                <th>Qty</th>
+                <th>Lab</th>
+                <th>Purchased</th>
+                <th>Vendor</th>
+                <th>Warranty</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemRows}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+    };
+  };
+
   return (
     <div className="p-4 md:p-8">
       <div className="mb-6 md:mb-8">
@@ -634,6 +1091,17 @@ export function ICT() {
           >
             <FileText size={18} />
             <span>Admission Forms</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors ${
+              activeTab === 'inventory'
+                ? 'border-[#14856E] text-[#14856E]'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Package size={18} />
+            <span>Inventory</span>
           </button>
         </div>
       </div>
@@ -782,6 +1250,559 @@ export function ICT() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'inventory' && (
+        <div className="rounded-lg bg-white shadow">
+          <div className="flex items-center justify-between border-b border-gray-200 p-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Inventory</h2>
+              <p className="text-sm text-gray-600">Track ICT equipment and supplies</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {inventoryItems.length > 0 && (
+                <button
+                  onClick={handlePrintInventoryFullReport}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  <FileText size={16} />
+                  Print Full Report
+                </button>
+              )}
+              {selectedInventoryIds.length > 0 && (
+                <button
+                  onClick={handlePrintSelectedInventorySlips}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#14856E] bg-white px-4 py-2.5 text-[#14856E] transition-colors hover:bg-[#14856E]/10"
+                >
+                  <Printer size={16} />
+                  Print Selected Slips ({selectedInventoryIds.length})
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setSuccess('');
+                  setError('');
+                  setInventoryEditId(null);
+                  setInventoryEditSerial('');
+                  setInventoryForm(DEFAULT_INVENTORY_FORM);
+                  setIsInventoryFormOpen(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#14856E] px-4 py-2.5 text-white transition-colors hover:bg-[#0f6b5a]"
+              >
+                <Plus size={16} />
+                Add Item
+              </button>
+            </div>
+          </div>
+
+          {inventoryItems.length > 0 && (
+            <div className="border-b border-gray-200 bg-gray-50/60 p-6">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Inventory Summary</p>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{inventorySummary.total}</p>
+                    <p className="text-xs text-gray-500">Total Items</p>
+                  </div>
+                  <div className="rounded-lg bg-[#14856E] p-2.5">
+                    <Package className="text-white" size={20} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{inventorySummary.active}</p>
+                    <p className="text-xs text-gray-500">Active</p>
+                  </div>
+                  <div className="rounded-lg bg-green-600 p-2.5">
+                    <CheckCircle2 className="text-white" size={20} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{inventorySummary.disabled}</p>
+                    <p className="text-xs text-gray-500">Disabled</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-400 p-2.5">
+                    <Power className="text-white" size={20} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">By Category</p>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie data={categoryChartData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={4} dataKey="value">
+                        {categoryChartData.map((entry, index) => (
+                          <Cell key={entry.name} fill={CHART_CATEGORY_COLORS[index % CHART_CATEGORY_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number, n: string) => [v, n]} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
+                    {categoryChartData.map((entry, index) => (
+                      <div key={entry.name} className="flex items-center gap-1.5">
+                        <div
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: CHART_CATEGORY_COLORS[index % CHART_CATEGORY_COLORS.length] }}
+                        />
+                        <span className="text-xs text-gray-600">{entry.name} ({entry.value})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">By Lab</p>
+                  <ResponsiveContainer width="100%" height={Math.max(200, locationChartData.length * 34)}>
+                    <BarChart data={locationChartData} layout="vertical" margin={{ left: 8, right: 16 }}>
+                      <XAxis type="number" stroke="#9ca3af" tick={{ fontSize: 12 }} allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" stroke="#9ca3af" tick={{ fontSize: 12 }} width={100} />
+                      <Tooltip formatter={(v: number) => [v, 'Items']} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                      <Bar dataKey="value" fill="#14856E" radius={[0, 4, 4, 0]} barSize={16} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {lastAddedInventoryItem && (
+            <div className="mx-6 mt-6 flex items-center justify-between gap-3 rounded-lg border border-[#14856E]/30 bg-[#14856E]/5 p-4">
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">{lastAddedInventoryItem.serial_no}</span> was added to inventory.
+              </p>
+              <button
+                onClick={() => handlePrintInventorySlip(lastAddedInventoryItem)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#14856E] bg-white px-3 py-1.5 text-sm font-medium text-[#14856E] hover:bg-[#14856E]/10"
+              >
+                <Printer size={15} />
+                Print Slip
+              </button>
+            </div>
+          )}
+
+          {inventoryItems.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600" htmlFor="inventory-filter-category">Category</label>
+                <select
+                  id="inventory-filter-category"
+                  value={inventoryCategoryFilter}
+                  onChange={(e) => setInventoryCategoryFilter(e.target.value)}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#14856E] focus:outline-none"
+                >
+                  <option value="all">All Categories</option>
+                  {inventoryCategories.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600" htmlFor="inventory-filter-location">Lab</label>
+                <select
+                  id="inventory-filter-location"
+                  value={inventoryLocationFilter}
+                  onChange={(e) => setInventoryLocationFilter(e.target.value)}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#14856E] focus:outline-none"
+                >
+                  <option value="all">All Labs</option>
+                  {inventoryLocationOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              {(inventoryCategoryFilter !== 'all' || inventoryLocationFilter !== 'all') && (
+                <button
+                  onClick={() => {
+                    setInventoryCategoryFilter('all');
+                    setInventoryLocationFilter('all');
+                  }}
+                  className="text-xs font-medium text-gray-500 hover:text-gray-700 underline"
+                >
+                  Clear filters
+                </button>
+              )}
+              <span className="text-xs text-gray-400">
+                Showing {filteredInventoryItems.length} of {inventoryItems.length}
+              </span>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex items-center gap-2 px-6 py-10 text-sm text-gray-600">
+              <Loader2 size={18} className="animate-spin" />
+              Loading inventory...
+            </div>
+          ) : filteredInventoryItems.length === 0 ? (
+            <div className="px-6 py-10 text-center text-gray-500">
+              {inventoryItems.length === 0 ? 'No inventory items found.' : 'No inventory items match the selected filters.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={filteredInventoryItems.length > 0 && selectedInventoryIds.length === filteredInventoryItems.length}
+                        onChange={toggleSelectAllInventory}
+                        className="h-4 w-4 rounded"
+                        aria-label="Select all inventory items"
+                      />
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Serial No</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Specs</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Device Serial No</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Quantity</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Lab</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredInventoryItems.map((item) => (
+                    <tr key={item.id} className={`hover:bg-gray-50 ${item.is_active ? '' : 'opacity-60'}`}>
+                      <td className="px-4 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedInventoryIds.includes(item.id)}
+                          onChange={() => toggleInventorySelection(item.id)}
+                          className="h-4 w-4 rounded"
+                          aria-label={`Select ${item.serial_no}`}
+                        />
+                      </td>
+                      <td className="px-6 py-4 font-medium text-gray-900">{item.serial_no}</td>
+                      <td className="px-6 py-4 text-gray-700">{item.category_name || 'N/A'}</td>
+                      <td className="px-6 py-4 text-gray-700 text-xs">
+                        {SPEC_CATEGORIES.includes(item.category_name)
+                          ? [item.cpu, item.ram, item.ssd, item.hdd].filter(Boolean).join(' / ') || 'N/A'
+                          : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-gray-700">{item.device_serial_no || 'N/A'}</td>
+                      <td className="px-6 py-4 text-gray-700">{item.quantity} {item.unit || ''}</td>
+                      <td className="px-6 py-4 text-gray-700">{item.location || 'N/A'}</td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                            item.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                          }`}
+                        >
+                          {item.is_active ? 'Active' : 'Disabled'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-700">
+                        <div className="flex gap-1.5 flex-wrap items-center">
+                          <button
+                            onClick={() => handleEditInventoryItem(item)}
+                            title="Edit"
+                            aria-label="Edit"
+                            className="inline-flex items-center justify-center rounded bg-blue-50 p-1.5 text-blue-700"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handlePrintInventorySlip(item)}
+                            title="Print Slip"
+                            aria-label="Print Slip"
+                            className="inline-flex items-center justify-center rounded bg-white border p-1.5"
+                          >
+                            <Printer size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleToggleInventoryStatus(item)}
+                            title={item.is_active ? 'Disable' : 'Enable'}
+                            aria-label={item.is_active ? 'Disable' : 'Enable'}
+                            className={`inline-flex items-center justify-center rounded p-1.5 ${
+                              item.is_active ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'
+                            }`}
+                          >
+                            <Power size={14} />
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDeleteInventoryItem(item.id)}
+                              title="Delete"
+                              aria-label="Delete"
+                              className="inline-flex items-center justify-center rounded bg-red-50 p-1.5 text-red-600"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isInventoryFormOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={closeInventoryForm} />
+          <aside className="fixed inset-y-0 left-0 z-50 w-full max-w-xl overflow-y-auto bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white p-5">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {inventoryEditId ? `Edit Inventory Item (${inventoryEditSerial})` : 'Add Inventory Item'}
+                </h3>
+                <p className="text-sm text-gray-600">Fill in item details</p>
+              </div>
+              <button
+                onClick={closeInventoryForm}
+                className="rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                aria-label="Close inventory form"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddInventoryItem} className="space-y-4 p-5">
+              {inventoryEditId ? (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Category</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {selectedInventoryCategory?.name || 'N/A'} &middot; Serial No {inventoryEditSerial}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">Category and serial number can't be changed after creation.</p>
+                </div>
+              ) : (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="inventory-category">
+                  Category *
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    id="inventory-category"
+                    value={inventoryForm.category_id}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, category_id: e.target.value })}
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  >
+                    <option value="">Select a category</option>
+                    {inventoryCategories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingCategory((prev) => !prev)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <Plus size={15} />
+                    Add
+                  </button>
+                </div>
+                {selectedInventoryCategory && (
+                  <p className="text-xs text-gray-500">
+                    Serial number will be auto-generated as {selectedInventoryCategory.prefix}-##
+                  </p>
+                )}
+              </div>
+              )}
+
+              {!inventoryEditId && isAddingCategory && (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      type="text"
+                      placeholder="Category name (e.g. Router)"
+                      value={categoryForm.name}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#14856E] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Serial prefix (e.g. RTR)"
+                      value={categoryForm.prefix}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, prefix: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#14856E] focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      disabled={isSavingCategory || !categoryForm.name || !categoryForm.prefix}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#14856E] px-3 py-1.5 text-sm text-white hover:bg-[#0f6b5a] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSavingCategory ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      Save Category
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsAddingCategory(false); setCategoryForm(DEFAULT_CATEGORY_FORM); }}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {showSpecFields && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block space-y-2 text-sm font-medium text-gray-700">
+                    CPU
+                    <select
+                      value={inventoryForm.cpu}
+                      onChange={(e) => setInventoryForm({ ...inventoryForm, cpu: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    >
+                      <option value="">Select CPU</option>
+                      {CPU_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-2 text-sm font-medium text-gray-700">
+                    RAM
+                    <select
+                      value={inventoryForm.ram}
+                      onChange={(e) => setInventoryForm({ ...inventoryForm, ram: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    >
+                      <option value="">Select RAM</option>
+                      {RAM_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-2 text-sm font-medium text-gray-700">
+                    SSD
+                    <select
+                      value={inventoryForm.ssd}
+                      onChange={(e) => setInventoryForm({ ...inventoryForm, ssd: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    >
+                      <option value="">Select SSD</option>
+                      {SSD_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-2 text-sm font-medium text-gray-700">
+                    HDD
+                    <select
+                      value={inventoryForm.hdd}
+                      onChange={(e) => setInventoryForm({ ...inventoryForm, hdd: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    >
+                      <option value="">Select HDD</option>
+                      {HDD_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  </label>
+                </div>
+              )}
+
+              <label className="block space-y-2 text-sm font-medium text-gray-700">
+                Device Body Serial No
+                <input
+                  type="text"
+                  value={inventoryForm.device_serial_no}
+                  onChange={(e) => setInventoryForm({ ...inventoryForm, device_serial_no: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  placeholder="Manufacturer serial number printed on the device"
+                />
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block space-y-2 text-sm font-medium text-gray-700">
+                  Purchase Date
+                  <input
+                    type="date"
+                    value={inventoryForm.purchase_date}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, purchase_date: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  />
+                </label>
+                <label className="block space-y-2 text-sm font-medium text-gray-700">
+                  Purchase Vendor Name
+                  <input
+                    type="text"
+                    value={inventoryForm.vendor_name}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, vendor_name: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    placeholder="e.g. Ryans Computers"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-2 text-sm font-medium text-gray-700">
+                Warranty Period
+                <input
+                  type="text"
+                  value={inventoryForm.warranty_period}
+                  onChange={(e) => setInventoryForm({ ...inventoryForm, warranty_period: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  placeholder="e.g. 1 Year, 18 Months"
+                />
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block space-y-2 text-sm font-medium text-gray-700">
+                  Quantity
+                  <input
+                    type="number"
+                    value={inventoryForm.quantity}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, quantity: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  />
+                </label>
+                <label className="block space-y-2 text-sm font-medium text-gray-700">
+                  Unit
+                  <input
+                    type="text"
+                    value={inventoryForm.unit}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, unit: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                    placeholder="e.g. pcs, boxes"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-2 text-sm font-medium text-gray-700">
+                Lab
+                <input
+                  type="text"
+                  value={inventoryForm.location}
+                  onChange={(e) => setInventoryForm({ ...inventoryForm, location: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  placeholder="e.g. ICT Lab 1, Store Room"
+                />
+              </label>
+
+              <label className="block space-y-2 text-sm font-medium text-gray-700">
+                Notes
+                <textarea
+                  value={inventoryForm.notes}
+                  onChange={(e) => setInventoryForm({ ...inventoryForm, notes: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                />
+              </label>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={isAddingInventoryItem}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#14856E] px-4 py-2.5 text-white transition-colors hover:bg-[#0f6b5a] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isAddingInventoryItem ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  {inventoryEditId ? 'Save Changes' : 'Add Item'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeInventoryForm}
+                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </aside>
+        </>
       )}
 
       {isStudentFormOpen && (

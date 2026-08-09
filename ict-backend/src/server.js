@@ -5,6 +5,7 @@ import { ensureSchema } from './db.js';
 import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import studentsRouter from './routes/students.js';
 import admissionsRouter from './routes/admissions.js';
+import inventoryRouter from './routes/inventory.js';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.get('/api/health', (req, res) => {
 const ictAccess = moduleAccessMiddleware('ICT');
 app.use('/api/ict', authMiddleware, ictAccess, studentsRouter);
 app.use('/api/ict', authMiddleware, ictAccess, admissionsRouter);
+app.use('/api/ict', authMiddleware, ictAccess, inventoryRouter);
 
 // 404 handler
 app.use((req, res) => {
