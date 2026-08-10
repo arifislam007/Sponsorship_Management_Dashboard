@@ -291,3 +291,72 @@ INSERT INTO acc_projects (name, code, description) VALUES
   ('Relief Operations', 'RELIEF', 'Emergency relief and disaster response'),
   ('Sponsorship Program', 'SPONSOR', 'Student sponsorship management')
 ON CONFLICT (code) DO NOTHING;
+
+-- ── Monthly Accounts (flat Receive/Payment log, processed into the GL above) ──
+
+CREATE TABLE IF NOT EXISTS acc_donations (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL,
+    donor_name VARCHAR(150) NOT NULL,
+    donation_purpose VARCHAR(150),
+    category VARCHAR(100) NOT NULL,
+    payment_method VARCHAR(50) NOT NULL,
+    amount NUMERIC(14, 2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    voucher_id INTEGER REFERENCES acc_vouchers(id) ON DELETE SET NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS acc_expenses (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL,
+    particulars VARCHAR(200) NOT NULL,
+    project_id INTEGER REFERENCES acc_projects(id) ON DELETE SET NULL,
+    category VARCHAR(100) NOT NULL,
+    consumer_name VARCHAR(150),
+    payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash',
+    amount NUMERIC(14, 2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    voucher_id INTEGER REFERENCES acc_vouchers(id) ON DELETE SET NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- One-time category → GL account mapping, required before a category can be processed to the ledger
+CREATE TABLE IF NOT EXISTS acc_category_mappings (
+    id SERIAL PRIMARY KEY,
+    entry_type VARCHAR(20) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    account_id INTEGER NOT NULL REFERENCES acc_accounts(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_acc_category_mapping UNIQUE (entry_type, category)
+);
+
+-- Payment method → GL asset account mapping (shared by donations and expenses)
+CREATE TABLE IF NOT EXISTS acc_payment_method_mappings (
+    id SERIAL PRIMARY KEY,
+    payment_method VARCHAR(50) NOT NULL UNIQUE,
+    account_id INTEGER NOT NULL REFERENCES acc_accounts(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO acc_payment_method_mappings (payment_method, account_id)
+SELECT 'Cash', id FROM acc_accounts WHERE code = '1100'
+ON CONFLICT (payment_method) DO NOTHING;
+INSERT INTO acc_payment_method_mappings (payment_method, account_id)
+SELECT 'Bank', id FROM acc_accounts WHERE code = '1200'
+ON CONFLICT (payment_method) DO NOTHING;
+INSERT INTO acc_payment_method_mappings (payment_method, account_id)
+SELECT 'bKash', id FROM acc_accounts WHERE code = '1310'
+ON CONFLICT (payment_method) DO NOTHING;
+INSERT INTO acc_payment_method_mappings (payment_method, account_id)
+SELECT 'Nagad', id FROM acc_accounts WHERE code = '1320'
+ON CONFLICT (payment_method) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS idx_acc_donations_date ON acc_donations(date);
+CREATE INDEX IF NOT EXISTS idx_acc_expenses_date ON acc_expenses(date);
+CREATE INDEX IF NOT EXISTS idx_acc_donations_status ON acc_donations(status);
+CREATE INDEX IF NOT EXISTS idx_acc_expenses_status ON acc_expenses(status);

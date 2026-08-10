@@ -37,6 +37,16 @@ async function recalcAccountBalance(accountId) {
   );
 }
 
+// Employees for the "Consumer Name" picker (read-only lookup against the shared HR table)
+accountingRouter.get('/employees', async (req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT id, employee_code, full_name FROM hr_employees WHERE NOT is_deleted ORDER BY full_name ASC`
+    );
+    res.json(result.rows);
+  } catch (err) { next(err); }
+});
+
 // ── Chart of Accounts ───────────────────────────────────────────────────────
 
 accountingRouter.get('/accounts', async (req, res, next) => {
@@ -492,5 +502,426 @@ accountingRouter.get('/dashboard', async (req, res, next) => {
       cash_balance: cashBalance.rows[0].balance,
       recent_vouchers: recent.rows,
     });
+  } catch (err) { next(err); }
+});
+
+// ── Monthly Accounts (flat Receive/Payment log) ─────────────────────────────
+
+function monthRange(month, year) {
+  const m = Number(month);
+  const y = Number(year);
+  const from = `${y}-${String(m).padStart(2, '0')}-01`;
+  const to = new Date(y, m, 0).toISOString().slice(0, 10); // last day of month
+  return { from, to };
+}
+
+async function getCategoryAccount(entryType, category) {
+  const result = await query(
+    `SELECT account_id FROM acc_category_mappings WHERE entry_type = $1 AND category = $2`,
+    [entryType, category]
+  );
+  return result.rows[0]?.account_id || null;
+}
+
+async function getPaymentMethodAccount(paymentMethod) {
+  const result = await query(
+    `SELECT account_id FROM acc_payment_method_mappings WHERE payment_method = $1`,
+    [paymentMethod]
+  );
+  return result.rows[0]?.account_id || null;
+}
+
+// Build a voucher, insert its lines, then walk it straight through to Posted —
+// used by the "Process to Ledger" actions below instead of the manual
+// submit/approve/post workflow, since these entries are already user-approved
+// by the act of processing them.
+async function createAndPostVoucher({ voucherType, date, narration, projectId, lines, userId }) {
+  const voucher_no = await nextVoucherNo(voucherType);
+  const totalAmount = lines.reduce((s, l) => s + Number(l.debit || 0), 0);
+
+  const vResult = await query(
+    `INSERT INTO acc_vouchers (voucher_no, voucher_type, date, narration, project_id, status, total_amount, created_by, submitted_by, submitted_at, approved_by, approved_at, posted_by, posted_at)
+     VALUES ($1, $2, $3, $4, $5, 'Posted', $6, $7, $7, NOW(), $7, NOW(), $7, NOW())
+     RETURNING id, voucher_no`,
+    [voucher_no, voucherType, date, narration, projectId || null, totalAmount, userId || null]
+  );
+  const voucher = vResult.rows[0];
+
+  for (let i = 0; i < lines.length; i++) {
+    const { account_id, debit, credit } = lines[i];
+    const lResult = await query(
+      `INSERT INTO acc_voucher_lines (voucher_id, account_id, debit, credit, line_order)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [voucher.id, account_id, Number(debit || 0), Number(credit || 0), i]
+    );
+    await query(
+      `INSERT INTO acc_ledger (account_id, voucher_id, voucher_line_id, date, debit, credit)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [account_id, voucher.id, lResult.rows[0].id, date, Number(debit || 0), Number(credit || 0)]
+    );
+    await recalcAccountBalance(account_id);
+  }
+
+  return voucher;
+}
+
+// -- Donations (Receive) --
+
+accountingRouter.get('/donations', async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+    const params = [];
+    let where = '';
+    if (month && year) {
+      const { from, to } = monthRange(month, year);
+      params.push(from, to);
+      where = `WHERE date BETWEEN $1 AND $2`;
+    }
+    const result = await query(
+      `SELECT id, date, donor_name, donation_purpose, category, payment_method, amount::float8, status, voucher_id, created_at
+       FROM acc_donations ${where} ORDER BY date DESC, id DESC`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post('/donations', async (req, res, next) => {
+  try {
+    const { date, donor_name, donation_purpose, category, payment_method, amount } = req.body;
+    if (!date || !donor_name || !category || !payment_method || !amount) {
+      return res.status(400).json({ message: 'date, donor_name, category, payment_method, and amount are required.' });
+    }
+    const result = await query(
+      `INSERT INTO acc_donations (date, donor_name, donation_purpose, category, payment_method, amount, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, date, donor_name, donation_purpose, category, payment_method, amount::float8, status, voucher_id, created_at`,
+      [date, donor_name, donation_purpose || null, category, payment_method, Number(amount), req.user?.id || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.put('/donations/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { date, donor_name, donation_purpose, category, payment_method, amount } = req.body;
+    const existing = await query(`SELECT status FROM acc_donations WHERE id = $1`, [id]);
+    if (!existing.rows.length) return res.status(404).json({ message: 'Donation not found.' });
+    if (existing.rows[0].status !== 'draft') {
+      return res.status(400).json({ message: 'Only draft entries can be edited.' });
+    }
+    const result = await query(
+      `UPDATE acc_donations SET date=$1, donor_name=$2, donation_purpose=$3, category=$4, payment_method=$5, amount=$6, updated_at=NOW()
+       WHERE id=$7
+       RETURNING id, date, donor_name, donation_purpose, category, payment_method, amount::float8, status, voucher_id, created_at`,
+      [date, donor_name, donation_purpose || null, category, payment_method, Number(amount), id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.delete('/donations/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await query(`SELECT status FROM acc_donations WHERE id = $1`, [id]);
+    if (!existing.rows.length) return res.status(404).json({ message: 'Donation not found.' });
+    if (existing.rows[0].status !== 'draft') {
+      return res.status(400).json({ message: 'Only draft entries can be deleted.' });
+    }
+    await query(`DELETE FROM acc_donations WHERE id = $1`, [id]);
+    res.json({ message: 'Donation deleted.' });
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post('/donations/:id/process', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await query(`SELECT * FROM acc_donations WHERE id = $1`, [id]);
+    if (!result.rows.length) return res.status(404).json({ message: 'Donation not found.' });
+    const donation = result.rows[0];
+    if (donation.status !== 'draft') {
+      return res.status(400).json({ message: 'Donation already processed.' });
+    }
+
+    const incomeAccountId = await getCategoryAccount('donation', donation.category);
+    if (!incomeAccountId) {
+      return res.status(400).json({ message: `Category "${donation.category}" is not mapped to an account yet.`, code: 'UNMAPPED_CATEGORY' });
+    }
+    const assetAccountId = await getPaymentMethodAccount(donation.payment_method);
+    if (!assetAccountId) {
+      return res.status(400).json({ message: `Payment method "${donation.payment_method}" is not mapped to an account yet.`, code: 'UNMAPPED_PAYMENT_METHOD' });
+    }
+
+    const voucher = await createAndPostVoucher({
+      voucherType: 'RV',
+      date: donation.date,
+      narration: `Donation from ${donation.donor_name}${donation.donation_purpose ? ' — ' + donation.donation_purpose : ''}`,
+      lines: [
+        { account_id: assetAccountId, debit: donation.amount, credit: 0 },
+        { account_id: incomeAccountId, debit: 0, credit: donation.amount },
+      ],
+      userId: req.user?.id,
+    });
+
+    await query(`UPDATE acc_donations SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, id]);
+
+    res.json({ message: 'Donation processed to ledger.', voucher });
+  } catch (err) { next(err); }
+});
+
+// -- Expenses (Payment) --
+
+accountingRouter.get('/expenses', async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+    const params = [];
+    let where = '';
+    if (month && year) {
+      const { from, to } = monthRange(month, year);
+      params.push(from, to);
+      where = `WHERE e.date BETWEEN $1 AND $2`;
+    }
+    const result = await query(
+      `SELECT e.id, e.date, e.particulars, e.project_id, p.name AS project_name, e.category, e.consumer_name,
+              e.payment_method, e.amount::float8, e.status, e.voucher_id, e.created_at
+       FROM acc_expenses e
+       LEFT JOIN acc_projects p ON p.id = e.project_id
+       ${where} ORDER BY e.date DESC, e.id DESC`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post('/expenses', async (req, res, next) => {
+  try {
+    const { date, particulars, project_id, category, consumer_name, payment_method, amount } = req.body;
+    if (!date || !particulars || !category || !amount) {
+      return res.status(400).json({ message: 'date, particulars, category, and amount are required.' });
+    }
+    const result = await query(
+      `INSERT INTO acc_expenses (date, particulars, project_id, category, consumer_name, payment_method, amount, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, date, particulars, project_id, category, consumer_name, payment_method, amount::float8, status, voucher_id, created_at`,
+      [date, particulars, project_id || null, category, consumer_name || null, payment_method || 'Cash', Number(amount), req.user?.id || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.put('/expenses/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { date, particulars, project_id, category, consumer_name, payment_method, amount } = req.body;
+    const existing = await query(`SELECT status FROM acc_expenses WHERE id = $1`, [id]);
+    if (!existing.rows.length) return res.status(404).json({ message: 'Expense not found.' });
+    if (existing.rows[0].status !== 'draft') {
+      return res.status(400).json({ message: 'Only draft entries can be edited.' });
+    }
+    const result = await query(
+      `UPDATE acc_expenses SET date=$1, particulars=$2, project_id=$3, category=$4, consumer_name=$5, payment_method=$6, amount=$7, updated_at=NOW()
+       WHERE id=$8
+       RETURNING id, date, particulars, project_id, category, consumer_name, payment_method, amount::float8, status, voucher_id, created_at`,
+      [date, particulars, project_id || null, category, consumer_name || null, payment_method || 'Cash', Number(amount), id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.delete('/expenses/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await query(`SELECT status FROM acc_expenses WHERE id = $1`, [id]);
+    if (!existing.rows.length) return res.status(404).json({ message: 'Expense not found.' });
+    if (existing.rows[0].status !== 'draft') {
+      return res.status(400).json({ message: 'Only draft entries can be deleted.' });
+    }
+    await query(`DELETE FROM acc_expenses WHERE id = $1`, [id]);
+    res.json({ message: 'Expense deleted.' });
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post('/expenses/:id/process', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await query(`SELECT * FROM acc_expenses WHERE id = $1`, [id]);
+    if (!result.rows.length) return res.status(404).json({ message: 'Expense not found.' });
+    const expense = result.rows[0];
+    if (expense.status !== 'draft') {
+      return res.status(400).json({ message: 'Expense already processed.' });
+    }
+
+    const expenseAccountId = await getCategoryAccount('expense', expense.category);
+    if (!expenseAccountId) {
+      return res.status(400).json({ message: `Category "${expense.category}" is not mapped to an account yet.`, code: 'UNMAPPED_CATEGORY' });
+    }
+    const assetAccountId = await getPaymentMethodAccount(expense.payment_method);
+    if (!assetAccountId) {
+      return res.status(400).json({ message: `Payment method "${expense.payment_method}" is not mapped to an account yet.`, code: 'UNMAPPED_PAYMENT_METHOD' });
+    }
+
+    const voucher = await createAndPostVoucher({
+      voucherType: 'PV',
+      date: expense.date,
+      narration: `${expense.particulars}${expense.consumer_name ? ' — ' + expense.consumer_name : ''}`,
+      projectId: expense.project_id,
+      lines: [
+        { account_id: expenseAccountId, debit: expense.amount, credit: 0 },
+        { account_id: assetAccountId, debit: 0, credit: expense.amount },
+      ],
+      userId: req.user?.id,
+    });
+
+    await query(`UPDATE acc_expenses SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, id]);
+
+    res.json({ message: 'Expense processed to ledger.', voucher });
+  } catch (err) { next(err); }
+});
+
+// -- Batch processing & summary --
+
+accountingRouter.post('/monthly-accounts/process', async (req, res, next) => {
+  try {
+    const { month, year } = req.body;
+    if (!month || !year) return res.status(400).json({ message: 'month and year are required.' });
+    const { from, to } = monthRange(month, year);
+
+    const donations = await query(`SELECT id FROM acc_donations WHERE status = 'draft' AND date BETWEEN $1 AND $2`, [from, to]);
+    const expenses = await query(`SELECT id FROM acc_expenses WHERE status = 'draft' AND date BETWEEN $1 AND $2`, [from, to]);
+
+    const results = { processed: 0, failed: [] };
+
+    for (const row of donations.rows) {
+      const r = await query(`SELECT * FROM acc_donations WHERE id = $1 AND status = 'draft'`, [row.id]);
+      if (!r.rows.length) continue;
+      const donation = r.rows[0];
+      const incomeAccountId = await getCategoryAccount('donation', donation.category);
+      const assetAccountId = await getPaymentMethodAccount(donation.payment_method);
+      if (!incomeAccountId || !assetAccountId) {
+        results.failed.push({ type: 'donation', id: donation.id, donor_name: donation.donor_name, reason: !incomeAccountId ? `Category "${donation.category}" unmapped` : `Payment method "${donation.payment_method}" unmapped` });
+        continue;
+      }
+      const voucher = await createAndPostVoucher({
+        voucherType: 'RV',
+        date: donation.date,
+        narration: `Donation from ${donation.donor_name}${donation.donation_purpose ? ' — ' + donation.donation_purpose : ''}`,
+        lines: [
+          { account_id: assetAccountId, debit: donation.amount, credit: 0 },
+          { account_id: incomeAccountId, debit: 0, credit: donation.amount },
+        ],
+        userId: req.user?.id,
+      });
+      await query(`UPDATE acc_donations SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, donation.id]);
+      results.processed += 1;
+    }
+
+    for (const row of expenses.rows) {
+      const r = await query(`SELECT * FROM acc_expenses WHERE id = $1 AND status = 'draft'`, [row.id]);
+      if (!r.rows.length) continue;
+      const expense = r.rows[0];
+      const expenseAccountId = await getCategoryAccount('expense', expense.category);
+      const assetAccountId = await getPaymentMethodAccount(expense.payment_method);
+      if (!expenseAccountId || !assetAccountId) {
+        results.failed.push({ type: 'expense', id: expense.id, particulars: expense.particulars, reason: !expenseAccountId ? `Category "${expense.category}" unmapped` : `Payment method "${expense.payment_method}" unmapped` });
+        continue;
+      }
+      const voucher = await createAndPostVoucher({
+        voucherType: 'PV',
+        date: expense.date,
+        narration: `${expense.particulars}${expense.consumer_name ? ' — ' + expense.consumer_name : ''}`,
+        projectId: expense.project_id,
+        lines: [
+          { account_id: expenseAccountId, debit: expense.amount, credit: 0 },
+          { account_id: assetAccountId, debit: 0, credit: expense.amount },
+        ],
+        userId: req.user?.id,
+      });
+      await query(`UPDATE acc_expenses SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, expense.id]);
+      results.processed += 1;
+    }
+
+    res.json(results);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.get('/monthly-accounts/summary', async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+    if (!month || !year) return res.status(400).json({ message: 'month and year are required.' });
+    const { from, to } = monthRange(month, year);
+
+    const [earnResult, costResult] = await Promise.all([
+      query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total FROM acc_donations WHERE date BETWEEN $1 AND $2`, [from, to]),
+      query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total FROM acc_expenses WHERE date BETWEEN $1 AND $2`, [from, to]),
+    ]);
+
+    const earn = earnResult.rows[0].total;
+    const totalCost = costResult.rows[0].total;
+
+    res.json({ earn, total_cost: totalCost, remaining_balance: earn - totalCost });
+  } catch (err) { next(err); }
+});
+
+// -- Category / payment method mappings --
+
+accountingRouter.get('/category-mappings', async (req, res, next) => {
+  try {
+    const { entry_type } = req.query;
+    const params = [];
+    let where = '';
+    if (entry_type) { params.push(entry_type); where = `WHERE m.entry_type = $1`; }
+    const result = await query(
+      `SELECT m.id, m.entry_type, m.category, m.account_id, a.code AS account_code, a.name AS account_name
+       FROM acc_category_mappings m JOIN acc_accounts a ON a.id = m.account_id
+       ${where} ORDER BY m.entry_type, m.category`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post('/category-mappings', async (req, res, next) => {
+  try {
+    const { entry_type, category, account_id } = req.body;
+    if (!entry_type || !category || !account_id) {
+      return res.status(400).json({ message: 'entry_type, category, and account_id are required.' });
+    }
+    const result = await query(
+      `INSERT INTO acc_category_mappings (entry_type, category, account_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (entry_type, category) DO UPDATE SET account_id = EXCLUDED.account_id
+       RETURNING id, entry_type, category, account_id`,
+      [entry_type, category, account_id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.get('/payment-method-mappings', async (req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT m.id, m.payment_method, m.account_id, a.code AS account_code, a.name AS account_name
+       FROM acc_payment_method_mappings m JOIN acc_accounts a ON a.id = m.account_id
+       ORDER BY m.payment_method`
+    );
+    res.json(result.rows);
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post('/payment-method-mappings', async (req, res, next) => {
+  try {
+    const { payment_method, account_id } = req.body;
+    if (!payment_method || !account_id) {
+      return res.status(400).json({ message: 'payment_method and account_id are required.' });
+    }
+    const result = await query(
+      `INSERT INTO acc_payment_method_mappings (payment_method, account_id)
+       VALUES ($1, $2)
+       ON CONFLICT (payment_method) DO UPDATE SET account_id = EXCLUDED.account_id
+       RETURNING id, payment_method, account_id`,
+      [payment_method, account_id]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
 });

@@ -1,18 +1,20 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   BookOpen, Plus, X, Check, TrendingUp, TrendingDown, DollarSign, Clock,
-  FileText, BarChart2, RefreshCw, Printer, Ban, Send, Eye, CheckCircle
+  FileText, BarChart2, RefreshCw, Printer, Ban, Send, Eye, CheckCircle,
+  Wallet, Pencil, Trash2, Loader2, AlertCircle, PlayCircle
 } from 'lucide-react';
 import {
   api,
   AccAccount, AccProject, AccVoucher, AccVoucherLine,
   AccVoucherType, AccVoucherStatus, AccLedgerEntry,
-  AccTrialBalanceLine, AccIncomeExpenseReport, AccDashboard, AccAccountType
+  AccTrialBalanceLine, AccIncomeExpenseReport, AccDashboard, AccAccountType,
+  AccDonation, AccExpense, AccMonthlySummary, AccCategoryMapping, AccPaymentMethodMapping, AccEmployee
 } from '../services/api';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'accounts' | 'vouchers' | 'ledger' | 'reports';
+type Tab = 'overview' | 'monthly-accounts' | 'accounts' | 'vouchers' | 'ledger' | 'reports';
 type ReportType = 'trial-balance' | 'income-expense' | 'cash-book';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1083,10 +1085,755 @@ function ReportsTab() {
   );
 }
 
+// ── Monthly Accounts Tab ─────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+const DEFAULT_DONATION_FORM = { date: today(), donor_name: '', donation_purpose: '', category: '', payment_method: 'Cash', amount: '' };
+const DEFAULT_EXPENSE_FORM = { date: today(), particulars: '', project_id: '', category: '', consumer_name: '', payment_method: 'Cash', amount: '' };
+
+const MANUAL_CATEGORY_VALUE = '__manual__';
+const MANUAL_PAYMENT_METHOD_VALUE = '__manual__';
+const MANUAL_CONSUMER_VALUE = '__manual__';
+const PAYMENT_METHOD_OPTIONS = ['Cash', 'bKash', 'Nagad', 'Bank'];
+
+function PaymentMethodField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [isManual, setIsManual] = useState(() => !!value && !PAYMENT_METHOD_OPTIONS.includes(value));
+
+  if (isManual) {
+    return (
+      <div className="mt-1 flex gap-2">
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Enter payment method" autoFocus
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+        <button type="button" onClick={() => { setIsManual(false); onChange(''); }}
+          className="shrink-0 px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+          Pick from list
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        if (e.target.value === MANUAL_PAYMENT_METHOD_VALUE) { setIsManual(true); onChange(''); return; }
+        onChange(e.target.value);
+      }}
+      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]"
+    >
+      <option value="">Select payment method</option>
+      {PAYMENT_METHOD_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+      <option value={MANUAL_PAYMENT_METHOD_VALUE}>Other (enter manually)</option>
+    </select>
+  );
+}
+
+function ConsumerField({ value, onChange, employees }: { value: string; onChange: (v: string) => void; employees: AccEmployee[] }) {
+  const matchedEmployee = employees.find((e) => e.full_name === value);
+  const [isManual, setIsManual] = useState(() => !!value && !matchedEmployee);
+
+  if (isManual) {
+    return (
+      <div className="mt-1 flex gap-2">
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Enter a name" autoFocus
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+        {employees.length > 0 && (
+          <button type="button" onClick={() => { setIsManual(false); onChange(''); }}
+            className="shrink-0 px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+            Pick from list
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={matchedEmployee ? matchedEmployee.id : ''}
+      onChange={(e) => {
+        if (e.target.value === MANUAL_CONSUMER_VALUE) { setIsManual(true); onChange(''); return; }
+        const employee = employees.find((emp) => String(emp.id) === e.target.value);
+        onChange(employee ? employee.full_name : '');
+      }}
+      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]"
+    >
+      <option value="">Unassigned</option>
+      {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.employee_code})</option>)}
+      <option value={MANUAL_CONSUMER_VALUE}>Other (enter manually)</option>
+    </select>
+  );
+}
+
+function CategoryField({
+  value, onChange, categories, placeholder, accounts, accountType, accountId, onAccountChange,
+}: {
+  value: string;
+  categories: string[];
+  onChange: (v: string) => void;
+  placeholder: string;
+  accounts: AccAccount[];
+  accountType: 'Income' | 'Expense';
+  accountId: string;
+  onAccountChange: (id: string) => void;
+}) {
+  const [isManual, setIsManual] = useState(() => !!value && !categories.includes(value));
+  const accountOptions = accounts.filter((a) => a.account_type === accountType && a.is_active);
+
+  if (isManual) {
+    return (
+      <div className="mt-1 space-y-2">
+        <div className="flex gap-2">
+          <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} autoFocus
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+          {categories.length > 0 && (
+            <button type="button" onClick={() => { setIsManual(false); onChange(''); onAccountChange(''); }}
+              className="shrink-0 px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
+              Pick from list
+            </button>
+          )}
+        </div>
+        <div>
+          <label className="text-xs text-gray-500">Map to an Account <span className="text-gray-400">(optional now, required before processing)</span></label>
+          <select value={accountId} onChange={(e) => onAccountChange(e.target.value)}
+            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
+            <option value="">— Skip, map later —</option>
+            {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+          </select>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        if (e.target.value === MANUAL_CATEGORY_VALUE) { setIsManual(true); onChange(''); return; }
+        onChange(e.target.value);
+      }}
+      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]"
+    >
+      <option value="">Select a category</option>
+      {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+      <option value={MANUAL_CATEGORY_VALUE}>+ Add new category</option>
+    </select>
+  );
+}
+
+function DonationFormModal({ editing, categories, accounts, onClose, onSaved }: { editing: AccDonation | null; categories: string[]; accounts: AccAccount[]; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState(
+    editing
+      ? { date: editing.date.slice(0, 10), donor_name: editing.donor_name, donation_purpose: editing.donation_purpose || '', category: editing.category, payment_method: editing.payment_method, amount: String(editing.amount) }
+      : DEFAULT_DONATION_FORM
+  );
+  const [accountId, setAccountId] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setError('');
+    if (!form.date || !form.donor_name || !form.category || !form.payment_method || !form.amount) {
+      setError('Date, donor name, category, payment method, and amount are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = { ...form, amount: Number(form.amount) };
+      if (editing) await api.accUpdateDonation(editing.id, payload);
+      else await api.accCreateDonation(payload);
+      if (accountId) {
+        await api.accCreateCategoryMapping({ entry_type: 'donation', category: form.category, account_id: Number(accountId) });
+      }
+      onSaved();
+      onClose();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Donation</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Date</label>
+              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Amount</label>
+              <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Donor Name</label>
+            <input value={form.donor_name} onChange={(e) => setForm({ ...form, donor_name: e.target.value })}
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Donation Purpose</label>
+            <input value={form.donation_purpose} onChange={(e) => setForm({ ...form, donation_purpose: e.target.value })}
+              placeholder="e.g. Sombhabona iHub"
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Category</label>
+              <CategoryField value={form.category} onChange={(v) => setForm({ ...form, category: v })} categories={categories} placeholder="e.g. Form Fee"
+                accounts={accounts} accountType="Income" accountId={accountId} onAccountChange={setAccountId} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Payment Method</label>
+              <PaymentMethodField value={form.payment_method} onChange={(v) => setForm({ ...form, payment_method: v })} />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 p-5 border-t border-gray-200">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button onClick={save} disabled={saving} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save Donation'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseFormModal({ editing, projects, categories, accounts, employees, onClose, onSaved }: { editing: AccExpense | null; projects: AccProject[]; categories: string[]; accounts: AccAccount[]; employees: AccEmployee[]; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState(
+    editing
+      ? { date: editing.date.slice(0, 10), particulars: editing.particulars, project_id: editing.project_id ? String(editing.project_id) : '', category: editing.category, consumer_name: editing.consumer_name || '', payment_method: editing.payment_method, amount: String(editing.amount) }
+      : DEFAULT_EXPENSE_FORM
+  );
+  const [accountId, setAccountId] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setError('');
+    if (!form.date || !form.particulars || !form.category || !form.payment_method || !form.amount) {
+      setError('Date, particulars, category, payment method, and amount are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = { ...form, project_id: form.project_id ? Number(form.project_id) : null, amount: Number(form.amount) };
+      if (editing) await api.accUpdateExpense(editing.id, payload);
+      else await api.accCreateExpense(payload);
+      if (accountId) {
+        await api.accCreateCategoryMapping({ entry_type: 'expense', category: form.category, account_id: Number(accountId) });
+      }
+      onSaved();
+      onClose();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Expense</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Date</label>
+              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Amount</label>
+              <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Particulars</label>
+            <input value={form.particulars} onChange={(e) => setForm({ ...form, particulars: e.target.value })}
+              placeholder="e.g. Mobile Recharge"
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Project</label>
+              <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
+                <option value="">— No Project —</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Category</label>
+              <CategoryField value={form.category} onChange={(v) => setForm({ ...form, category: v })} categories={categories} placeholder="e.g. Stationary"
+                accounts={accounts} accountType="Expense" accountId={accountId} onAccountChange={setAccountId} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Consumer Name</label>
+              <ConsumerField value={form.consumer_name} onChange={(v) => setForm({ ...form, consumer_name: v })} employees={employees} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Payment Method</label>
+              <PaymentMethodField value={form.payment_method} onChange={(v) => setForm({ ...form, payment_method: v })} />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 p-5 border-t border-gray-200">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button onClick={save} disabled={saving} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save Expense'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MappingModal({
+  entryType, category, paymentMethod, accounts, onClose, onSaved,
+}: {
+  entryType?: 'donation' | 'expense';
+  category?: string;
+  paymentMethod?: string;
+  accounts: AccAccount[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isPaymentMethod = !!paymentMethod;
+  const relevantType: AccAccountType = isPaymentMethod ? 'Asset' : entryType === 'donation' ? 'Income' : 'Expense';
+  const options = accounts.filter((a) => a.account_type === relevantType && a.is_active);
+  const [accountId, setAccountId] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!accountId) { setError('Select an account.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      if (isPaymentMethod) {
+        await api.accCreatePaymentMethodMapping({ payment_method: paymentMethod!, account_id: Number(accountId) });
+      } else {
+        await api.accCreateCategoryMapping({ entry_type: entryType!, category: category!, account_id: Number(accountId) });
+      }
+      onSaved();
+      onClose();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900">Map to an Account</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-sm text-gray-600">
+            {isPaymentMethod
+              ? <>Payment method <strong>"{paymentMethod}"</strong> needs a GL account before it can be processed.</>
+              : <><strong className="capitalize">{entryType}</strong> category <strong>"{category}"</strong> needs a GL account before it can be processed.</>}
+          </p>
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <div>
+            <label className="text-xs font-medium text-gray-600">
+              {isPaymentMethod ? 'Asset Account' : entryType === 'donation' ? 'Income Account' : 'Expense Account'}
+            </label>
+            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
+              <option value="">Select account</option>
+              {options.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-gray-400">Need a new account? Create it first from the "Chart of Accounts" tab, then map it here.</p>
+          </div>
+        </div>
+        <div className="flex gap-3 p-5 border-t border-gray-200">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button onClick={save} disabled={saving} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save Mapping'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MonthlyAccountsTab() {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [donations, setDonations] = useState<AccDonation[]>([]);
+  const [expenses, setExpenses] = useState<AccExpense[]>([]);
+  const [summary, setSummary] = useState<AccMonthlySummary | null>(null);
+  const [projects, setProjects] = useState<AccProject[]>([]);
+  const [accounts, setAccounts] = useState<AccAccount[]>([]);
+  const [donationCategories, setDonationCategories] = useState<string[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<AccEmployee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [processResult, setProcessResult] = useState<{ processed: number; failed: Array<{ type: string; id: number; reason: string }> } | null>(null);
+
+  const [donationModal, setDonationModal] = useState<{ open: boolean; editing: AccDonation | null }>({ open: false, editing: null });
+  const [expenseModal, setExpenseModal] = useState<{ open: boolean; editing: AccExpense | null }>({ open: false, editing: null });
+  const [mappingModal, setMappingModal] = useState<{ entryType?: 'donation' | 'expense'; category?: string; paymentMethod?: string } | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api.accGetDonations(month, year),
+      api.accGetExpenses(month, year),
+      api.accGetMonthlySummary(month, year),
+      api.accGetProjects(),
+      api.accGetAccounts(),
+      api.accGetCategoryMappings('donation'),
+      api.accGetCategoryMappings('expense'),
+      api.accGetEmployees(),
+    ])
+      .then(([d, e, s, p, a, dCat, eCat, emp]) => {
+        setDonations(d); setExpenses(e); setSummary(s); setProjects(p); setAccounts(a); setEmployees(emp);
+        setDonationCategories(Array.from(new Set([...dCat.map((c) => c.category), ...d.map((x) => x.category)])).sort());
+        setExpenseCategories(Array.from(new Set([...eCat.map((c) => c.category), ...e.map((x) => x.category)])).sort());
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [month, year]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const processOne = async (type: 'donation' | 'expense', id: number) => {
+    try {
+      if (type === 'donation') await api.accProcessDonation(id);
+      else await api.accProcessExpense(id);
+      load();
+    } catch (e: any) {
+      if (e.message?.includes('Category')) {
+        const row = type === 'donation' ? donations.find((d) => d.id === id) : expenses.find((x) => x.id === id);
+        if (row) setMappingModal({ entryType: type, category: row.category });
+      } else if (e.message?.includes('Payment method')) {
+        const row = type === 'donation' ? donations.find((d) => d.id === id) : expenses.find((x) => x.id === id);
+        if (row) setMappingModal({ paymentMethod: row.payment_method });
+      } else {
+        alert(e.message);
+      }
+    }
+  };
+
+  const processAll = async () => {
+    setProcessing(true);
+    setProcessResult(null);
+    try {
+      const result = await api.accProcessMonthlyAccounts(month, year);
+      setProcessResult(result);
+      load();
+    } catch (e: any) { alert(e.message); }
+    finally { setProcessing(false); }
+  };
+
+  const deleteDonation = async (id: number) => {
+    if (!confirm('Delete this donation entry?')) return;
+    try { await api.accDeleteDonation(id); load(); } catch (e: any) { alert(e.message); }
+  };
+  const deleteExpense = async (id: number) => {
+    if (!confirm('Delete this expense entry?')) return;
+    try { await api.accDeleteExpense(id); load(); } catch (e: any) { alert(e.message); }
+  };
+
+  const printMonthlyAccounts = () => {
+    const printWindow = window.open('', '_blank', 'width=1200,height=900');
+    if (!printWindow) return;
+
+    const receiveRows = donations.map((d) => `
+      <tr>
+        <td>${new Date(d.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+        <td>${d.donor_name}</td>
+        <td>${d.donation_purpose || ''}</td>
+        <td>${d.category}</td>
+        <td>${d.payment_method}</td>
+        <td class="num">${Number(d.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+      </tr>`).join('');
+
+    const paymentRows = expenses.map((e) => `
+      <tr>
+        <td>${new Date(e.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+        <td>${e.particulars}</td>
+        <td>${e.project_name || ''}</td>
+        <td>${e.category}</td>
+        <td>${e.consumer_name || ''}</td>
+        <td class="num">${Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+      </tr>`).join('');
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Monthly Accounts - ${MONTH_NAMES[month - 1]} ${year}</title>
+          <style>
+            body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; color: #0f172a; font-size: 12px; }
+            h1 { text-align: center; font-size: 20px; margin: 0 0 12px; }
+            .summary { display: flex; margin-bottom: 12px; border: 1px solid #93c5a3; }
+            .summary .cell { flex: 1; padding: 10px; text-align: center; border-right: 1px solid #93c5a3; }
+            .summary .cell:last-child { border-right: none; }
+            .summary .earn, .summary .cost { background: #fde68a; }
+            .summary .balance { background: #6ee7b7; }
+            .summary .lbl { font-size: 11px; font-weight: 700; }
+            .summary .val { font-size: 16px; font-weight: 700; margin-top: 2px; }
+            .cols { display: flex; gap: 8px; }
+            .col { flex: 1; }
+            table { width: 100%; border-collapse: collapse; }
+            th { background: #67e8f9; padding: 6px; text-align: left; font-size: 11px; border: 1px solid #cbd5e1; }
+            .col.payment th { background: #fde68a; }
+            td { padding: 5px 6px; border: 1px solid #e2e8f0; font-size: 11px; }
+            td.num { text-align: right; }
+            .section-head { text-align: center; font-weight: 700; padding: 6px; }
+            .col.receive .section-head { background: #6ee7b7; }
+            .col.payment .section-head { background: #fde68a; }
+            @media print { body { padding: 4px; } }
+          </style>
+        </head>
+        <body>
+          <h1>Monthly accounts of Sombhabona Foundation — ${MONTH_NAMES[month - 1]} ${year}</h1>
+          <div class="summary">
+            <div class="cell balance"><div class="lbl">Remaining Balance</div><div class="val">${summary ? summary.remaining_balance.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}</div></div>
+            <div class="cell earn"><div class="lbl">Earn</div><div class="val">${summary ? summary.earn.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}</div></div>
+            <div class="cell cost"><div class="lbl">Total Cost</div><div class="val">${summary ? summary.total_cost.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}</div></div>
+          </div>
+          <div class="cols">
+            <div class="col receive">
+              <div class="section-head">Receive</div>
+              <table>
+                <thead><tr><th>Date</th><th>Donor Name</th><th>Donation Purpose</th><th>Category</th><th>Payment Method</th><th>Donation Amount</th></tr></thead>
+                <tbody>${receiveRows || '<tr><td colspan="6" style="text-align:center">No entries</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="col payment">
+              <div class="section-head">Payment</div>
+              <table>
+                <thead><tr><th>Date</th><th>Particulers</th><th>Project Name</th><th>Category</th><th>Consumer Name</th><th>Amount</th></tr></thead>
+                <tbody>${paymentRows || '<tr><td colspan="6" style="text-align:center">No entries</td></tr>'}</tbody>
+              </table>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+    };
+  };
+
+  const draftCount = donations.filter((d) => d.status === 'draft').length + expenses.filter((e) => e.status === 'draft').length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
+            {Array.from({ length: 5 }, (_, i) => now.getFullYear() - i).map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          {draftCount > 0 && (
+            <button onClick={processAll} disabled={processing}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              {processing ? <Loader2 size={15} className="animate-spin" /> : <PlayCircle size={15} />}
+              Process {draftCount} Draft{draftCount === 1 ? '' : 's'} to Ledger
+            </button>
+          )}
+          <button onClick={printMonthlyAccounts}
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+            <Printer size={15} /> Print
+          </button>
+        </div>
+      </div>
+
+      {processResult && processResult.failed.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+          <p className="font-semibold flex items-center gap-2"><AlertCircle size={16} /> Processed {processResult.processed}, {processResult.failed.length} need mapping first:</p>
+          <ul className="mt-2 space-y-1 list-disc list-inside">
+            {processResult.failed.map((f) => <li key={`${f.type}-${f.id}`}>{f.reason} ({f.type} #{f.id})</li>)}
+          </ul>
+        </div>
+      )}
+
+      {summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-5 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Remaining Balance</p>
+            <p className={`text-2xl font-bold mt-1 ${summary.remaining_balance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{fmt(summary.remaining_balance)}</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-5 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Earn</p>
+            <p className="text-2xl font-bold mt-1 text-amber-700">{fmt(summary.earn)}</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-5 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Total Cost</p>
+            <p className="text-2xl font-bold mt-1 text-amber-700">{fmt(summary.total_cost)}</p>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="p-8 text-center text-gray-500">Loading…</div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between p-4 bg-emerald-50 border-b border-emerald-200">
+              <h3 className="font-semibold text-emerald-800">Receive</h3>
+              <button onClick={() => setDonationModal({ open: true, editing: null })}
+                className="flex items-center gap-1 px-3 py-1.5 bg-[#14856E] text-white rounded-lg text-xs font-medium hover:bg-[#0f6b5a]">
+                <Plus size={13} /> Add Income
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-600">
+                  <tr>
+                    <th className="text-left px-3 py-2">Date</th>
+                    <th className="text-left px-3 py-2">Donor</th>
+                    <th className="text-left px-3 py-2">Category</th>
+                    <th className="text-right px-3 py-2">Amount</th>
+                    <th className="text-left px-3 py-2">Status</th>
+                    <th className="text-left px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {donations.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-8 text-gray-400">No donations for this month.</td></tr>
+                  ) : donations.map((d) => (
+                    <tr key={d.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 whitespace-nowrap">{new Date(d.date).toLocaleDateString()}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-gray-900">{d.donor_name}</div>
+                        <div className="text-xs text-gray-500">{d.donation_purpose}</div>
+                      </td>
+                      <td className="px-3 py-2">{d.category}</td>
+                      <td className="px-3 py-2 text-right font-medium">{fmt(d.amount)}</td>
+                      <td className="px-3 py-2">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${d.status === 'posted' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {d.status === 'posted' ? 'Posted' : 'Draft'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          {d.status === 'draft' && (
+                            <>
+                              <button onClick={() => processOne('donation', d.id)} title="Process to ledger" className="p-1.5 rounded bg-blue-50 text-blue-600"><PlayCircle size={14} /></button>
+                              <button onClick={() => setDonationModal({ open: true, editing: d })} title="Edit" className="p-1.5 rounded bg-gray-50 text-gray-600"><Pencil size={14} /></button>
+                              <button onClick={() => deleteDonation(d.id)} title="Delete" className="p-1.5 rounded bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between p-4 bg-amber-50 border-b border-amber-200">
+              <h3 className="font-semibold text-amber-800">Payment</h3>
+              <button onClick={() => setExpenseModal({ open: true, editing: null })}
+                className="flex items-center gap-1 px-3 py-1.5 bg-[#14856E] text-white rounded-lg text-xs font-medium hover:bg-[#0f6b5a]">
+                <Plus size={13} /> Add Expense
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-600">
+                  <tr>
+                    <th className="text-left px-3 py-2">Date</th>
+                    <th className="text-left px-3 py-2">Particulars</th>
+                    <th className="text-left px-3 py-2">Category</th>
+                    <th className="text-right px-3 py-2">Amount</th>
+                    <th className="text-left px-3 py-2">Status</th>
+                    <th className="text-left px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {expenses.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-8 text-gray-400">No expenses for this month.</td></tr>
+                  ) : expenses.map((e) => (
+                    <tr key={e.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 whitespace-nowrap">{new Date(e.date).toLocaleDateString()}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-gray-900">{e.particulars}</div>
+                        <div className="text-xs text-gray-500">{e.project_name}{e.consumer_name ? ` · ${e.consumer_name}` : ''}</div>
+                      </td>
+                      <td className="px-3 py-2">{e.category}</td>
+                      <td className="px-3 py-2 text-right font-medium">{fmt(e.amount)}</td>
+                      <td className="px-3 py-2">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${e.status === 'posted' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {e.status === 'posted' ? 'Posted' : 'Draft'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          {e.status === 'draft' && (
+                            <>
+                              <button onClick={() => processOne('expense', e.id)} title="Process to ledger" className="p-1.5 rounded bg-blue-50 text-blue-600"><PlayCircle size={14} /></button>
+                              <button onClick={() => setExpenseModal({ open: true, editing: e })} title="Edit" className="p-1.5 rounded bg-gray-50 text-gray-600"><Pencil size={14} /></button>
+                              <button onClick={() => deleteExpense(e.id)} title="Delete" className="p-1.5 rounded bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {donationModal.open && (
+        <DonationFormModal editing={donationModal.editing} categories={donationCategories} accounts={accounts} onClose={() => setDonationModal({ open: false, editing: null })} onSaved={load} />
+      )}
+      {expenseModal.open && (
+        <ExpenseFormModal editing={expenseModal.editing} projects={projects} categories={expenseCategories} accounts={accounts} employees={employees} onClose={() => setExpenseModal({ open: false, editing: null })} onSaved={load} />
+      )}
+      {mappingModal && (
+        <MappingModal
+          entryType={mappingModal.entryType}
+          category={mappingModal.category}
+          paymentMethod={mappingModal.paymentMethod}
+          accounts={accounts}
+          onClose={() => setMappingModal(null)}
+          onSaved={load}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart2 },
+  { id: 'monthly-accounts', label: 'Monthly Accounts', icon: Wallet },
   { id: 'accounts', label: 'Chart of Accounts', icon: BookOpen },
   { id: 'vouchers', label: 'Vouchers', icon: FileText },
   { id: 'ledger', label: 'General Ledger', icon: Clock },
@@ -1124,6 +1871,7 @@ export function Accounting() {
       </div>
 
       {tab === 'overview' && <OverviewTab />}
+      {tab === 'monthly-accounts' && <MonthlyAccountsTab />}
       {tab === 'accounts' && <AccountsTab />}
       {tab === 'vouchers' && <VouchersTab />}
       {tab === 'ledger' && <LedgerTab />}

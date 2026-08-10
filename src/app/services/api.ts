@@ -238,6 +238,65 @@ export interface AccDashboard {
   recent_vouchers: Array<{ voucher_no: string; voucher_type: AccVoucherType; date: string; narration: string; status: AccVoucherStatus; total_amount: number }>;
 }
 
+export type AccEntryStatus = 'draft' | 'posted';
+
+export interface AccDonation {
+  id: number;
+  date: string;
+  donor_name: string;
+  donation_purpose?: string | null;
+  category: string;
+  payment_method: string;
+  amount: number;
+  status: AccEntryStatus;
+  voucher_id: number | null;
+  created_at?: string;
+}
+
+export interface AccExpense {
+  id: number;
+  date: string;
+  particulars: string;
+  project_id: number | null;
+  project_name?: string | null;
+  category: string;
+  consumer_name?: string | null;
+  payment_method: string;
+  amount: number;
+  status: AccEntryStatus;
+  voucher_id: number | null;
+  created_at?: string;
+}
+
+export interface AccMonthlySummary {
+  earn: number;
+  total_cost: number;
+  remaining_balance: number;
+}
+
+export interface AccCategoryMapping {
+  id: number;
+  entry_type: 'donation' | 'expense';
+  category: string;
+  account_id: number;
+  account_code: string;
+  account_name: string;
+}
+
+export interface AccPaymentMethodMapping {
+  id: number;
+  payment_method: string;
+  account_id: number;
+  account_code: string;
+  account_name: string;
+}
+
+export interface AccEmployee {
+  id: number;
+  employee_code: string;
+  full_name: string;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -437,6 +496,48 @@ export const api = {
     return request<AccLedgerEntry[]>(`/accounting/reports/cash-book?${qs}`);
   },
   accGetDashboard: () => request<AccDashboard>('/accounting/dashboard'),
+
+  // Monthly Accounts (flat Receive/Payment log)
+  accGetDonations: (month: number, year: number) =>
+    request<AccDonation[]>(`/accounting/donations?month=${month}&year=${year}`),
+  accCreateDonation: (p: { date: string; donor_name: string; donation_purpose?: string; category: string; payment_method: string; amount: number }) =>
+    request<AccDonation>('/accounting/donations', { method: 'POST', body: JSON.stringify(p) }),
+  accUpdateDonation: (id: number, p: { date: string; donor_name: string; donation_purpose?: string; category: string; payment_method: string; amount: number }) =>
+    request<AccDonation>(`/accounting/donations/${id}`, { method: 'PUT', body: JSON.stringify(p) }),
+  accDeleteDonation: (id: number) =>
+    request<{ message: string }>(`/accounting/donations/${id}`, { method: 'DELETE' }),
+  accProcessDonation: (id: number) =>
+    request<{ message: string; voucher: AccVoucher }>(`/accounting/donations/${id}/process`, { method: 'POST' }),
+
+  accGetExpenses: (month: number, year: number) =>
+    request<AccExpense[]>(`/accounting/expenses?month=${month}&year=${year}`),
+  accCreateExpense: (p: { date: string; particulars: string; project_id?: number | null; category: string; consumer_name?: string; payment_method: string; amount: number }) =>
+    request<AccExpense>('/accounting/expenses', { method: 'POST', body: JSON.stringify(p) }),
+  accUpdateExpense: (id: number, p: { date: string; particulars: string; project_id?: number | null; category: string; consumer_name?: string; payment_method: string; amount: number }) =>
+    request<AccExpense>(`/accounting/expenses/${id}`, { method: 'PUT', body: JSON.stringify(p) }),
+  accDeleteExpense: (id: number) =>
+    request<{ message: string }>(`/accounting/expenses/${id}`, { method: 'DELETE' }),
+  accProcessExpense: (id: number) =>
+    request<{ message: string; voucher: AccVoucher }>(`/accounting/expenses/${id}/process`, { method: 'POST' }),
+
+  accProcessMonthlyAccounts: (month: number, year: number) =>
+    request<{ processed: number; failed: Array<{ type: string; id: number; reason: string }> }>('/accounting/monthly-accounts/process', {
+      method: 'POST',
+      body: JSON.stringify({ month, year }),
+    }),
+  accGetMonthlySummary: (month: number, year: number) =>
+    request<AccMonthlySummary>(`/accounting/monthly-accounts/summary?month=${month}&year=${year}`),
+
+  accGetCategoryMappings: (entry_type?: 'donation' | 'expense') =>
+    request<AccCategoryMapping[]>(`/accounting/category-mappings${entry_type ? `?entry_type=${entry_type}` : ''}`),
+  accCreateCategoryMapping: (p: { entry_type: 'donation' | 'expense'; category: string; account_id: number }) =>
+    request<AccCategoryMapping>('/accounting/category-mappings', { method: 'POST', body: JSON.stringify(p) }),
+
+  accGetPaymentMethodMappings: () => request<AccPaymentMethodMapping[]>('/accounting/payment-method-mappings'),
+  accCreatePaymentMethodMapping: (p: { payment_method: string; account_id: number }) =>
+    request<AccPaymentMethodMapping>('/accounting/payment-method-mappings', { method: 'POST', body: JSON.stringify(p) }),
+
+  accGetEmployees: () => request<AccEmployee[]>('/accounting/employees'),
 
   async exportDonorStatement(payload: DonorStatementPayload): Promise<Blob> {
     const response = await fetch(`${API_BASE}/exports/donor-statement`, {
