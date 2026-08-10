@@ -28,6 +28,7 @@ const DEFAULT_STUDENT_FORM = {
 
 const DEFAULT_INVENTORY_FORM = {
   category_id: '',
+  brand: '',
   cpu: '',
   ram: '',
   ssd: '',
@@ -40,11 +41,17 @@ const DEFAULT_INVENTORY_FORM = {
   purchase_date: '',
   vendor_name: '',
   warranty_period: '',
+  assigned_employee_id: '',
+  assigned_to: '',
 };
 
 const DEFAULT_CATEGORY_FORM = { name: '', prefix: '' };
 
 const CHART_CATEGORY_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+
+const MANUAL_ASSIGN_VALUE = '__manual__';
+const MANUAL_BRAND_VALUE = '__manual__';
+const BRAND_OPTIONS = ['Dell', 'HP', 'Lenovo', 'Asus', 'Acer', 'Apple', 'Samsung', 'MSI', 'Toshiba'];
 
 const SPEC_CATEGORIES = ['Laptop', 'Desktop'];
 const CPU_OPTIONS = ['Core i3', 'Core i5', 'Core i7', 'Core i9', 'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Other'];
@@ -164,6 +171,9 @@ export function ICT() {
 
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [inventoryCategories, setInventoryCategories] = useState<any[]>([]);
+  const [inventoryEmployees, setInventoryEmployees] = useState<any[]>([]);
+  const [isManualAssign, setIsManualAssign] = useState(false);
+  const [isManualBrand, setIsManualBrand] = useState(false);
   const [isInventoryFormOpen, setIsInventoryFormOpen] = useState(false);
   const [isAddingInventoryItem, setIsAddingInventoryItem] = useState(false);
   const [inventoryForm, setInventoryForm] = useState(DEFAULT_INVENTORY_FORM);
@@ -187,28 +197,32 @@ export function ICT() {
     setError('');
 
     try {
-      // Fetch ICT students, admissions, inventory and inventory categories from ICT backend
-      const [studentsRes, admissionsRes, inventoryRes, categoriesRes] = await Promise.all([
+      // Fetch ICT students, admissions, inventory, inventory categories and employees from ICT backend
+      const [studentsRes, admissionsRes, inventoryRes, categoriesRes, employeesRes] = await Promise.all([
         fetch('/api/ict/students', { headers: ictHeaders() }),
         fetch('/api/ict/admissions', { headers: ictHeaders() }),
         fetch('/api/ict/inventory', { headers: ictHeaders() }),
         fetch('/api/ict/inventory/categories', { headers: ictHeaders() }),
+        fetch('/api/ict/inventory/employees', { headers: ictHeaders() }),
       ]);
 
       if (!studentsRes.ok) throw new Error('Failed to load students');
       if (!admissionsRes.ok) throw new Error('Failed to load admissions');
       if (!inventoryRes.ok) throw new Error('Failed to load inventory');
       if (!categoriesRes.ok) throw new Error('Failed to load inventory categories');
+      if (!employeesRes.ok) throw new Error('Failed to load employees');
 
       const studentsJson = await studentsRes.json();
       const admissionsJson = await admissionsRes.json();
       const inventoryJson = await inventoryRes.json();
       const categoriesJson = await categoriesRes.json();
+      const employeesJson = await employeesRes.json();
 
       setStudents(studentsJson.students || []);
       setAdmissions(admissionsJson.admissions || []);
       setInventoryItems(inventoryJson.items || []);
       setInventoryCategories(categoriesJson.categories || []);
+      setInventoryEmployees(employeesJson.employees || []);
     } catch {
       setError('Failed to load ICT data');
     } finally {
@@ -225,6 +239,8 @@ export function ICT() {
     setIsAdmissionFormOpen(false);
     setIsInventoryFormOpen(false);
     setIsAddingCategory(false);
+    setIsManualAssign(false);
+    setIsManualBrand(false);
     setInventoryEditId(null);
     setSelectedInventoryIds([]);
   }, [activeTab]);
@@ -643,6 +659,7 @@ export function ICT() {
       const url = isEditing ? `/api/ict/inventory/${inventoryEditId}` : '/api/ict/inventory';
       const body = isEditing
         ? {
+            brand: inventoryForm.brand,
             cpu: inventoryForm.cpu,
             ram: inventoryForm.ram,
             ssd: inventoryForm.ssd,
@@ -655,8 +672,14 @@ export function ICT() {
             purchase_date: inventoryForm.purchase_date,
             vendor_name: inventoryForm.vendor_name,
             warranty_period: inventoryForm.warranty_period,
+            assigned_to: inventoryForm.assigned_to,
+            assigned_employee_id: inventoryForm.assigned_employee_id ? Number(inventoryForm.assigned_employee_id) : null,
           }
-        : { ...inventoryForm, category_id: Number(inventoryForm.category_id) };
+        : {
+            ...inventoryForm,
+            category_id: Number(inventoryForm.category_id),
+            assigned_employee_id: inventoryForm.assigned_employee_id ? Number(inventoryForm.assigned_employee_id) : null,
+          };
 
       const res = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',
@@ -684,6 +707,8 @@ export function ICT() {
   const closeInventoryForm = () => {
     setIsInventoryFormOpen(false);
     setIsAddingCategory(false);
+    setIsManualAssign(false);
+    setIsManualBrand(false);
     setInventoryEditId(null);
     setInventoryEditSerial('');
     setInventoryForm(DEFAULT_INVENTORY_FORM);
@@ -696,6 +721,7 @@ export function ICT() {
     setInventoryEditSerial(item.serial_no || '');
     setInventoryForm({
       category_id: String(item.category_id || ''),
+      brand: item.brand || '',
       cpu: item.cpu || '',
       ram: item.ram || '',
       ssd: item.ssd || '',
@@ -708,7 +734,11 @@ export function ICT() {
       purchase_date: item.purchase_date ? new Date(item.purchase_date).toISOString().slice(0, 10) : '',
       vendor_name: item.vendor_name || '',
       warranty_period: item.warranty_period || '',
+      assigned_employee_id: item.assigned_employee_id ? String(item.assigned_employee_id) : '',
+      assigned_to: item.assigned_to || '',
     });
+    setIsManualAssign(!item.assigned_employee_id && !!item.assigned_to);
+    setIsManualBrand(!!item.brand && !BRAND_OPTIONS.includes(item.brand));
     setIsAddingCategory(false);
     setIsInventoryFormOpen(true);
   };
@@ -788,12 +818,14 @@ export function ICT() {
           </div>
         </div>
         <div class="content">
+          <div class="row"><span class="label">Brand</span><span class="value">${item.brand || 'N/A'}</span></div>
           ${specLine ? `<div class="row"><span class="label">Specs</span><span class="value">${specLine}</span></div>` : ''}
           <div class="row"><span class="label">Device S/N</span><span class="value">${item.device_serial_no || 'N/A'}</span></div>
           <div class="row"><span class="label">Lab</span><span class="value">${item.location || 'N/A'}</span></div>
           <div class="row"><span class="label">Purchased</span><span class="value">${item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : 'N/A'}</span></div>
           <div class="row"><span class="label">Vendor</span><span class="value">${item.vendor_name || 'N/A'}</span></div>
           <div class="row"><span class="label">Warranty</span><span class="value">${item.warranty_period || 'N/A'}</span></div>
+          <div class="row"><span class="label">Assigned To</span><span class="value">${item.assigned_to || 'Unassigned'}</span></div>
         </div>
       </div>
     `;
@@ -933,6 +965,7 @@ export function ICT() {
           <tr>
             <td>${item.serial_no || ''}</td>
             <td>${item.category_name || 'N/A'}</td>
+            <td>${item.brand || 'N/A'}</td>
             <td>${specLine}</td>
             <td>${item.device_serial_no || 'N/A'}</td>
             <td>${item.quantity ?? 0} ${item.unit || ''}</td>
@@ -940,6 +973,7 @@ export function ICT() {
             <td>${item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : 'N/A'}</td>
             <td>${item.vendor_name || 'N/A'}</td>
             <td>${item.warranty_period || 'N/A'}</td>
+            <td>${item.assigned_to || 'Unassigned'}</td>
             <td>${item.is_active ? 'Active' : 'Disabled'}</td>
           </tr>
         `;
@@ -1003,6 +1037,7 @@ export function ICT() {
               <tr>
                 <th>Serial No</th>
                 <th>Category</th>
+                <th>Brand</th>
                 <th>Specs</th>
                 <th>Device S/N</th>
                 <th>Qty</th>
@@ -1010,6 +1045,7 @@ export function ICT() {
                 <th>Purchased</th>
                 <th>Vendor</th>
                 <th>Warranty</th>
+                <th>Assigned To</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -1285,6 +1321,8 @@ export function ICT() {
                   setInventoryEditId(null);
                   setInventoryEditSerial('');
                   setInventoryForm(DEFAULT_INVENTORY_FORM);
+                  setIsManualAssign(false);
+                  setIsManualBrand(false);
                   setIsInventoryFormOpen(true);
                 }}
                 className="inline-flex items-center gap-2 rounded-lg bg-[#14856E] px-4 py-2.5 text-white transition-colors hover:bg-[#0f6b5a]"
@@ -1456,10 +1494,12 @@ export function ICT() {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Serial No</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Brand</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Specs</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Device Serial No</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Quantity</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Lab</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Assigned To</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>
                   </tr>
@@ -1478,6 +1518,7 @@ export function ICT() {
                       </td>
                       <td className="px-6 py-4 font-medium text-gray-900">{item.serial_no}</td>
                       <td className="px-6 py-4 text-gray-700">{item.category_name || 'N/A'}</td>
+                      <td className="px-6 py-4 text-gray-700">{item.brand || 'N/A'}</td>
                       <td className="px-6 py-4 text-gray-700 text-xs">
                         {SPEC_CATEGORIES.includes(item.category_name)
                           ? [item.cpu, item.ram, item.ssd, item.hdd].filter(Boolean).join(' / ') || 'N/A'
@@ -1486,6 +1527,7 @@ export function ICT() {
                       <td className="px-6 py-4 text-gray-700">{item.device_serial_no || 'N/A'}</td>
                       <td className="px-6 py-4 text-gray-700">{item.quantity} {item.unit || ''}</td>
                       <td className="px-6 py-4 text-gray-700">{item.location || 'N/A'}</td>
+                      <td className="px-6 py-4 text-gray-700">{item.assigned_to || 'Unassigned'}</td>
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
@@ -1647,6 +1689,55 @@ export function ICT() {
                 </div>
               )}
 
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="inventory-brand">
+                  Brand
+                </label>
+                {isManualBrand ? (
+                  <div className="flex gap-2">
+                    <input
+                      id="inventory-brand"
+                      type="text"
+                      value={inventoryForm.brand}
+                      onChange={(e) => setInventoryForm({ ...inventoryForm, brand: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                      placeholder="Enter a brand name"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsManualBrand(false);
+                        setInventoryForm({ ...inventoryForm, brand: '' });
+                      }}
+                      className="inline-flex shrink-0 items-center rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Pick from list
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    id="inventory-brand"
+                    value={inventoryForm.brand}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === MANUAL_BRAND_VALUE) {
+                        setIsManualBrand(true);
+                        setInventoryForm({ ...inventoryForm, brand: '' });
+                        return;
+                      }
+                      setInventoryForm({ ...inventoryForm, brand: value });
+                    }}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  >
+                    <option value="">Select a brand</option>
+                    {BRAND_OPTIONS.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                    <option value={MANUAL_BRAND_VALUE}>Other (enter manually)</option>
+                  </select>
+                )}
+              </div>
+
               {showSpecFields && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block space-y-2 text-sm font-medium text-gray-700">
@@ -1739,6 +1830,60 @@ export function ICT() {
                   placeholder="e.g. 1 Year, 18 Months"
                 />
               </label>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="inventory-assigned-to">
+                  Assign To
+                </label>
+                {isManualAssign ? (
+                  <div className="flex gap-2">
+                    <input
+                      id="inventory-assigned-to"
+                      type="text"
+                      value={inventoryForm.assigned_to}
+                      onChange={(e) => setInventoryForm({ ...inventoryForm, assigned_to: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                      placeholder="Enter a name"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsManualAssign(false);
+                        setInventoryForm({ ...inventoryForm, assigned_to: '', assigned_employee_id: '' });
+                      }}
+                      className="inline-flex shrink-0 items-center rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Pick from list
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    id="inventory-assigned-to"
+                    value={inventoryForm.assigned_employee_id}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === MANUAL_ASSIGN_VALUE) {
+                        setIsManualAssign(true);
+                        setInventoryForm({ ...inventoryForm, assigned_employee_id: '', assigned_to: '' });
+                        return;
+                      }
+                      const employee = inventoryEmployees.find((emp) => String(emp.id) === value);
+                      setInventoryForm({
+                        ...inventoryForm,
+                        assigned_employee_id: value,
+                        assigned_to: employee ? employee.full_name : '',
+                      });
+                    }}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#14856E] focus:outline-none focus:ring-2 focus:ring-[#14856E]/20"
+                  >
+                    <option value="">Unassigned</option>
+                    {inventoryEmployees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.employee_code})</option>
+                    ))}
+                    <option value={MANUAL_ASSIGN_VALUE}>Other (enter manually)</option>
+                  </select>
+                )}
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block space-y-2 text-sm font-medium text-gray-700">

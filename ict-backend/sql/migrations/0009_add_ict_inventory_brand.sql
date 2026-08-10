@@ -1,0 +1,1 @@
+ALTER TABLE ict_inventory ADD COLUMN IF NOT EXISTS brand VARCHAR(100);
