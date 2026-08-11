@@ -23,14 +23,18 @@ async function recalcAccountBalance(accountId) {
     `UPDATE acc_ledger l
      SET running_balance = sub.rb
      FROM (
-       SELECT id,
-         SUM(credit - debit) OVER (
-           PARTITION BY account_id
-           ORDER BY date ASC, id ASC
+       SELECT led.id,
+         SUM(
+           CASE WHEN a.account_type IN ('Asset', 'Expense') THEN led.debit - led.credit
+                ELSE led.credit - led.debit END
+         ) OVER (
+           PARTITION BY led.account_id
+           ORDER BY led.date ASC, led.id ASC
            ROWS UNBOUNDED PRECEDING
          ) AS rb
-       FROM acc_ledger
-       WHERE account_id = $1
+       FROM acc_ledger led
+       JOIN acc_accounts a ON a.id = led.account_id
+       WHERE led.account_id = $1
      ) sub
      WHERE l.id = sub.id AND l.account_id = $1`,
     [accountId]
@@ -54,7 +58,10 @@ accountingRouter.get('/accounts', async (req, res, next) => {
     const result = await query(
       `SELECT a.id, a.code, a.name, a.account_type, a.parent_id, a.is_active,
               p.name AS parent_name,
-              COALESCE(SUM(l.credit) - SUM(l.debit), 0)::float8 AS balance
+              COALESCE(
+                CASE WHEN a.account_type IN ('Asset', 'Expense') THEN SUM(l.debit) - SUM(l.credit)
+                     ELSE SUM(l.credit) - SUM(l.debit) END, 0
+              )::float8 AS balance
        FROM acc_accounts a
        LEFT JOIN acc_accounts p ON p.id = a.parent_id
        LEFT JOIN acc_ledger l ON l.account_id = a.id
@@ -487,7 +494,7 @@ accountingRouter.get('/dashboard', async (req, res, next) => {
       query(`SELECT COALESCE(SUM(debit - credit), 0)::float8 AS total
              FROM acc_ledger l JOIN acc_accounts a ON a.id = l.account_id
              WHERE a.account_type = 'Expense'`),
-      query(`SELECT COALESCE(SUM(credit - debit), 0)::float8 AS balance
+      query(`SELECT COALESCE(SUM(debit - credit), 0)::float8 AS balance
              FROM acc_ledger l JOIN acc_accounts a ON a.id = l.account_id
              WHERE a.account_type = 'Asset'`),
       query(`SELECT v.voucher_no, v.voucher_type, v.date, v.narration, v.status, v.total_amount::float8

@@ -1255,7 +1255,7 @@ function DonationFormModal({ editing, categories, accounts, onClose, onSaved }: 
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Donation</h3>
+          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Income</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -1298,7 +1298,7 @@ function DonationFormModal({ editing, categories, accounts, onClose, onSaved }: 
         <div className="flex gap-3 p-5 border-t border-gray-200">
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
           <button onClick={save} disabled={saving} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
-            {saving ? 'Saving…' : 'Save Donation'}
+            {saving ? 'Saving…' : 'Save Income'}
           </button>
         </div>
       </div>
