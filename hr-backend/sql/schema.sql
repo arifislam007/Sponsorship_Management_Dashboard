@@ -174,7 +174,7 @@ INSERT INTO hr_departments (name, code) VALUES
   ('Human Resources', 'HR'),
   ('Operations', 'OPS'),
   ('Field & Outreach', 'FIELD')
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- Seed designations (cross-department, ordered by seniority)
 INSERT INTO hr_designations (title, grade) VALUES
