@@ -31,21 +31,28 @@ departmentsRouter.post('/', async (req, res, next) => {
       [name.trim(), code?.trim() || null, head_name?.trim() || null, description?.trim() || null]
     );
     res.status(201).json(r.rows[0]);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ message: 'A department with this name already exists' });
+    next(err);
+  }
 });
 
 departmentsRouter.put('/:id', async (req, res, next) => {
   try {
     const { name, code, head_name, description, is_active } = req.body;
+    if (!name?.trim()) return res.status(400).json({ message: 'Department name is required' });
     const r = await query(
       `UPDATE hr_departments SET name=$1, code=$2, head_name=$3, description=$4, is_active=$5,
        updated_at=CURRENT_TIMESTAMP WHERE id=$6 RETURNING *`,
-      [name, code || null, head_name || null, description || null,
+      [name.trim(), code?.trim() || null, head_name?.trim() || null, description?.trim() || null,
        is_active !== false, Number(req.params.id)]
     );
     if (!r.rows.length) return res.status(404).json({ message: 'Department not found' });
     res.json(r.rows[0]);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ message: 'A department with this name already exists' });
+    next(err);
+  }
 });
 
 departmentsRouter.delete('/:id', async (req, res, next) => {
@@ -94,20 +101,27 @@ departmentsRouter.post('/designations', async (req, res, next) => {
       [title.trim(), department_id || null, grade?.trim() || null]
     );
     res.status(201).json(r.rows[0]);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ message: 'A designation with this title already exists' });
+    next(err);
+  }
 });
 
 departmentsRouter.put('/designations/:id', async (req, res, next) => {
   try {
     const { title, department_id, grade, is_active } = req.body;
+    if (!title?.trim()) return res.status(400).json({ message: 'Designation title is required' });
     const r = await query(
       `UPDATE hr_designations SET title=$1, department_id=$2, grade=$3, is_active=$4
        WHERE id=$5 RETURNING *`,
-      [title, department_id || null, grade || null, is_active !== false, Number(req.params.id)]
+      [title.trim(), department_id || null, grade?.trim() || null, is_active !== false, Number(req.params.id)]
     );
     if (!r.rows.length) return res.status(404).json({ message: 'Designation not found' });
     res.json(r.rows[0]);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ message: 'A designation with this title already exists' });
+    next(err);
+  }
 });
 
 departmentsRouter.delete('/designations/:id', async (req, res, next) => {

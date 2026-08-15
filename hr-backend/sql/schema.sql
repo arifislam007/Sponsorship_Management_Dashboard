@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS hr_departments (
   id SERIAL PRIMARY KEY,
-  name VARCHAR(100) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
   code VARCHAR(20) UNIQUE,
   head_name VARCHAR(150),
   description TEXT,

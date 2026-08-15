@@ -71,7 +71,9 @@ async function hrFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Request failed: ${res.status}`);
+    let message = text || `Request failed: ${res.status}`;
+    try { message = JSON.parse(text)?.message || message; } catch { /* not JSON */ }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -1514,7 +1516,10 @@ function DepartmentsTab() {
   useEffect(() => { load(); }, []);
 
   const saveDept = async () => {
-    if (!deptForm?.name?.trim()) return;
+    const name = deptForm?.name?.trim();
+    if (!name) return;
+    const dup = departments.some(d => d.id !== deptForm.id && d.name.trim().toLowerCase() === name.toLowerCase());
+    if (dup) { alert('A department with this name already exists'); return; }
     setSaving(true);
     try {
       if (deptForm.id) {
@@ -1534,7 +1539,10 @@ function DepartmentsTab() {
   };
 
   const saveDes = async () => {
-    if (!desForm?.title?.trim()) return;
+    const title = desForm?.title?.trim();
+    if (!title) return;
+    const dup = designations.some(d => d.id !== desForm.id && d.title.trim().toLowerCase() === title.toLowerCase());
+    if (dup) { alert('A designation with this title already exists'); return; }
     setSaving(true);
     try {
       if (desForm.id) {
