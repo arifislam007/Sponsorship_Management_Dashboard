@@ -85,18 +85,6 @@ const EMP_TYPES: EmpType[] = ['Permanent', 'Contract', 'Volunteer', 'Consultant'
 const PAY_METHODS = ['Bank', 'bKash', 'Nagad', 'Cash'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const DOC_TYPES = ['NID', 'Passport', 'Appointment Letter', 'Contract', 'CV', 'Academic Certificate', 'Experience Certificate', 'Bank Cheque Copy', 'Other'];
-const DESIGNATION_TITLES = [
-  'Managing Director',
-  'Executive Director',
-  'General Manager',
-  'Assistant Manager',
-  'Senior Executive',
-  'Executive',
-  'Officer',
-  'Junior Officer',
-  'Office Assistant',
-  'Staff',
-];
 
 const STATUS_COLORS: Record<EmpStatus, string> = {
   Active: 'bg-green-100 text-green-700',
@@ -275,13 +263,6 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
   const f = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
 
-  // Map static title → designation id from fetched list (title match, case-insensitive)
-  const designationIdByTitle = (title: string): string => {
-    const found = designations.find(d => d.title.toLowerCase() === title.toLowerCase());
-    return found ? String(found.id) : '';
-  };
-  const currentDesignationTitle = designations.find(d => String(d.id) === form.designation_id)?.title ?? '';
-
   const save = async () => {
     setError('');
     if (!form.full_name.trim()) { setError('Full name is required'); return; }
@@ -422,13 +403,9 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
                   </select>
                 </div>
                 <div><label className={lbl}>Designation</label>
-                  <select
-                    value={currentDesignationTitle}
-                    onChange={e => setForm(p => ({ ...p, designation_id: designationIdByTitle(e.target.value) }))}
-                    className={inp}
-                  >
+                  <select value={form.designation_id} onChange={f('designation_id')} className={inp}>
                     <option value="">Select</option>
-                    {DESIGNATION_TITLES.map(t => <option key={t} value={t}>{t}</option>)}
+                    {designations.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
                   </select>
                 </div>
               </div>
