@@ -265,12 +265,6 @@ export function StudentProfile() {
                   <p className="text-gray-900 mt-1">{student.email}</p>
                 </div>
               )}
-              {student.phone && (
-                <div>
-                  <p className="text-sm text-gray-600 font-semibold uppercase tracking-wide">Phone</p>
-                  <p className="text-gray-900 mt-1">{student.phone}</p>
-                </div>
-              )}
               {student.address && (
                 <div className="col-span-2">
                   <p className="text-sm text-gray-600 font-semibold uppercase tracking-wide">Address</p>
