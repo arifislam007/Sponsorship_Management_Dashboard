@@ -20,6 +20,7 @@ interface MonitoringForm {
   yes_count: number; score_percent: number; items?: MonitoringItem[];
   created_at: string;
 }
+interface HrEmployee { id: number; full_name: string; designation_title?: string; department_name?: string; }
 interface DashboardData {
   total_students: number; active_students: number; total_classes: number;
   today_attendance: { total_records: number; present: number; absent: number; late: number; percentage: number };
@@ -50,6 +51,17 @@ async function schoolFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
   }
+  return res.json();
+}
+
+const HR_API = '/api/hr';
+
+async function hrFetch<T>(path: string): Promise<T> {
+  const token = localStorage.getItem('authToken');
+  const res = await fetch(`${HR_API}${path}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) throw new Error(await res.text() || `Request failed: ${res.status}`);
   return res.json();
 }
 
@@ -697,6 +709,7 @@ function MonitoringFormModal({ formId, classes, onClose, onSaved }: {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [manualTeacher, setManualTeacher] = useState(false);
+  const [hrEmployees, setHrEmployees] = useState<HrEmployee[]>([]);
   const [form, setForm] = useState({
     monitoring_date: today(),
     class_id: '',
@@ -713,6 +726,12 @@ function MonitoringFormModal({ formId, classes, onClose, onSaved }: {
   );
   const [savedFormId, setSavedFormId] = useState<number | undefined>(formId);
   const [formStatus, setFormStatus] = useState<'Draft' | 'Submitted'>('Draft');
+
+  useEffect(() => {
+    hrFetch<{ data: HrEmployee[] }>('/employees/?status=Active&limit=500')
+      .then(r => setHrEmployees(r.data))
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (formId) {
@@ -861,8 +880,10 @@ function MonitoringFormModal({ formId, classes, onClose, onSaved }: {
                   className={inp}
                 >
                   <option value="">— Select —</option>
-                  {[...new Set(classes.map(c => c.class_teacher).filter(Boolean))].map(t => (
-                    <option key={t} value={t!}>{t}</option>
+                  {hrEmployees.map(e => (
+                    <option key={e.id} value={e.full_name}>
+                      {e.full_name}{e.designation_title ? ` — ${e.designation_title}` : ''}
+                    </option>
                   ))}
                   <option value="__other__">Other…</option>
                 </select>
