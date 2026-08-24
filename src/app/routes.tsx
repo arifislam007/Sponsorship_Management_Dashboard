@@ -16,6 +16,7 @@ import { Accounting } from "./components/Accounting";
 import { Projects } from "./components/Projects";
 import { HR } from "./components/HR";
 import { School } from "./components/School";
+import { LeadManagement } from "./components/LeadManagement";
 import { PublicICTAdmission } from "./components/PublicICTAdmission";
 import { useAuth } from "./contexts/AuthContext";
 import { AttendancePanel } from "./components/AttendancePanel";
@@ -110,6 +111,11 @@ export const router = createBrowserRouter([
       { path: "school", Component: () => (
         <ProtectedRoute requiredModule="School">
           <School />
+        </ProtectedRoute>
+      ) },
+      { path: "lead-management", Component: () => (
+        <ProtectedRoute requiredModule="Lead Management">
+          <LeadManagement />
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (

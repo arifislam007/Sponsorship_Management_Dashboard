@@ -115,6 +115,7 @@ INSERT INTO modules (name, description, route_name) VALUES
     ('Projects', 'Project management and task tracking', 'projects'),
     ('HR', 'Human resources, employee and payroll management', 'hr'),
     ('School', 'Puspokoli School attendance and classroom monitoring', 'school'),
+    ('Lead Management', 'ICT student lead pipeline, follow-ups and admissions', 'lead-management'),
     ('Export', 'Data export functionality', 'export'),
     ('Admin', 'Admin panel and user management', 'admin')
 ON CONFLICT (name) DO NOTHING;

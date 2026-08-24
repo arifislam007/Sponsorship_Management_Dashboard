@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router';
-import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays, Code2, BookOpen, FolderKanban, UserCog, School } from 'lucide-react';
+import { LayoutDashboard, Users, Heart, Link2, FileText, Settings, LogOut, ChevronDown, CalendarDays, Code2, BookOpen, FolderKanban, UserCog, School, Target } from 'lucide-react';
 import logo from '../../../logo.png';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
@@ -203,6 +203,22 @@ export function RootLayout() {
             </NavLink>
           )}
 
+          {canAccess('Lead Management') && (
+            <NavLink
+              to="/dashboard/lead-management"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+                  isActive
+                    ? 'bg-[#14856E] text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`
+              }
+            >
+              <Target size={20} />
+              <span>Lead Management</span>
+            </NavLink>
+          )}
+
           {canAccess('Admin') && (
             <NavLink
               to="/dashboard/settings"
@@ -314,6 +330,12 @@ export function RootLayout() {
             <NavLink to="/dashboard/school"
               className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
               <School size={22} />
+            </NavLink>
+          )}
+          {canAccess('Lead Management') && (
+            <NavLink to="/dashboard/lead-management"
+              className={({ isActive }) => `flex items-center justify-center flex-1 h-full ${isActive ? 'text-[#14856E]' : 'text-gray-500'}`}>
+              <Target size={22} />
             </NavLink>
           )}
           {canAccess('Admin') && (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Users, FileText, Plus, AlertCircle, CheckCircle2, Loader2, X, Pencil, Package, Printer, Trash2, Power } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatDate } from '../utils/dateFormat';
@@ -138,7 +139,11 @@ const DEFAULT_ADMISSION_FORM = {
 export function ICT() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole('admin');
-  const [activeTab, setActiveTab] = useState<ICTTab>('student-profile');
+  const [searchParams] = useSearchParams();
+  const initialTab = (searchParams.get('tab') as ICTTab | null) ?? 'student-profile';
+  const [activeTab, setActiveTab] = useState<ICTTab>(
+    ['student-profile', 'admission-form', 'inventory'].includes(initialTab) ? initialTab : 'student-profile'
+  );
   const [students, setStudents] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -147,7 +152,7 @@ export function ICT() {
   const [isAddingStudent, setIsAddingStudent] = useState(false);
   const [isAddingAdmission, setIsAddingAdmission] = useState(false);
   const [isStudentFormOpen, setIsStudentFormOpen] = useState(false);
-  const [isAdmissionFormOpen, setIsAdmissionFormOpen] = useState(false);
+  const [isAdmissionFormOpen, setIsAdmissionFormOpen] = useState(searchParams.get('tab') === 'admission-form' && searchParams.get('new') === '1');
   const [isViewingAdmission, setIsViewingAdmission] = useState(false);
   const [selectedAdmission, setSelectedAdmission] = useState<any | null>(null);
   const [admissionEditId, setAdmissionEditId] = useState<number | null>(null);
