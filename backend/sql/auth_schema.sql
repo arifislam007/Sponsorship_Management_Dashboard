@@ -231,6 +231,23 @@ FROM roles r, modules m
 WHERE r.name = 'project_manager' AND m.name IN ('Leave Management')
 ON CONFLICT (role_id, module_id) DO NOTHING;
 
+-- New role: lead_management (full Lead Management module access)
+INSERT INTO roles (name, description) VALUES
+  ('lead_management', 'Lead management staff with access to the Lead Management module')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, true
+FROM roles r, modules m
+WHERE r.name = 'lead_management' AND m.name IN ('Lead Management', 'Dashboard')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, false
+FROM roles r, modules m
+WHERE r.name = 'lead_management' AND m.name IN ('Leave Management')
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
 -- Dedicated leave role (Leave Management access only)
 INSERT INTO roles (name, description) VALUES
   ('leave', 'Access to Leave Management module')

@@ -77,6 +77,52 @@ function validateLead(body) {
   return null;
 }
 
+function normalizePhone(phone) {
+  return String(phone || '').replace(/\D/g, '');
+}
+
+// Shared by the Excel bulk-upload route and the Google Sheets sync route.
+// Skips rows whose phone number (digits-only match) or email (case-insensitive
+// match) already belongs to an existing lead, so re-syncing/re-uploading the
+// same source doesn't create duplicate leads every time.
+export async function bulkInsertLeads(rows) {
+  let created = 0;
+  let skipped = 0;
+  const errors = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const err = validateLead(row);
+    if (err) { errors.push({ row: i + 1, message: err }); continue; }
+    try {
+      const normalizedPhone = normalizePhone(row.phone);
+      const email = row.email?.trim() || null;
+      const existing = await query(
+        `SELECT id FROM lead_leads
+         WHERE regexp_replace(phone, '\\D', '', 'g') = $1
+            OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2))
+         LIMIT 1`,
+        [normalizedPhone, email]
+      );
+      if (existing.rows.length) { skipped++; continue; }
+
+      const rowSource = row.source?.trim() || 'Other';
+      await query(
+        `INSERT INTO lead_leads (full_name, phone, email, course_id, source, status, notes, reference_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [row.full_name.trim(), row.phone.trim(), email, row.course_id || null,
+         rowSource, row.status || 'New', row.notes?.trim() || null,
+         rowSource === 'Reference' ? (row.reference_name?.trim() || null) : null]
+      );
+      created++;
+    } catch (e) {
+      errors.push({ row: i + 1, message: e.message });
+    }
+  }
+
+  return { created, skipped, failed: errors.length, errors };
+}
+
 leadsRouter.post('/', async (req, res, next) => {
   try {
     const err = validateLead(req.body);
@@ -105,29 +151,8 @@ leadsRouter.post('/bulk', async (req, res, next) => {
     const rows = Array.isArray(req.body) ? req.body : req.body?.rows;
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ message: 'No rows provided' });
 
-    let created = 0;
-    const errors = [];
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const err = validateLead(row);
-      if (err) { errors.push({ row: i + 1, message: err }); continue; }
-      try {
-        const rowSource = row.source?.trim() || 'Other';
-        await query(
-          `INSERT INTO lead_leads (full_name, phone, email, course_id, source, status, notes, reference_name)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [row.full_name.trim(), row.phone.trim(), row.email?.trim() || null, row.course_id || null,
-           rowSource, row.status || 'New', row.notes?.trim() || null,
-           rowSource === 'Reference' ? (row.reference_name?.trim() || null) : null]
-        );
-        created++;
-      } catch (e) {
-        errors.push({ row: i + 1, message: e.message });
-      }
-    }
-
-    res.status(201).json({ created, failed: errors.length, errors });
+    const result = await bulkInsertLeads(rows);
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 

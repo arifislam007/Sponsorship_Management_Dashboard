@@ -341,14 +341,24 @@ adminRouter.get('/roles/:roleName/permissions', authMiddleware, roleMiddleware('
   const { roleName } = req.params;
 
   try {
+    const roleResult = await pool.query('SELECT id FROM roles WHERE name = $1', [roleName]);
+    if (roleResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Role not found' });
+    }
+
+    // LEFT JOIN from modules so every module appears (defaulting to no access)
+    // even if a permissions row hasn't been created for this role/module pair yet
+    // — e.g. a module added after this role already existed.
     const result = await pool.query(
-      `SELECT m.id, m.name, p.can_view, p.can_create, p.can_edit, p.can_delete
-       FROM permissions p
-       JOIN modules m ON p.module_id = m.id
-       JOIN roles r ON p.role_id = r.id
-       WHERE r.name = $1
+      `SELECT m.id, m.name,
+              COALESCE(p.can_view, false)   AS can_view,
+              COALESCE(p.can_create, false) AS can_create,
+              COALESCE(p.can_edit, false)   AS can_edit,
+              COALESCE(p.can_delete, false) AS can_delete
+       FROM modules m
+       LEFT JOIN permissions p ON p.module_id = m.id AND p.role_id = $1
        ORDER BY m.name`,
-      [roleName]
+      [roleResult.rows[0].id]
     );
 
     res.json({ permissions: result.rows });
@@ -472,11 +482,17 @@ adminRouter.put('/roles/:roleName/permissions', authMiddleware, roleMiddleware('
     const roleId = roleResult.rows[0].id;
     const moduleId = moduleResult.rows[0].id;
 
-    // Update permissions
+    // Upsert: a permissions row may not exist yet for this role/module pair
+    // (e.g. a module added after this role was created), so INSERT it if missing
+    // rather than silently updating zero rows.
     await pool.query(
-      `UPDATE permissions
-       SET can_view = $1, can_create = $2, can_edit = $3, can_delete = $4
-       WHERE role_id = $5 AND module_id = $6`,
+      `INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+       VALUES ($5, $6, $1, $2, $3, $4)
+       ON CONFLICT (role_id, module_id) DO UPDATE SET
+         can_view = EXCLUDED.can_view,
+         can_create = EXCLUDED.can_create,
+         can_edit = EXCLUDED.can_edit,
+         can_delete = EXCLUDED.can_delete`,
       [canView || false, canCreate || false, canEdit || false, canDelete || false, roleId, moduleId]
     );
 

@@ -4,6 +4,7 @@ dotenv.config();
 export const config = {
   port: Number(process.env.PORT || 5006),
   jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+  googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '',
   db: {
     host:     process.env.DB_HOST     || 'localhost',
     port:     Number(process.env.DB_PORT || 5432),

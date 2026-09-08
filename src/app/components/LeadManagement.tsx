@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import * as XLSX from 'xlsx';
 import {
   LayoutDashboard, Users, BookOpen, PhoneCall, GraduationCap, FileBarChart,
-  Plus, Search, X, Edit2, Trash2, Upload, Download, Loader2, ExternalLink, Printer, Mail,
+  Plus, Search, X, Edit2, Trash2, Upload, Download, Loader2, ExternalLink, Printer, Mail, RefreshCw,
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 
@@ -391,7 +391,7 @@ function getValue(row: Record<string, unknown>, aliases: string[]): unknown {
 function BulkLeadUploadModal({ courses, onClose, onUploaded }: { courses: Course[]; onClose: () => void; onUploaded: () => void }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [summary, setSummary] = useState<{ created: number; failed: number; errors: { row: number; message: string }[] } | null>(null);
+  const [summary, setSummary] = useState<{ created: number; skipped: number; failed: number; errors: { row: number; message: string }[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const downloadSample = () => {
@@ -434,13 +434,13 @@ function BulkLeadUploadModal({ courses, onClose, onUploaded }: { courses: Course
         };
       });
 
-      const result = await leadFetch<{ created: number; failed: number; errors: { row: number; message: string }[] }>(
+      const result = await leadFetch<{ created: number; skipped: number; failed: number; errors: { row: number; message: string }[] }>(
         '/bulk', { method: 'POST', body: JSON.stringify(parsed) }
       );
       setSummary(result);
       onUploaded();
     } catch (e: any) {
-      setSummary({ created: 0, failed: 1, errors: [{ row: 0, message: e.message || 'Upload failed' }] });
+      setSummary({ created: 0, skipped: 0, failed: 1, errors: [{ row: 0, message: e.message || 'Upload failed' }] });
     } finally { setUploading(false); }
   };
 
@@ -473,7 +473,7 @@ function BulkLeadUploadModal({ courses, onClose, onUploaded }: { courses: Course
           </div>
           {summary && (
             <div className="rounded-lg border border-gray-200 p-3 text-sm space-y-1">
-              <p>Created: {summary.created} · Failed: {summary.failed}</p>
+              <p>Created: {summary.created} · Skipped (duplicate phone): {summary.skipped} · Failed: {summary.failed}</p>
               {summary.errors.length > 0 && (
                 <ul className="list-disc pl-5 text-red-600 space-y-0.5 max-h-32 overflow-y-auto">
                   {summary.errors.slice(0, 10).map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
@@ -494,6 +494,145 @@ function BulkLeadUploadModal({ courses, onClose, onUploaded }: { courses: Course
   );
 }
 
+// ── Google Sheet Sync Modal ───────────────────────────────────────────────────
+
+interface SheetConfig { id: number; spreadsheet_id: string; sheet_name: string; last_synced_at?: string | null; }
+
+function GoogleSheetSyncModal({ onClose, onSynced }: { onClose: () => void; onSynced: () => void }) {
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [cfg, setCfg] = useState<SheetConfig | null>(null);
+  const [serviceAccountEmail, setServiceAccountEmail] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [spreadsheetInput, setSpreadsheetInput] = useState('');
+  const [sheetNameInput, setSheetNameInput] = useState('Sheet1');
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState('');
+  const [summary, setSummary] = useState<{ created: number; skipped: number; failed: number; errors: { row: number; message: string }[] } | null>(null);
+
+  const loadConfig = () => {
+    setLoadingConfig(true);
+    leadFetch<{ config: SheetConfig | null; service_account_email: string | null }>('/sheet-sync/config')
+      .then(r => {
+        setCfg(r.config);
+        setServiceAccountEmail(r.service_account_email);
+        setEditing(!r.config);
+        if (r.config) { setSpreadsheetInput(r.config.spreadsheet_id); setSheetNameInput(r.config.sheet_name); }
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoadingConfig(false));
+  };
+  useEffect(() => { loadConfig(); }, []);
+
+  const saveConfig = async () => {
+    setError('');
+    if (!spreadsheetInput.trim()) { setError('Sheet URL or ID is required'); return; }
+    setSaving(true);
+    try {
+      const saved = await leadFetch<SheetConfig>('/sheet-sync/config', {
+        method: 'PUT',
+        body: JSON.stringify({ spreadsheet_id: spreadsheetInput.trim(), sheet_name: sheetNameInput.trim() || 'Sheet1' }),
+      });
+      setCfg(saved);
+      setEditing(false);
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const syncNow = async () => {
+    setError(''); setSummary(null); setSyncing(true);
+    try {
+      const result = await leadFetch<{ created: number; skipped: number; failed: number; errors: { row: number; message: string }[] }>(
+        '/sheet-sync/sync', { method: 'POST' }
+      );
+      setSummary(result);
+      onSynced();
+    } catch (e: any) { setError(e.message); }
+    finally { setSyncing(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+        <div className="flex items-center justify-between border-b border-gray-200 p-5">
+          <h3 className="text-lg font-bold text-gray-900">Sync with Google Sheet</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {loadingConfig ? (
+            <p className="text-sm text-gray-400 text-center py-6">Loading…</p>
+          ) : (
+            <>
+              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+              {serviceAccountEmail && (
+                <div className="rounded-xl border border-[#14856E]/20 bg-[#14856E]/5 p-4 text-sm text-gray-700">
+                  <p className="font-semibold text-gray-900 mb-1">Before syncing</p>
+                  <p>Share the Google Sheet (Viewer access is enough) with:</p>
+                  <p className="font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 mt-1 inline-block break-all">{serviceAccountEmail}</p>
+                </div>
+              )}
+
+              {editing ? (
+                <div className="space-y-3">
+                  <div><label className={lbl}>Google Sheet URL or ID *</label>
+                    <input value={spreadsheetInput} onChange={e => setSpreadsheetInput(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/..." className={inp} />
+                  </div>
+                  <div><label className={lbl}>Tab / Sheet Name</label>
+                    <input value={sheetNameInput} onChange={e => setSheetNameInput(e.target.value)} placeholder="Sheet1" className={inp} />
+                  </div>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                    <p className="font-semibold text-gray-900 mb-1">Expected columns (first row = headers)</p>
+                    <p><span className="font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1">name</span>{' '}
+                      <span className="font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1">phone</span></p>
+                    <p className="text-gray-600 mt-1">Optional: email, course, source, reference_name, notes</p>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    {cfg && <button onClick={() => setEditing(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>}
+                    <button onClick={saveConfig} disabled={saving}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                      {saving ? 'Saving…' : 'Save Sheet'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                    <p className="font-medium text-gray-900">{cfg?.sheet_name}</p>
+                    <p className="text-xs text-gray-500 break-all mt-0.5">{cfg?.spreadsheet_id}</p>
+                    {cfg?.last_synced_at && <p className="text-xs text-gray-400 mt-1">Last synced: {fmtDate(cfg.last_synced_at)}</p>}
+                    <button onClick={() => setEditing(true)} className="text-xs text-[#14856E] font-medium hover:underline mt-2">Change sheet</button>
+                  </div>
+
+                  {summary && (
+                    <div className="rounded-lg border border-gray-200 p-3 text-sm space-y-1">
+                      <p>Created: {summary.created} · Skipped (duplicate phone): {summary.skipped} · Failed: {summary.failed}</p>
+                      {summary.errors.length > 0 && (
+                        <ul className="list-disc pl-5 text-red-600 space-y-0.5 max-h-32 overflow-y-auto">
+                          {summary.errors.slice(0, 10).map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">Close</button>
+                    <button onClick={syncNow} disabled={syncing}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                      {syncing && <Loader2 size={14} className="animate-spin" />}{syncing ? 'Syncing…' : 'Sync Now'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Leads Tab ─────────────────────────────────────────────────────────────────
 
 function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatus; admissionsView?: boolean }) {
@@ -507,6 +646,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
   const [editing, setEditing] = useState<Lead | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [showSheetSync, setShowSheetSync] = useState(false);
   const [deleting, setDeleting] = useState<Lead | null>(null);
 
   const load = () => {
@@ -561,6 +701,10 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
               <button onClick={() => setShowBulk(true)}
                 className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 whitespace-nowrap">
                 <Upload size={16} />Upload Excel
+              </button>
+              <button onClick={() => setShowSheetSync(true)}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 whitespace-nowrap">
+                <RefreshCw size={16} />Sync Google Sheet
               </button>
             </>
           )}
@@ -630,6 +774,9 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
       )}
       {showBulk && (
         <BulkLeadUploadModal courses={courses} onClose={() => setShowBulk(false)} onUploaded={load} />
+      )}
+      {showSheetSync && (
+        <GoogleSheetSyncModal onClose={() => setShowSheetSync(false)} onSynced={load} />
       )}
       {deleting && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">

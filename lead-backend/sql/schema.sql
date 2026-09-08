@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS lead_followups (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS lead_sheet_config (
+  id SERIAL PRIMARY KEY,
+  spreadsheet_id VARCHAR(200) NOT NULL,
+  sheet_name VARCHAR(150) NOT NULL DEFAULT 'Sheet1',
+  last_synced_at TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_lead_leads_status      ON lead_leads(status);
 CREATE INDEX IF NOT EXISTS idx_lead_leads_course       ON lead_leads(course_id);
 CREATE INDEX IF NOT EXISTS idx_lead_followups_lead     ON lead_followups(lead_id);
