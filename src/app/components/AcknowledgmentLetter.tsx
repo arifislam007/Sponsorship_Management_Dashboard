@@ -269,10 +269,20 @@ export function AcknowledgmentLetter() {
     return `${LETTER_META_PREFIX}${encodedMeta}${LETTER_META_SUFFIX}${content}`;
   };
 
+  const waitForImages = (root: HTMLElement) => Promise.all(
+    Array.from(root.querySelectorAll('img')).map((img) =>
+      img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+        img.addEventListener('load', () => resolve(), { once: true });
+        img.addEventListener('error', () => resolve(), { once: true });
+      })
+    )
+  );
+
   const generatePdfFromPreview = async (): Promise<string | null> => {
     const target = letterContentRef.current;
     if (!target) return null;
     try {
+      await waitForImages(target);
       const canvas = await html2canvas(target, {
         scale: 2,
         useCORS: true,
@@ -307,7 +317,8 @@ export function AcknowledgmentLetter() {
       let binary = '';
       bytes.forEach((b) => (binary += String.fromCharCode(b)));
       return btoa(binary);
-    } catch {
+    } catch (e) {
+      console.error('[AcknowledgmentLetter] PDF generation failed:', e);
       return null;
     }
   };
@@ -357,7 +368,11 @@ export function AcknowledgmentLetter() {
         },
         ...prev,
       ]);
-      setSaveMessage('Letter saved to database with PDF.');
+      setSaveMessage(
+        pdf_base64
+          ? 'Letter saved to database with PDF.'
+          : 'Letter saved, but PDF generation failed — check the browser console for details.'
+      );
       return res;
     } catch (error) {
       console.error('Failed to save letter:', error);
@@ -948,8 +963,8 @@ export function AcknowledgmentLetter() {
             <p className="text-sm text-gray-600">Real-time preview and database-ready letter content</p>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-auto p-4 md:p-6" ref={printableLetterRef}>
-            <div ref={letterContentRef} className="relative bg-white border border-gray-200 rounded-lg p-4 md:p-8">
+          <div className="flex-1 min-h-0 overflow-auto p-4 md:p-6">
+            <div className="relative bg-white border border-gray-200 rounded-lg p-4 md:p-8">
               <div className="relative">
                 <div className="text-center border-b-2 border-[#14856E] pb-3 mb-5">
                   <img src={logo} alt="Sombhabona logo" className="h-10 md:h-12 w-auto mx-auto" />
@@ -1047,6 +1062,116 @@ export function AcknowledgmentLetter() {
                   </div>
                 </div>
 
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Off-screen, plain-inline-styled duplicate of the letter above. This is the source for
+          PDF generation (html2canvas), the "Save to DB" content snapshot, print, and email —
+          Tailwind v4 utility classes compile to oklch() colors that html2canvas@1.4.1 cannot
+          parse, and a raw print window / emailed HTML has no Tailwind stylesheet loaded either,
+          so this node uses inline hex styles instead (same pattern as Accounting.tsx's
+          Money Receipt print-root). Kept off-screen via position:absolute (not display:none)
+          so it stays laid out and capturable. */}
+      <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+        <div ref={printableLetterRef}>
+          <div
+            ref={letterContentRef}
+            style={{ position: 'relative', background: '#ffffff', padding: '32px', maxWidth: '700px', fontFamily: 'Arial, sans-serif' }}
+          >
+            <div style={{ textAlign: 'center', borderBottom: '2px solid #14856E', paddingBottom: '12px', marginBottom: '20px' }}>
+              <img src={logo} alt="Sombhabona logo" style={{ height: '48px', width: 'auto', margin: '0 auto', display: 'block' }} />
+              <p style={{ fontSize: '12px', color: '#4b5563', marginTop: '8px' }}>
+                756 West Sewrapara, Mirpur, Dhaka | Phone: 01737243447 | Email: info@sombhabona.org
+              </p>
+            </div>
+
+            <div style={{ textAlign: 'right', fontSize: '14px', color: '#374151', marginBottom: '24px' }}>
+              Date: <strong>{todayDate}</strong>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <p style={{ fontSize: '14px', color: '#374151' }}>To,</p>
+              <p style={{ fontSize: '16px', fontWeight: 600, color: '#111827', marginTop: '4px' }}>{formData.donorName || '[Donor Name]'}</p>
+            </div>
+
+            <p style={{ textAlign: 'center', fontWeight: 600, color: '#111827', marginBottom: '24px' }}>Subject: Acknowledgment of Donation</p>
+
+            <div style={{ fontSize: '14px', lineHeight: 1.7, color: '#1f2937' }}>
+              <p style={{ marginBottom: '16px' }}>Dear {formData.donorName || '[Donor Name]'},</p>
+
+              <p style={{ marginBottom: '16px' }}>
+                On behalf of <strong>Sombhabona</strong> and all those whose lives you touch, we extend our
+                heartfelt gratitude for your generous contribution. Your support plays a vital role in enabling us
+                to continue our mission of building hope and nurturing lives in our community.
+              </p>
+
+              {hasValidData && (
+                <>
+                  <p style={{ marginBottom: '16px' }}>
+                    We acknowledge with sincere appreciation your donation(s) towards{' '}
+                    <strong>{formData.donationType}</strong>
+                    {formData.projectName && ` for the project "${formData.projectName}"`}.
+                  </p>
+
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
+                    <thead>
+                      <tr style={{ background: '#f3f4f6', color: '#374151' }}>
+                        <th style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'left' }}>Date</th>
+                        <th style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right' }}>Amount (BDT)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formData.donations.map((donation, index) => {
+                        if (!Number(donation.amount)) return null;
+                        return (
+                          <tr key={index}>
+                            <td style={{ border: '1px solid #d1d5db', padding: '8px 12px' }}>
+                              {donation.date ? format(new Date(donation.date), 'MMMM dd, yyyy') : '-'}
+                            </td>
+                            <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right' }}>
+                              ৳{Number(donation.amount).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr style={{ background: 'rgba(20,133,110,0.1)' }}>
+                        <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', fontWeight: 600 }}>Total Amount</td>
+                        <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>
+                          ৳{Number(totalAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              <p style={{ marginBottom: '16px' }}>This letter serves as an official receipt for your donation. Please retain it for your records.</p>
+
+              {formData.message && (
+                <div style={{ padding: '12px', borderLeft: '4px solid #14856E', background: 'rgba(20,133,110,0.05)', marginBottom: '16px' }}>
+                  <p style={{ fontStyle: 'italic', margin: 0 }}>{formData.message}</p>
+                </div>
+              )}
+
+              <p style={{ marginBottom: '16px' }}>
+                Your compassion and generosity make a profound difference in the lives of those we serve. Together,
+                we are creating lasting positive change and building a brighter future for our community.
+              </p>
+
+              <p style={{ marginBottom: '16px' }}>Thank you once again for your unwavering support and trust in our mission.</p>
+
+              <p style={{ paddingTop: '16px' }}>Yours sincerely,</p>
+
+              <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                {signatureData.imageUrl && (
+                  <img src={signatureData.imageUrl} alt={`${signatureData.name} signature`} style={{ height: '64px', width: 'auto', objectFit: 'contain', marginBottom: '12px', display: 'block' }} />
+                )}
+                <p style={{ fontWeight: 600, color: '#111827', margin: 0 }}>({signatureData.name})</p>
+                <p style={{ fontSize: '14px', color: '#374151', margin: 0 }}>{signatureData.title}</p>
+                <p style={{ fontSize: '14px', color: '#374151', margin: 0 }}>{signatureData.organization}</p>
               </div>
             </div>
           </div>

@@ -213,7 +213,7 @@ accountingRouter.post('/vouchers', async (req, res, next) => {
       `INSERT INTO acc_vouchers (voucher_no, voucher_type, date, narration, project_id, total_amount, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, voucher_no, voucher_type, date, narration, status, total_amount::float8`,
-      [voucher_no, voucher_type, date, narration, project_id || null, totalDebit, req.user?.id || null]
+      [voucher_no, voucher_type, date, narration, project_id || null, totalDebit, req.user?.userId || null]
     );
     const voucher = vResult.rows[0];
 
@@ -289,14 +289,14 @@ async function transitionVoucher(req, res, next, fromStatus, toStatus, extraFiel
 
 accountingRouter.post('/vouchers/:id/submit', (req, res, next) =>
   transitionVoucher(req, res, next, 'Draft', 'Submitted', {
-    submitted_by: req.user?.id || null,
+    submitted_by: req.user?.userId || null,
     submitted_at: new Date(),
   })
 );
 
 accountingRouter.post('/vouchers/:id/approve', (req, res, next) =>
   transitionVoucher(req, res, next, 'Submitted', 'Approved', {
-    approved_by: req.user?.id || null,
+    approved_by: req.user?.userId || null,
     approved_at: new Date(),
   })
 );
@@ -330,7 +330,7 @@ accountingRouter.post('/vouchers/:id/post', async (req, res, next) => {
 
     await query(
       `UPDATE acc_vouchers SET status = 'Posted', posted_by = $1, posted_at = $2 WHERE id = $3`,
-      [req.user?.id || null, new Date(), id]
+      [req.user?.userId || null, new Date(), id]
     );
 
     res.json({ message: 'Voucher posted to ledger.' });
@@ -357,7 +357,7 @@ accountingRouter.post('/vouchers/:id/cancel', async (req, res, next) => {
 
     await query(
       `UPDATE acc_vouchers SET status = 'Cancelled', cancelled_by = $1, cancelled_at = $2, cancel_reason = $3 WHERE id = $4`,
-      [req.user?.id || null, new Date(), reason || null, id]
+      [req.user?.userId || null, new Date(), reason || null, id]
     );
 
     res.json({ message: 'Voucher cancelled.' });
@@ -402,7 +402,8 @@ accountingRouter.get('/ledger', async (req, res, next) => {
 accountingRouter.get('/reports/trial-balance', async (req, res, next) => {
   try {
     const { as_of } = req.query;
-    const dateFilter = as_of ? `AND l.date <= '${as_of}'` : '';
+    const params = [];
+    const dateFilter = as_of ? (params.push(as_of), `AND l.date <= $${params.length}`) : '';
 
     const result = await query(
       `SELECT a.id, a.code, a.name, a.account_type,
@@ -414,7 +415,8 @@ accountingRouter.get('/reports/trial-balance', async (req, res, next) => {
        WHERE a.is_active = TRUE
        GROUP BY a.id, a.code, a.name, a.account_type
        HAVING COALESCE(SUM(l.debit), 0) != 0 OR COALESCE(SUM(l.credit), 0) != 0
-       ORDER BY a.code`
+       ORDER BY a.code`,
+      params
     );
     res.json(result.rows);
   } catch (err) { next(err); }
@@ -603,7 +605,7 @@ accountingRouter.post('/donations', async (req, res, next) => {
       `INSERT INTO acc_donations (date, donor_name, donation_purpose, category, payment_method, amount, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, date, donor_name, donation_purpose, category, payment_method, amount::float8, status, voucher_id, created_at`,
-      [date, donor_name, donation_purpose || null, category, payment_method, Number(amount), req.user?.id || null]
+      [date, donor_name, donation_purpose || null, category, payment_method, Number(amount), req.user?.userId || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
@@ -668,7 +670,7 @@ accountingRouter.post('/donations/:id/process', async (req, res, next) => {
         { account_id: assetAccountId, debit: donation.amount, credit: 0 },
         { account_id: incomeAccountId, debit: 0, credit: donation.amount },
       ],
-      userId: req.user?.id,
+      userId: req.user?.userId,
     });
 
     await query(`UPDATE acc_donations SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, id]);
@@ -711,7 +713,7 @@ accountingRouter.post('/expenses', async (req, res, next) => {
       `INSERT INTO acc_expenses (date, particulars, project_id, category, consumer_name, payment_method, amount, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, date, particulars, project_id, category, consumer_name, payment_method, amount::float8, status, voucher_id, created_at`,
-      [date, particulars, project_id || null, category, consumer_name || null, payment_method || 'Cash', Number(amount), req.user?.id || null]
+      [date, particulars, project_id || null, category, consumer_name || null, payment_method || 'Cash', Number(amount), req.user?.userId || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
@@ -777,7 +779,7 @@ accountingRouter.post('/expenses/:id/process', async (req, res, next) => {
         { account_id: expenseAccountId, debit: expense.amount, credit: 0 },
         { account_id: assetAccountId, debit: 0, credit: expense.amount },
       ],
-      userId: req.user?.id,
+      userId: req.user?.userId,
     });
 
     await query(`UPDATE acc_expenses SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, id]);
@@ -817,7 +819,7 @@ accountingRouter.post('/monthly-accounts/process', async (req, res, next) => {
           { account_id: assetAccountId, debit: donation.amount, credit: 0 },
           { account_id: incomeAccountId, debit: 0, credit: donation.amount },
         ],
-        userId: req.user?.id,
+        userId: req.user?.userId,
       });
       await query(`UPDATE acc_donations SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, donation.id]);
       results.processed += 1;
@@ -842,7 +844,7 @@ accountingRouter.post('/monthly-accounts/process', async (req, res, next) => {
           { account_id: expenseAccountId, debit: expense.amount, credit: 0 },
           { account_id: assetAccountId, debit: 0, credit: expense.amount },
         ],
-        userId: req.user?.id,
+        userId: req.user?.userId,
       });
       await query(`UPDATE acc_expenses SET status = 'posted', voucher_id = $1, updated_at = NOW() WHERE id = $2`, [voucher.id, expense.id]);
       results.processed += 1;
