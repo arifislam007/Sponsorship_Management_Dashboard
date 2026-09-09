@@ -890,9 +890,10 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
   const [outcomeTags, setOutcomeTags] = useState<string[]>([]);
   const [otherText, setOtherText] = useState('');
   const [existingCount, setExistingCount] = useState(0);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [form, setForm] = useState({
     lead_id: initialLeadId ? String(initialLeadId) : '', followup_date: new Date().toISOString().slice(0, 10), method: 'Call',
-    next_followup_date: '', created_by: '', new_status: '',
+    next_followup_date: '', created_by: '', new_status: '', new_course_id: '',
   });
   const f = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
@@ -900,6 +901,10 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
   const toggleOutcome = (option: string) => {
     setOutcomeTags(prev => prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]);
   };
+
+  useEffect(() => {
+    leadFetch<{ data: Course[] }>('/courses/').then(r => setCourses(r.data)).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (!form.lead_id) { setExistingCount(0); return; }
@@ -974,12 +979,18 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
               <input value={otherText} onChange={e => setOtherText(e.target.value)} placeholder="Briefly describe…" className={`${inp} mt-2`} />
             )}
           </div>
+          <div><label className={lbl}>Next Follow-up Date</label><input type="date" value={form.next_followup_date} onChange={f('next_followup_date')} className={inp} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={lbl}>Next Follow-up Date</label><input type="date" value={form.next_followup_date} onChange={f('next_followup_date')} className={inp} /></div>
             <div><label className={lbl}>Update Status</label>
               <select value={form.new_status} onChange={f('new_status')} className={inp}>
                 <option value="">Keep current</option>
                 {STATUSES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div><label className={lbl}>Update Course</label>
+              <select value={form.new_course_id} onChange={f('new_course_id')} className={inp}>
+                <option value="">Keep current</option>
+                {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           </div>

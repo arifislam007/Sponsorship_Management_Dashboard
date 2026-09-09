@@ -34,7 +34,7 @@ const MAX_FOLLOWUP_ATTEMPTS = 5;
 
 followupsRouter.post('/', async (req, res, next) => {
   try {
-    const { lead_id, followup_date, method, outcome, next_followup_date, created_by, new_status } = req.body;
+    const { lead_id, followup_date, method, outcome, next_followup_date, created_by, new_status, new_course_id } = req.body;
     if (!lead_id) return res.status(400).json({ message: 'lead_id is required' });
 
     const countResult = await query('SELECT COUNT(*)::int AS cnt FROM lead_followups WHERE lead_id=$1', [Number(lead_id)]);
@@ -52,6 +52,9 @@ followupsRouter.post('/', async (req, res, next) => {
 
     if (new_status) {
       await query(`UPDATE lead_leads SET status=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [new_status, Number(lead_id)]);
+    }
+    if (new_course_id) {
+      await query(`UPDATE lead_leads SET course_id=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [Number(new_course_id), Number(lead_id)]);
     }
 
     res.status(201).json(r.rows[0]);

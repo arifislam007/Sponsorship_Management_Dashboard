@@ -1,21 +1,50 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BookOpen, Plus, X, Check, TrendingUp, TrendingDown, DollarSign, Clock,
   FileText, BarChart2, RefreshCw, Printer, Ban, Send, Eye, CheckCircle,
-  Wallet, Pencil, Trash2, Loader2, AlertCircle, PlayCircle
+  Wallet, Pencil, Trash2, Loader2, AlertCircle, PlayCircle, Receipt, Upload
 } from 'lucide-react';
+import { format } from 'date-fns';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import {
   api,
   AccAccount, AccProject, AccVoucher, AccVoucherLine,
   AccVoucherType, AccVoucherStatus, AccLedgerEntry,
   AccTrialBalanceLine, AccIncomeExpenseReport, AccDashboard, AccAccountType,
-  AccDonation, AccExpense, AccMonthlySummary, AccCategoryMapping, AccPaymentMethodMapping, AccEmployee
+  AccDonation, AccExpense, AccMonthlySummary, AccCategoryMapping, AccPaymentMethodMapping, AccEmployee,
+  SponsorshipApi, MoneyReceiptApi,
 } from '../services/api';
+import logo from '../../../logo.png';
+import udaySignature from '../../../Uday_signature.jpg';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'monthly-accounts' | 'accounts' | 'vouchers' | 'ledger' | 'reports';
+type Tab = 'overview' | 'monthly-accounts' | 'accounts' | 'vouchers' | 'ledger' | 'reports' | 'money-receipt';
 type ReportType = 'trial-balance' | 'income-expense' | 'cash-book';
+
+// ── HR lookup (Finance & Accounts staff, for Money Receipt "Received By") ─────
+
+const HR_API = '/api/hr';
+
+async function hrFetch<T>(path: string): Promise<T> {
+  const token = localStorage.getItem('authToken');
+  const res = await fetch(`${HR_API}${path}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) throw new Error(await res.text() || `Request failed: ${res.status}`);
+  return res.json();
+}
+
+interface FinanceEmployee { id: number; full_name: string; designation_title?: string; }
+
+async function fetchFinanceEmployees(): Promise<FinanceEmployee[]> {
+  const deptRes = await hrFetch<{ data: { id: number; name: string }[] }>('/departments/');
+  const financeDept = deptRes.data.find(d => d.name.trim().toLowerCase() === 'finance & accounts');
+  if (!financeDept) return [];
+  const empRes = await hrFetch<{ data: FinanceEmployee[] }>(`/employees/?department_id=${financeDept.id}&status=Active&limit=200`);
+  return empRes.data;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1829,6 +1858,456 @@ function MonthlyAccountsTab() {
   );
 }
 
+// ── Money Receipt Tab ────────────────────────────────────────────────────────
+
+function numberToWords(num: number): string {
+  if (!num || num <= 0) return 'Zero';
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const twoDigits = (n: number): string => {
+    if (n < 20) return ones[n];
+    return `${tens[Math.floor(n / 10)]}${n % 10 ? ' ' + ones[n % 10] : ''}`;
+  };
+  const threeDigits = (n: number): string => {
+    if (n < 100) return twoDigits(n);
+    return `${ones[Math.floor(n / 100)]} Hundred${n % 100 ? ' ' + twoDigits(n % 100) : ''}`;
+  };
+
+  // Indian/Bangladeshi numbering: crore, lakh, thousand, hundred
+  let n = Math.floor(num);
+  const parts: string[] = [];
+  const crore = Math.floor(n / 10000000); n %= 10000000;
+  const lakh = Math.floor(n / 100000); n %= 100000;
+  const thousand = Math.floor(n / 1000); n %= 1000;
+  const rest = n;
+
+  if (crore) parts.push(`${threeDigits(crore)} Crore`);
+  if (lakh) parts.push(`${threeDigits(lakh)} Lakh`);
+  if (thousand) parts.push(`${threeDigits(thousand)} Thousand`);
+  if (rest) parts.push(threeDigits(rest));
+
+  return parts.join(' ') || 'Zero';
+}
+
+function amountInWords(amount: number): string {
+  return `Taka ${numberToWords(amount)} Only`;
+}
+
+const PAYMENT_METHODS = ['Cash', 'Bank', 'bKash', 'Nagad', 'Cheque'];
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function MoneyReceiptTab() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [sponsorships, setSponsorships] = useState<SponsorshipApi[]>([]);
+  const [financeEmployees, setFinanceEmployees] = useState<FinanceEmployee[]>([]);
+  const [history, setHistory] = useState<MoneyReceiptApi[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [sponsorshipId, setSponsorshipId] = useState('');
+  const [receivedByEmployeeId, setReceivedByEmployeeId] = useState('');
+  const [form, setForm] = useState({
+    receivedFrom: '', studentName: '', amount: '', paymentMethod: 'Cash',
+    referenceNo: '', receivedByName: '', receivedByDesignation: '', date: today, month: MONTHS[new Date().getMonth()],
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [signatureUrl, setSignatureUrl] = useState<string>(udaySignature as string);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const signatureInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => setSignatureUrl(event.target?.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const loadHistory = () => {
+    setLoadingHistory(true);
+    api.getReceipts().then(r => setHistory(r.receipts)).catch(console.error).finally(() => setLoadingHistory(false));
+  };
+
+  useEffect(() => {
+    api.getSponsorships(200, 0).then(r => setSponsorships(r.data || r)).catch(console.error);
+    fetchFinanceEmployees().then(setFinanceEmployees).catch(console.error);
+    loadHistory();
+  }, []);
+
+  const onReceivedByChange = (id: string) => {
+    setReceivedByEmployeeId(id);
+    const emp = financeEmployees.find(e => String(e.id) === id);
+    if (emp) {
+      setForm(f => ({ ...f, receivedByName: emp.full_name, receivedByDesignation: emp.designation_title || '' }));
+    }
+  };
+
+  const onSponsorshipChange = (id: string) => {
+    setSponsorshipId(id);
+    const sp = sponsorships.find(s => String(s.id) === id);
+    if (sp) {
+      setForm(f => ({
+        ...f,
+        receivedFrom: sp.donor_name,
+        studentName: sp.student_name,
+        amount: String(sp.amount),
+        paymentMethod: sp.payment_media || f.paymentMethod,
+        referenceNo: sp.reference_number || '',
+      }));
+    }
+  };
+
+  const setField = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(p => ({ ...p, [field]: e.target.value }));
+
+  const amountNum = Number(form.amount) || 0;
+  const receiptNoPreview = 'Auto-generated on save';
+  const wordsPreview = amountInWords(amountNum);
+
+  const waitForImages = (root: HTMLElement) => Promise.all(
+    Array.from(root.querySelectorAll('img')).map(img =>
+      img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+        img.addEventListener('load', () => resolve(), { once: true });
+        img.addEventListener('error', () => resolve(), { once: true });
+      })
+    )
+  );
+
+  const generatePdfFromPreview = async (): Promise<string | null> => {
+    const target = contentRef.current;
+    if (!target) return null;
+    try {
+      await waitForImages(target);
+      const canvas = await html2canvas(target, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false });
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = pdf.internal.pageSize.getHeight();
+      const scaleRatio = pdfW / imgWidth;
+      const scaledH = imgHeight * scaleRatio;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfW, scaledH);
+      let heightLeft = scaledH - pdfH;
+      let position = -pdfH;
+      while (heightLeft > 0) {
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfW, scaledH);
+        position -= pdfH;
+        heightLeft -= pdfH;
+      }
+      const bytes = new Uint8Array(pdf.output('arraybuffer'));
+      let binary = '';
+      bytes.forEach(b => (binary += String.fromCharCode(b)));
+      return btoa(binary);
+    } catch (e) {
+      console.error('[MoneyReceipt] PDF generation failed:', e);
+      return null;
+    }
+  };
+
+  const save = async () => {
+    setError(''); setSuccess('');
+    if (!form.receivedFrom.trim()) { setError('Received From is required'); return; }
+    if (!amountNum || amountNum <= 0) { setError('Enter a valid amount'); return; }
+    if (!form.date) { setError('Date is required'); return; }
+    setSaving(true);
+    try {
+      const pdf_base64 = await generatePdfFromPreview();
+      const sp = sponsorships.find(s => String(s.id) === sponsorshipId);
+      const result = await api.saveReceipt({
+        sponsorship_id: sp?.id ?? null,
+        donor_id: sp?.donor_id ?? null,
+        received_from: form.receivedFrom.trim(),
+        student_name: form.studentName.trim() || null,
+        amount: amountNum,
+        amount_words: wordsPreview,
+        payment_method: form.paymentMethod,
+        reference_no: form.referenceNo.trim() || null,
+        received_by_name: form.receivedByName.trim() || null,
+        received_by_designation: form.receivedByDesignation.trim() || null,
+        date: form.date,
+        month: form.month,
+        pdf_base64: pdf_base64 || undefined,
+      });
+      setSuccess(
+        pdf_base64
+          ? `Saved as ${result.receipt.receipt_no}`
+          : `Saved as ${result.receipt.receipt_no}, but PDF generation failed — check the browser console for details.`
+      );
+      loadHistory();
+    } catch (e: any) {
+      setError(e.message || 'Failed to save receipt');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const printNow = () => window.print();
+
+  const downloadHistoryPdf = async (r: MoneyReceiptApi) => {
+    try {
+      const blob = await api.downloadReceiptPDF(r.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = `receipt-${r.receipt_no}.pdf`; link.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e.message || 'Failed to download PDF');
+    }
+  };
+
+  const inp = 'mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]';
+  const lbl = 'text-xs font-medium text-gray-600';
+
+  return (
+    <div className="space-y-6">
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #money-receipt-print-root { visibility: visible; display: block !important; position: fixed; top: 0; left: 0; width: 100%; background: white; }
+          #money-receipt-print-root * { visibility: visible; }
+        }
+        @media screen {
+          #money-receipt-print-root { position: absolute; left: -9999px; top: 0; }
+        }
+      `}</style>
+
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">Money Receipt</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Pick a sponsorship to auto-fill donor/amount, or fill in manually.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Form */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
+
+          <div>
+            <label className={lbl}>Sponsorship (optional, auto-fills below)</label>
+            <select value={sponsorshipId} onChange={e => onSponsorshipChange(e.target.value)} className={inp}>
+              <option value="">Select a sponsorship…</option>
+              {sponsorships.map(s => (
+                <option key={s.id} value={s.id}>{s.donor_name} — {s.student_name} (৳{s.amount.toLocaleString()})</option>
+              ))}
+            </select>
+          </div>
+
+          <div><label className={lbl}>Received From *</label>
+            <input value={form.receivedFrom} onChange={setField('receivedFrom')} className={inp} /></div>
+          <div><label className={lbl}>Student / Purpose</label>
+            <input value={form.studentName} onChange={setField('studentName')} placeholder="e.g. Sample Student" className={inp} /></div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lbl}>Amount (BDT) *</label>
+              <input type="number" value={form.amount} onChange={setField('amount')} className={inp} /></div>
+            <div><label className={lbl}>Date *</label>
+              <input type="date" value={form.date} onChange={setField('date')} className={inp} /></div>
+          </div>
+
+          <div><label className={lbl}>Month</label>
+            <select value={form.month} onChange={setField('month')} className={inp}>
+              {MONTHS.map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lbl}>Payment Method</label>
+              <select value={form.paymentMethod} onChange={setField('paymentMethod')} className={inp}>
+                {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
+              </select>
+            </div>
+            <div><label className={lbl}>Reference No</label>
+              <input value={form.referenceNo} onChange={setField('referenceNo')} placeholder="Cheque / TrxID" className={inp} /></div>
+          </div>
+
+          <div><label className={lbl}>Received By (Finance & Accounts)</label>
+            <select value={receivedByEmployeeId} onChange={e => onReceivedByChange(e.target.value)} className={inp}>
+              <option value="">Select</option>
+              {financeEmployees.map(e => <option key={e.id} value={e.id}>{e.full_name}{e.designation_title ? ` — ${e.designation_title}` : ''}</option>)}
+            </select>
+          </div>
+
+          {receivedByEmployeeId && (
+            <div><label className={lbl}>Designation</label>
+              <input value={form.receivedByDesignation} onChange={setField('receivedByDesignation')} className={inp} /></div>
+          )}
+
+          <div>
+            <label className={lbl}>Signature</label>
+            <div className="mt-1 flex items-center gap-3">
+              <img src={signatureUrl} alt="Signature preview" className="h-12 w-auto object-contain border border-gray-200 rounded-lg bg-white p-1" />
+              <button onClick={() => signatureInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50">
+                <Upload size={13} />Upload Signature
+              </button>
+              {signatureUrl !== (udaySignature as string) && (
+                <button onClick={() => setSignatureUrl(udaySignature as string)}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline">
+                  Reset to default
+                </button>
+              )}
+              <input ref={signatureInputRef} type="file" accept="image/*" className="hidden" onChange={handleSignatureUpload} />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button onClick={printNow} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+              <Printer size={16} />Print
+            </button>
+            <button onClick={save} disabled={saving} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+              {saving && <Loader2 size={16} className="animate-spin" />}{saving ? 'Saving…' : 'Save & Generate PDF'}
+            </button>
+          </div>
+        </div>
+
+        {/* Live preview */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6">
+          <div className="p-4 md:p-6">
+            <div className="text-center border-b-2 border-[#14856E] pb-3 mb-5">
+              <img src={logo} alt="Sombhabona logo" className="h-10 md:h-12 w-auto mx-auto" />
+              <p className="text-xs text-gray-600 mt-2">
+                756 West Sewrapara, Mirpur, Dhaka | Phone: 01737243447 | Email: info@sombhabona.org
+              </p>
+            </div>
+
+            <p className="text-center text-lg font-bold text-gray-900 tracking-wide mb-6">MONEY RECEIPT</p>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm mb-6">
+              <div><span className={lbl}>Received From</span><p className="text-gray-900 font-medium">{form.receivedFrom || '—'}</p></div>
+              <div className="text-right"><span className={lbl}>Receipt No</span><p className="text-gray-900 font-medium">{receiptNoPreview}</p></div>
+              <div><span className={lbl}>Sponsorship / Purpose</span><p className="text-gray-900 font-medium">{form.studentName ? `Sponsorship for ${form.studentName}` : '—'}</p></div>
+              <div className="text-right"><span className={lbl}>Date</span><p className="text-gray-900 font-medium">{format(new Date(form.date || today), 'MMMM dd, yyyy')}</p></div>
+              <div><span className={lbl}>Month</span><p className="text-gray-900 font-medium">{form.month}</p></div>
+              <div className="text-right"><span className={lbl}>Payment Method</span><p className="text-gray-900 font-medium">{form.paymentMethod}</p></div>
+              <div><span className={lbl}>Reference No</span><p className="text-gray-900 font-medium">{form.referenceNo || '—'}</p></div>
+            </div>
+
+            <div className="border border-gray-300 rounded-lg p-4 mb-6">
+              <div className="flex items-center justify-between mb-1">
+                <span className={lbl}>Amount</span>
+                <span className="text-xl font-bold text-[#14856E]">৳{amountNum.toLocaleString()}</span>
+              </div>
+              <p className="text-sm text-gray-700 italic">In Words: {wordsPreview}</p>
+            </div>
+
+            <div className="mt-10 flex justify-end">
+              <div className="w-48 text-center">
+                <img src={signatureUrl} alt="Signature" className="h-14 w-auto object-contain mb-2 mx-auto" />
+                <div className="border-t border-gray-400 pt-1">
+                  <p className="text-sm font-semibold text-gray-900">{form.receivedByName || 'Received By'}</p>
+                  {form.receivedByDesignation && <p className="text-xs text-gray-600">{form.receivedByDesignation}</p>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Printable version (hidden on screen) — also the html2canvas capture target for PDF generation,
+          since it uses plain inline hex-color styles instead of Tailwind classes (html2canvas can't
+          parse the oklch() colors Tailwind v4 emits). */}
+      <div id="money-receipt-print-root">
+        <div ref={contentRef} style={{ fontFamily: 'Arial, sans-serif', color: '#111', padding: '32px', maxWidth: '700px', margin: '0 auto', background: '#ffffff' }}>
+          <div style={{ textAlign: 'center', borderBottom: '2px solid #14856E', paddingBottom: '12px', marginBottom: '20px' }}>
+            <img src={logo} alt="Sombhabona logo" style={{ height: '48px', margin: '0 auto' }} />
+            <p style={{ fontSize: '11px', color: '#555', marginTop: '8px' }}>
+              756 West Sewrapara, Mirpur, Dhaka | Phone: 01737243447 | Email: info@sombhabona.org
+            </p>
+          </div>
+          <p style={{ textAlign: 'center', fontSize: '18px', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '24px' }}>MONEY RECEIPT</p>
+          <table style={{ width: '100%', fontSize: '13px', marginBottom: '20px' }}>
+            <tbody>
+              <tr>
+                <td style={{ padding: '4px 0' }}><strong>Received From:</strong> {form.receivedFrom || '—'}</td>
+                <td style={{ padding: '4px 0', textAlign: 'right' }}><strong>Receipt No:</strong> {receiptNoPreview}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '4px 0' }}><strong>Purpose:</strong> {form.studentName ? `Sponsorship for ${form.studentName}` : '—'}</td>
+                <td style={{ padding: '4px 0', textAlign: 'right' }}><strong>Date:</strong> {format(new Date(form.date || today), 'MMMM dd, yyyy')}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '4px 0' }}><strong>Month:</strong> {form.month}</td>
+                <td style={{ padding: '4px 0', textAlign: 'right' }}><strong>Payment Method:</strong> {form.paymentMethod}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '4px 0' }}><strong>Reference No:</strong> {form.referenceNo || '—'}</td>
+                <td style={{ padding: '4px 0', textAlign: 'right' }}></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '14px', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <strong>Amount</strong>
+              <strong style={{ color: '#14856E', fontSize: '18px' }}>৳{amountNum.toLocaleString()}</strong>
+            </div>
+            <p style={{ fontStyle: 'italic', fontSize: '13px' }}>In Words: {wordsPreview}</p>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ width: '180px', textAlign: 'center' }}>
+              <img src={signatureUrl} alt="Signature" style={{ display: 'block', height: '50px', margin: '0 auto 8px' }} />
+              <div style={{ borderTop: '1px solid #999', paddingTop: '4px' }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }}>{form.receivedByName || 'Received By'}</p>
+                {form.receivedByDesignation && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#555' }}>{form.receivedByDesignation}</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* History */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200"><h3 className="font-semibold text-gray-800">Recent Receipts</h3></div>
+        {loadingHistory ? (
+          <p className="text-center py-8 text-gray-400 text-sm">Loading…</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                <tr>
+                  <th className="px-4 py-2 text-left">Receipt No</th>
+                  <th className="px-4 py-2 text-left">Date</th>
+                  <th className="px-4 py-2 text-left">Received From</th>
+                  <th className="px-4 py-2 text-right">Amount</th>
+                  <th className="px-4 py-2 text-left">Method</th>
+                  <th className="px-4 py-2 text-center">PDF</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {history.map(r => (
+                  <tr key={r.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5 font-medium text-gray-900">{r.receipt_no}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{format(new Date(r.date), 'MMM dd, yyyy')}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{r.received_from}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-800 font-medium">৳{r.amount.toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{r.payment_method}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      {r.has_pdf ? (
+                        <button onClick={() => downloadHistoryPdf(r)} className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Download PDF"><FileText size={14} /></button>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                ))}
+                {history.length === 0 && (
+                  <tr><td colSpan={6} className="text-center py-8 text-gray-400">No receipts yet</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
@@ -1838,6 +2317,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'vouchers', label: 'Vouchers', icon: FileText },
   { id: 'ledger', label: 'General Ledger', icon: Clock },
   { id: 'reports', label: 'Reports', icon: TrendingUp },
+  { id: 'money-receipt', label: 'Money Receipt', icon: Receipt },
 ];
 
 export function Accounting() {
@@ -1876,6 +2356,7 @@ export function Accounting() {
       {tab === 'vouchers' && <VouchersTab />}
       {tab === 'ledger' && <LedgerTab />}
       {tab === 'reports' && <ReportsTab />}
+      {tab === 'money-receipt' && <MoneyReceiptTab />}
     </div>
   );
 }

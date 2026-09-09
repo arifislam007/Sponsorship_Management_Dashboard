@@ -82,6 +82,25 @@ export interface SponsorshipApi {
   reference_number?: string;
 }
 
+export interface MoneyReceiptApi {
+  id: number;
+  receipt_no: string;
+  sponsorship_id?: number | null;
+  donor_id?: number | null;
+  received_from: string;
+  student_name?: string | null;
+  amount: number;
+  amount_words: string;
+  payment_method: string;
+  reference_no?: string | null;
+  received_by_name?: string | null;
+  received_by_designation?: string | null;
+  date: string;
+  month?: string | null;
+  created_at: string;
+  has_pdf?: boolean;
+}
+
 export interface LedgerEntry {
   id: number;
   date: string;
@@ -429,6 +448,37 @@ export const api = {
   async downloadLetterPDF(id: number): Promise<Blob> {
     const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
     const response = await fetch(`${API_BASE}/letters/${id}/pdf`, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Failed to download PDF');
+    }
+    return response.blob();
+  },
+
+  getReceipts: (filters?: { sponsorship_id?: number; donor_id?: number; from?: string; to?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.sponsorship_id) params.append('sponsorship_id', filters.sponsorship_id.toString());
+    if (filters?.donor_id) params.append('donor_id', filters.donor_id.toString());
+    if (filters?.from) params.append('from', filters.from);
+    if (filters?.to) params.append('to', filters.to);
+    return request<{ receipts: MoneyReceiptApi[] }>(`/receipts?${params.toString()}`);
+  },
+
+  saveReceipt: (payload: {
+    sponsorship_id?: number | null; donor_id?: number | null; received_from: string; student_name?: string | null;
+    amount: number; amount_words: string; payment_method: string; reference_no?: string | null;
+    received_by_name?: string | null; received_by_designation?: string | null; date: string; month?: string | null; pdf_base64?: string;
+  }) =>
+    request<{ receipt: MoneyReceiptApi }>('/receipts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  async downloadReceiptPDF(id: number): Promise<Blob> {
+    const authToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    const response = await fetch(`${API_BASE}/receipts/${id}/pdf`, {
       headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
     });
     if (!response.ok) {

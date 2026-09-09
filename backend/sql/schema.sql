@@ -133,6 +133,29 @@ CREATE TABLE IF NOT EXISTS acknowledgment_letters (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS money_receipts (
+    id SERIAL PRIMARY KEY,
+    receipt_no VARCHAR(30) NOT NULL UNIQUE,
+    sponsorship_id INTEGER REFERENCES sponsorships(id) ON DELETE SET NULL,
+    donor_id INTEGER REFERENCES donors(id) ON DELETE SET NULL,
+    received_from VARCHAR(200) NOT NULL,
+    student_name VARCHAR(200),
+    amount NUMERIC(12,2) NOT NULL,
+    amount_words VARCHAR(255) NOT NULL,
+    payment_method VARCHAR(30) NOT NULL,
+    reference_no VARCHAR(100),
+    received_by_name VARCHAR(150),
+    received_by_designation VARCHAR(150),
+    date DATE NOT NULL,
+    month VARCHAR(20),
+    pdf_data BYTEA,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE money_receipts ADD COLUMN IF NOT EXISTS month VARCHAR(20);
+ALTER TABLE money_receipts ADD COLUMN IF NOT EXISTS received_by_designation VARCHAR(150);
+
 -- ============================================================
 -- Accounting & Finance Module
 -- ============================================================

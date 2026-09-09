@@ -13,6 +13,7 @@ import { sponsorshipsRouter } from './routes/sponsorships.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { accountingRouter } from './routes/accounting.js';
+import { receiptsRouter } from './routes/receipts.js';
 import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
 import { auditMiddleware } from './middleware/audit.js';
 import { startBillingScheduler } from './services/sponsorshipBilling.js';
@@ -61,6 +62,7 @@ app.use(`${config.apiPrefix}/ledger`, authMiddleware, moduleAccessMiddleware('Ac
 app.use(`${config.apiPrefix}/exports`, authMiddleware, moduleAccessMiddleware('Export'), exportsRouter);
 app.use(`${config.apiPrefix}/letters`, authMiddleware, moduleAccessMiddleware('Export'), acknowledgmentsRouter);
 app.use(`${config.apiPrefix}/accounting`, authMiddleware, moduleAccessMiddleware('Accounting'), auditMiddleware('Accounting'), accountingRouter);
+app.use(`${config.apiPrefix}/receipts`, authMiddleware, moduleAccessMiddleware('Accounting'), auditMiddleware('Accounting'), receiptsRouter);
 app.use(`${config.apiPrefix}/notifications`, notificationsRouter);
 
 app.use((err, req, res, next) => {
