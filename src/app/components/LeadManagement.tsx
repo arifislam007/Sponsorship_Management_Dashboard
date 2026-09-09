@@ -647,6 +647,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
   const [showForm, setShowForm] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [showSheetSync, setShowSheetSync] = useState(false);
+  const [followupLead, setFollowupLead] = useState<Lead | null>(null);
   const [deleting, setDeleting] = useState<Lead | null>(null);
 
   const load = () => {
@@ -751,6 +752,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
                         {admissionsView && (
                           <Link to="/dashboard/ict?tab=admission-form&new=1" className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Open ICT Admission Form"><ExternalLink size={14} /></Link>
                         )}
+                        <button onClick={() => setFollowupLead(l)} className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Log Follow-up"><PhoneCall size={14} /></button>
                         <button onClick={() => { setEditing(l); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-gray-700"><Edit2 size={14} /></button>
                         <button onClick={() => setDeleting(l)} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
                       </div>
@@ -777,6 +779,9 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
       )}
       {showSheetSync && (
         <GoogleSheetSyncModal onClose={() => setShowSheetSync(false)} onSynced={load} />
+      )}
+      {followupLead && (
+        <FollowupFormModal leads={leads} initialLeadId={followupLead.id} onClose={() => setFollowupLead(null)} onSaved={load} />
       )}
       {deleting && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -879,13 +884,14 @@ function CoursesTab() {
 
 // ── Follow-ups Tab ────────────────────────────────────────────────────────────
 
-function FollowupFormModal({ leads, followups, onClose, onSaved }: { leads: Lead[]; followups: Followup[]; onClose: () => void; onSaved: () => void }) {
+function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: Lead[]; initialLeadId?: number; onClose: () => void; onSaved: () => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [outcomeTags, setOutcomeTags] = useState<string[]>([]);
   const [otherText, setOtherText] = useState('');
+  const [existingCount, setExistingCount] = useState(0);
   const [form, setForm] = useState({
-    lead_id: '', followup_date: new Date().toISOString().slice(0, 10), method: 'Call',
+    lead_id: initialLeadId ? String(initialLeadId) : '', followup_date: new Date().toISOString().slice(0, 10), method: 'Call',
     next_followup_date: '', created_by: '', new_status: '',
   });
   const f = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -895,7 +901,14 @@ function FollowupFormModal({ leads, followups, onClose, onSaved }: { leads: Lead
     setOutcomeTags(prev => prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]);
   };
 
-  const existingCount = form.lead_id ? followups.filter(fu => fu.lead_id === Number(form.lead_id)).length : 0;
+  useEffect(() => {
+    if (!form.lead_id) { setExistingCount(0); return; }
+    leadFetch<{ data: Followup[] }>(`/followups/?lead_id=${form.lead_id}`)
+      .then(r => setExistingCount(r.data.length))
+      .catch(() => setExistingCount(0));
+  }, [form.lead_id]);
+
+  const selectedLead = leads.find(l => String(l.id) === form.lead_id);
   const nextAttempt = existingCount + 1;
   const limitReached = form.lead_id !== '' && nextAttempt > MAX_FOLLOWUP_ATTEMPTS;
 
@@ -925,10 +938,14 @@ function FollowupFormModal({ leads, followups, onClose, onSaved }: { leads: Lead
         <div className="space-y-3">
           {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
           <div><label className={lbl}>Lead *</label>
-            <select value={form.lead_id} onChange={f('lead_id')} className={inp}>
-              <option value="">Select</option>
-              {leads.map(l => <option key={l.id} value={l.id}>{l.full_name} ({l.phone})</option>)}
-            </select>
+            {initialLeadId ? (
+              <div className={`${inp} bg-gray-50 text-gray-700`}>{selectedLead ? `${selectedLead.full_name} (${selectedLead.phone})` : '—'}</div>
+            ) : (
+              <select value={form.lead_id} onChange={f('lead_id')} className={inp}>
+                <option value="">Select</option>
+                {leads.map(l => <option key={l.id} value={l.id}>{l.full_name} ({l.phone})</option>)}
+              </select>
+            )}
             {form.lead_id !== '' && (
               limitReached ? (
                 <p className="text-xs text-red-600 mt-1">Maximum of {MAX_FOLLOWUP_ATTEMPTS} follow-up attempts already reached for this lead.</p>
@@ -978,7 +995,6 @@ function FollowupFormModal({ leads, followups, onClose, onSaved }: { leads: Lead
 
 function FollowupsTab() {
   const [followups, setFollowups] = useState<Followup[]>([]);
-  const [allFollowups, setAllFollowups] = useState<Followup[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -995,9 +1011,8 @@ function FollowupsTab() {
     if (statusFilter) qs.set('status', statusFilter);
     Promise.all([
       leadFetch<{ data: Followup[] }>(`/followups/?${qs}`),
-      leadFetch<{ data: Followup[] }>('/followups/'),
       leadFetch<{ data: Lead[] }>('/?limit=200'),
-    ]).then(([fr, allFr, lr]) => { setFollowups(fr.data); setAllFollowups(allFr.data); setLeads(lr.data); }).catch(console.error).finally(() => setLoading(false));
+    ]).then(([fr, lr]) => { setFollowups(fr.data); setLeads(lr.data); }).catch(console.error).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, [dueOnly, dateFilter, statusFilter]);
 
@@ -1048,7 +1063,7 @@ function FollowupsTab() {
         {visibleFollowups.length === 0 && <p className="text-center py-10 text-gray-400 text-sm">No follow-ups found</p>}
       </div>
 
-      {showForm && <FollowupFormModal leads={leads} followups={allFollowups} onClose={() => setShowForm(false)} onSaved={load} />}
+      {showForm && <FollowupFormModal leads={leads} onClose={() => setShowForm(false)} onSaved={load} />}
     </div>
   );
 }
