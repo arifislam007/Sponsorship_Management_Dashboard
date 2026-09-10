@@ -403,6 +403,9 @@ export const api = {
   deleteSponsorship: (id: number) =>
     request<{ message: string }>(`/sponsorships/${id}`, { method: 'DELETE' }),
 
+  sendSponsorshipReminder: (id: number) =>
+    request<{ ok: boolean; sent_to: string }>(`/sponsorships/${id}/send-reminder`, { method: 'POST' }),
+
   getDonorSponsoredStudents: (donorId: number) =>
     request<StudentApi[]>(`/donors/${donorId}/sponsored-students`),
 

@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Link2, User, Heart, X, Trash2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Link2, User, Heart, X, Trash2, AlertTriangle, Mail, Loader2 } from 'lucide-react';
 import { api, SponsorshipApi } from '../services/api';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
 import { formatDate } from '../utils/dateFormat';
+
+function isEndingSoon(endDate: string, withinDays = 30): boolean {
+  const end = new Date(endDate);
+  const now = new Date();
+  const diffDays = (end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= withinDays;
+}
 
 export function Sponsorships() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,6 +21,24 @@ export function Sponsorships() {
   const [editingSponsorship, setEditingSponsorship] = useState<SponsorshipApi | null>(null);
   const [deletingSponsorship, setDeletingSponsorship] = useState<SponsorshipApi | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [sendingReminderId, setSendingReminderId] = useState<number | null>(null);
+
+  const handleSendReminder = async (sponsorship: SponsorshipApi) => {
+    if (!sponsorship.end_date) {
+      alert('This sponsorship has no end date set, so a reminder cannot be sent.');
+      return;
+    }
+    if (!confirm(`Send an expiry reminder email to ${sponsorship.donor_name} for ${sponsorship.student_name}'s sponsorship?`)) return;
+    setSendingReminderId(sponsorship.id);
+    try {
+      const res = await api.sendSponsorshipReminder(sponsorship.id);
+      alert(`Reminder sent to ${res.sent_to}.`);
+    } catch (error: any) {
+      alert(error.message || 'Failed to send reminder email.');
+    } finally {
+      setSendingReminderId(null);
+    }
+  };
 
   const loadSponsorships = async () => {
     try {
@@ -187,6 +212,9 @@ export function Sponsorships() {
                   Start Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  End Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -215,6 +243,16 @@ export function Sponsorships() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                     {formatDate(sponsorship.start_date)}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {sponsorship.end_date ? (
+                      <span className={isEndingSoon(sponsorship.end_date) ? 'inline-flex items-center gap-1 text-amber-600 font-medium' : 'text-gray-600'}>
+                        {isEndingSoon(sponsorship.end_date) && <AlertTriangle size={13} />}
+                        {formatDate(sponsorship.end_date)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
@@ -239,6 +277,14 @@ export function Sponsorships() {
                         className="text-gray-600 hover:text-gray-900"
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => handleSendReminder(sponsorship)}
+                        disabled={sendingReminderId === sponsorship.id}
+                        className="text-amber-600 hover:text-amber-700 transition-colors disabled:opacity-50"
+                        title="Send expiry reminder email to donor"
+                      >
+                        {sendingReminderId === sponsorship.id ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
                       </button>
                       <button
                         onClick={() => setDeletingSponsorship(sponsorship)}
@@ -336,6 +382,15 @@ export function Sponsorships() {
               <p><span className="font-semibold">Donor:</span> {selectedSponsorship.donor_name}</p>
               <p><span className="font-semibold">Amount:</span> ৳{Number(selectedSponsorship.amount).toLocaleString()}</p>
               <p><span className="font-semibold">Start date:</span> {formatDate(selectedSponsorship.start_date)}</p>
+              <p>
+                <span className="font-semibold">End date:</span>{' '}
+                {selectedSponsorship.end_date ? (
+                  <span className={isEndingSoon(selectedSponsorship.end_date) ? 'text-amber-600 font-medium' : ''}>
+                    {formatDate(selectedSponsorship.end_date)}
+                    {isEndingSoon(selectedSponsorship.end_date) && ' (ending soon)'}
+                  </span>
+                ) : '—'}
+              </p>
               <p><span className="font-semibold">Status:</span> {selectedSponsorship.status.charAt(0).toUpperCase() + selectedSponsorship.status.slice(1)}</p>
               <div className="flex gap-3 pt-2">
                 <button
@@ -347,6 +402,14 @@ export function Sponsorships() {
                   className="px-4 py-2 rounded-lg border border-[#14856E] text-[#14856E] hover:bg-[#14856E] hover:text-white transition-colors"
                 >
                   Edit
+                </button>
+                <button
+                  onClick={() => handleSendReminder(selectedSponsorship)}
+                  disabled={sendingReminderId === selectedSponsorship.id}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-500 text-amber-600 hover:bg-amber-500 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {sendingReminderId === selectedSponsorship.id ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
+                  Send Reminder
                 </button>
               </div>
             </div>

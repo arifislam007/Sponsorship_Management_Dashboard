@@ -1,8 +1,20 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { generateSponsorshipLedgerEntries } from '../services/sponsorshipBilling.js';
+import { sendManualExpiryReminder } from '../services/sponsorshipExpiryReminder.js';
 
 export const sponsorshipsRouter = Router();
+
+sponsorshipsRouter.post('/:id/send-reminder', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const sp = await sendManualExpiryReminder(id);
+    res.json({ ok: true, sent_to: sp.donor_email });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    next(error);
+  }
+});
 
 async function syncStudentSponsoredStatus(studentId) {
   const activeResult = await query(

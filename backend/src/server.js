@@ -17,6 +17,7 @@ import { receiptsRouter } from './routes/receipts.js';
 import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
 import { auditMiddleware } from './middleware/audit.js';
 import { startBillingScheduler } from './services/sponsorshipBilling.js';
+import { startSponsorshipExpirySummaryScheduler } from './services/sponsorshipExpiryReminder.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { initVapidKeys } from './services/notificationService.js';
 import { fileURLToPath } from 'url';
@@ -84,6 +85,7 @@ async function start() {
   });
 
   startBillingScheduler();
+  startSponsorshipExpirySummaryScheduler();
   await initVapidKeys();
 }
 

@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Mail, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mail, X, Send, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import logoUrl from '../../../logo.png';
+
+interface ExtraAttachment {
+  filename: string;
+  content: string; // base64
+  contentType: string;
+}
 
 interface Props {
   defaultSubject: string;
   getHtml: (logoDataUrl: string) => string;
   defaultTo?: string;
+  extraAttachments?: ExtraAttachment[];
   onClose: () => void;
 }
 
@@ -87,7 +94,7 @@ export function buildEmailHtml(title: string, subtitle: string, body: string, lo
 </html>`;
 }
 
-export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClose }: Props) {
+export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', extraAttachments = [], onClose }: Props) {
   const [to, setTo] = useState(defaultTo);
   const [subject, setSubject] = useState(defaultSubject);
   const [note, setNote] = useState('');
@@ -122,11 +129,13 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClo
         return `src="cid:${cid}"`;
       });
 
+      const allAttachments = [...attachments, ...extraAttachments.map(a => ({ ...a, cid: undefined as any }))];
+
       const token = localStorage.getItem('authToken');
       const res = await fetch('/api/v1/notifications/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ to: to.trim(), subject, html, attachments }),
+        body: JSON.stringify({ to: to.trim(), subject, html, attachments: allAttachments }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -168,6 +177,13 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', onClo
               <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                 <AlertCircle size={15} className="mt-0.5 shrink-0" />
                 <span>{errMsg}</span>
+              </div>
+            )}
+
+            {extraAttachments.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+                <FileText size={13} className="text-[#14856E]" />
+                {extraAttachments.map(a => a.filename).join(', ')} will be attached
               </div>
             )}
 

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BookOpen, Plus, X, Check, TrendingUp, TrendingDown, DollarSign, Clock,
   FileText, BarChart2, RefreshCw, Printer, Ban, Send, Eye, CheckCircle,
-  Wallet, Pencil, Trash2, Loader2, AlertCircle, PlayCircle, Receipt, Upload
+  Wallet, Pencil, Trash2, Loader2, AlertCircle, PlayCircle, Receipt, Upload, Mail
 } from 'lucide-react';
 import { format } from 'date-fns';
 import html2canvas from 'html2canvas';
@@ -13,10 +13,11 @@ import {
   AccVoucherType, AccVoucherStatus, AccLedgerEntry,
   AccTrialBalanceLine, AccIncomeExpenseReport, AccDashboard, AccAccountType,
   AccDonation, AccExpense, AccMonthlySummary, AccCategoryMapping, AccPaymentMethodMapping, AccEmployee,
-  SponsorshipApi, MoneyReceiptApi,
+  SponsorshipApi, MoneyReceiptApi, DonorApi,
 } from '../services/api';
 import logo from '../../../logo.png';
 import udaySignature from '../../../Uday_signature.jpg';
+import { ShareEmailModal, wrapSimpleHtml } from './ShareEmailModal';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1905,11 +1906,17 @@ function MoneyReceiptTab() {
   const today = new Date().toISOString().slice(0, 10);
 
   const [sponsorships, setSponsorships] = useState<SponsorshipApi[]>([]);
+  const [donors, setDonors] = useState<DonorApi[]>([]);
   const [financeEmployees, setFinanceEmployees] = useState<FinanceEmployee[]>([]);
   const [history, setHistory] = useState<MoneyReceiptApi[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [sponsorshipId, setSponsorshipId] = useState('');
   const [receivedByEmployeeId, setReceivedByEmployeeId] = useState('');
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<{
+    receiptNo: string; pdfBase64: string; receivedFrom: string; amount: number; date: string; donorId?: number | null;
+  } | null>(null);
+  const [emailingHistoryId, setEmailingHistoryId] = useState<number | null>(null);
   const [form, setForm] = useState({
     receivedFrom: '', studentName: '', amount: '', paymentMethod: 'Cash',
     referenceNo: '', receivedByName: '', receivedByDesignation: '', date: today, month: MONTHS[new Date().getMonth()],
@@ -1937,9 +1944,17 @@ function MoneyReceiptTab() {
 
   useEffect(() => {
     api.getSponsorships(200, 0).then(r => setSponsorships(r.data || r)).catch(console.error);
+    api.getDonors(200, 0).then(r => setDonors(r.data || r)).catch(console.error);
     fetchFinanceEmployees().then(setFinanceEmployees).catch(console.error);
     loadHistory();
   }, []);
+
+  const recipientEmail = (() => {
+    if (lastReceipt?.donorId) return donors.find(d => d.id === lastReceipt.donorId)?.email || '';
+    const sp = sponsorships.find(s => String(s.id) === sponsorshipId);
+    if (!sp) return '';
+    return donors.find(d => d.id === sp.donor_id)?.email || '';
+  })();
 
   const onReceivedByChange = (id: string) => {
     setReceivedByEmployeeId(id);
@@ -2014,7 +2029,7 @@ function MoneyReceiptTab() {
   };
 
   const save = async () => {
-    setError(''); setSuccess('');
+    setError(''); setSuccess(''); setLastReceipt(null);
     if (!form.receivedFrom.trim()) { setError('Received From is required'); return; }
     if (!amountNum || amountNum <= 0) { setError('Enter a valid amount'); return; }
     if (!form.date) { setError('Date is required'); return; }
@@ -2042,6 +2057,16 @@ function MoneyReceiptTab() {
           ? `Saved as ${result.receipt.receipt_no}`
           : `Saved as ${result.receipt.receipt_no}, but PDF generation failed — check the browser console for details.`
       );
+      if (pdf_base64) {
+        setLastReceipt({
+          receiptNo: result.receipt.receipt_no,
+          pdfBase64: pdf_base64,
+          receivedFrom: form.receivedFrom.trim(),
+          amount: amountNum,
+          date: form.date,
+          donorId: sp?.donor_id ?? null,
+        });
+      }
       loadHistory();
     } catch (e: any) {
       setError(e.message || 'Failed to save receipt');
@@ -2061,6 +2086,32 @@ function MoneyReceiptTab() {
       URL.revokeObjectURL(url);
     } catch (e: any) {
       alert(e.message || 'Failed to download PDF');
+    }
+  };
+
+  const emailHistoryReceipt = async (r: MoneyReceiptApi) => {
+    setEmailingHistoryId(r.id);
+    try {
+      const blob = await api.downloadReceiptPDF(r.id);
+      const pdfBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      setLastReceipt({
+        receiptNo: r.receipt_no,
+        pdfBase64,
+        receivedFrom: r.received_from,
+        amount: r.amount,
+        date: r.date,
+        donorId: r.donor_id ?? null,
+      });
+      setShowEmailModal(true);
+    } catch (e: any) {
+      alert(e.message || 'Failed to load PDF for emailing');
+    } finally {
+      setEmailingHistoryId(null);
     }
   };
 
@@ -2167,6 +2218,15 @@ function MoneyReceiptTab() {
               {saving && <Loader2 size={16} className="animate-spin" />}{saving ? 'Saving…' : 'Save & Generate PDF'}
             </button>
           </div>
+
+          {lastReceipt && (
+            <button
+              onClick={() => setShowEmailModal(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-[#14856E] text-[#14856E] rounded-lg text-sm font-medium hover:bg-green-50"
+            >
+              <Mail size={16} />Email PDF ({lastReceipt.receiptNo})
+            </button>
+          )}
         </div>
 
         {/* Live preview */}
@@ -2263,6 +2323,26 @@ function MoneyReceiptTab() {
         </div>
       </div>
 
+      {showEmailModal && lastReceipt && (
+        <ShareEmailModal
+          defaultSubject={`Money Receipt ${lastReceipt.receiptNo} – ${lastReceipt.receivedFrom || 'Donor'}`}
+          defaultTo={recipientEmail}
+          extraAttachments={[{
+            filename: `receipt-${lastReceipt.receiptNo}.pdf`,
+            content: lastReceipt.pdfBase64,
+            contentType: 'application/pdf',
+          }]}
+          getHtml={() => wrapSimpleHtml(`
+            <p>Dear ${lastReceipt.receivedFrom || 'Donor'},</p>
+            <p>Please find attached your money receipt <strong>${lastReceipt.receiptNo}</strong> for
+               <strong>৳${lastReceipt.amount.toLocaleString()}</strong>, dated ${format(new Date(lastReceipt.date), 'MMMM dd, yyyy')}.</p>
+            <p>Thank you for your continued support.</p>
+            <p>— Sombhabona Foundation</p>
+          `)}
+          onClose={() => { setShowEmailModal(false); setEmailingHistoryId(null); }}
+        />
+      )}
+
       {/* History */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200"><h3 className="font-semibold text-gray-800">Recent Receipts</h3></div>
@@ -2291,7 +2371,17 @@ function MoneyReceiptTab() {
                     <td className="px-4 py-2.5 text-gray-600">{r.payment_method}</td>
                     <td className="px-4 py-2.5 text-center">
                       {r.has_pdf ? (
-                        <button onClick={() => downloadHistoryPdf(r)} className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Download PDF"><FileText size={14} /></button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => downloadHistoryPdf(r)} className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Download PDF"><FileText size={14} /></button>
+                          <button
+                            onClick={() => emailHistoryReceipt(r)}
+                            disabled={emailingHistoryId === r.id}
+                            className="p-1.5 text-gray-400 hover:text-[#14856E] disabled:opacity-50"
+                            title="Email PDF"
+                          >
+                            {emailingHistoryId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                          </button>
+                        </div>
                       ) : '—'}
                     </td>
                   </tr>

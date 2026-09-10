@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS notification_config (
 );
 
 INSERT INTO notification_config (id) VALUES (1) ON CONFLICT DO NOTHING;
+ALTER TABLE notification_config ADD COLUMN IF NOT EXISTS sponsorship_summary_last_sent_month VARCHAR(7);
 
 CREATE TABLE IF NOT EXISTS notification_preferences (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
