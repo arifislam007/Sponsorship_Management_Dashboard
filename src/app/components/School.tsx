@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import {
   LayoutDashboard, Users, CalendarDays, ClipboardList, BarChart2,
   Plus, Search, X, Edit2, CheckCircle2, XCircle, Clock, Printer,
   ChevronDown, Save, Send, Trash2, BookOpen, TrendingUp, AlertCircle,
 } from 'lucide-react';
+import { Modal } from './Modal';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -365,6 +366,7 @@ function _ClassAttendanceSummaryModal_UNUSED({ classes, onClose, onSaved }: {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   const setRow = (idx: number, field: string, val: string) =>
     setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: val } : e));
@@ -407,11 +409,10 @@ function _ClassAttendanceSummaryModal_UNUSED({ classes, onClose, onSaved }: {
   const inp = 'w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <div>
-            <h3 className="text-lg font-bold text-gray-900">শ্রেণিভিত্তিক উপস্থিতি</h3>
+            <h3 id={titleId} className="text-lg font-bold text-gray-900">শ্রেণিভিত্তিক উপস্থিতি</h3>
             <p className="text-xs text-gray-500 mt-0.5">Class-wise Attendance Summary</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
@@ -484,8 +485,7 @@ function _ClassAttendanceSummaryModal_UNUSED({ classes, onClose, onSaved }: {
             <Save size={14} />{saving ? 'Saving…' : 'Save All'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -726,6 +726,7 @@ function MonitoringFormModal({ formId, classes, onClose, onSaved }: {
   );
   const [savedFormId, setSavedFormId] = useState<number | undefined>(formId);
   const [formStatus, setFormStatus] = useState<'Draft' | 'Submitted'>('Draft');
+  const titleId = useId();
 
   useEffect(() => {
     hrFetch<{ data: HrEmployee[] }>('/employees/?status=Active&limit=500')
@@ -826,12 +827,11 @@ function MonitoringFormModal({ formId, classes, onClose, onSaved }: {
   const sectionHead = 'text-xs font-semibold uppercase tracking-wide text-[#14856E] mb-3 pb-1 border-b border-green-100';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <div>
-            <h3 className="text-lg font-bold text-gray-900">ডিজিটাল ক্লাস মনিটরিং</h3>
+            <h3 id={titleId} className="text-lg font-bold text-gray-900">ডিজিটাল ক্লাস মনিটরিং</h3>
             <p className="text-xs text-gray-500 mt-0.5">Classroom Monitoring Form</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
@@ -982,8 +982,7 @@ function MonitoringFormModal({ formId, classes, onClose, onSaved }: {
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1189,6 +1188,7 @@ function StudentFormModal({ editing, classes, onClose, onSaved }: {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   const f = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
@@ -1213,10 +1213,9 @@ function StudentFormModal({ editing, classes, onClose, onSaved }: {
   const lbl = 'text-xs font-medium text-gray-600';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900">{editing ? 'Edit Student' : 'Add Student'}</h3>
+          <h3 id={titleId} className="font-bold text-gray-900">{editing ? 'Edit Student' : 'Add Student'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{error}</p>}
@@ -1246,8 +1245,7 @@ function StudentFormModal({ editing, classes, onClose, onSaved }: {
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import {
   Briefcase, Plus, Search, X, ChevronRight, MoreHorizontal,
   Calendar, Users, TrendingUp, AlertCircle, CheckCircle2, Clock,
@@ -6,6 +6,7 @@ import {
   BarChart2, Activity, AlertTriangle, RefreshCw, FolderOpen
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { Modal } from './Modal';
 
 // ── HR Employee Helper ────────────────────────────────────────────────────────
 
@@ -428,6 +429,7 @@ function ProjectFormModal({ editing, onClose, onSaved }: { editing?: Project | n
   const [employees, setEmployees] = useState<HrEmployee[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   useEffect(() => { fetchHrEmployees().then(setEmployees); }, []);
 
@@ -462,10 +464,9 @@ function ProjectFormModal({ editing, onClose, onSaved }: { editing?: Project | n
     setForm((p) => ({ ...p, [field]: e.target.value }));
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit Project' : 'New Project'}</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit Project' : 'New Project'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -541,8 +542,7 @@ function ProjectFormModal({ editing, onClose, onSaved }: { editing?: Project | n
             {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Project'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -555,6 +555,7 @@ function ProjectDetailModal({ project, onClose, onRefresh }: { project: Project;
   const [editProgress, setEditProgress] = useState<number | null>(null);
   const [editStatus, setEditStatus] = useState<ProjectStatus | null>(null);
   const [saving, setSaving] = useState(false);
+  const titleId = useId();
 
   const load = () => {
     setLoading(true);
@@ -587,9 +588,9 @@ function ProjectDetailModal({ project, onClose, onRefresh }: { project: Project;
   };
 
   if (loading) return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-8 text-gray-500">Loading…</div>
-    </div>
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
+        Loading…
+    </Modal>
   );
   if (!detail) return null;
 
@@ -600,8 +601,7 @@ function ProjectDetailModal({ project, onClose, onRefresh }: { project: Project;
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
         <div className="flex items-start justify-between p-5 border-b border-gray-200">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -609,7 +609,7 @@ function ProjectDetailModal({ project, onClose, onRefresh }: { project: Project;
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[detail.status]}`}>{detail.status}</span>
               <span className="text-xs text-gray-500">{detail.category}</span>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">{detail.name}</h2>
+            <h2 id={titleId} className="text-xl font-bold text-gray-900">{detail.name}</h2>
             {detail.description && <p className="text-sm text-gray-500 mt-1">{detail.description}</p>}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 mt-1 flex-shrink-0"><X size={20} /></button>
@@ -705,8 +705,7 @@ function ProjectDetailModal({ project, onClose, onRefresh }: { project: Project;
         <div className="p-5 border-t border-gray-200">
           <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Close</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -723,6 +722,7 @@ function ProjectsTab() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [viewingProject, setViewingProject] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const deleteTitleId = useId();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -854,14 +854,13 @@ function ProjectsTab() {
       )}
 
       {deleting && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <Modal onClose={() => setDeleting(null)} titleId={deleteTitleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertTriangle size={20} className="text-red-600" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900">Delete Project</h3>
+                <h3 id={deleteTitleId} className="font-bold text-gray-900">Delete Project</h3>
                 <p className="text-sm text-gray-500">This will also delete all tasks and activity.</p>
               </div>
             </div>
@@ -870,8 +869,7 @@ function ProjectsTab() {
               <button onClick={() => setDeleting(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700">Cancel</button>
               <button onClick={deleteProject} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">Delete</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -911,6 +909,7 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   useEffect(() => { fetchHrEmployees().then(setEmployees); }, []);
 
@@ -953,10 +952,9 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit Task' : 'New Task'}</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit Task' : 'New Task'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -1038,8 +1036,7 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
             {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Task'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1050,6 +1047,7 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState('');
   const [posting, setPosting] = useState(false);
+  const titleId = useId();
 
   const load = () => {
     setLoading(true);
@@ -1073,15 +1071,14 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
   };
 
   if (loading) return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-8 text-gray-500">Loading…</div>
-    </div>
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
+        Loading…
+    </Modal>
   );
   if (!task) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
         <div className="flex items-start justify-between p-5 border-b border-gray-200">
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1089,7 +1086,7 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
               <span className={`text-xs px-2 py-0.5 rounded font-medium ${PRIORITY_COLORS[task.priority]}`}>{task.priority}</span>
               <span className="text-xs text-gray-500">{task.project_code}</span>
             </div>
-            <h3 className="text-lg font-bold text-gray-900">{task.name}</h3>
+            <h3 id={titleId} className="text-lg font-bold text-gray-900">{task.name}</h3>
             {task.description && <p className="text-sm text-gray-500 mt-1">{task.description}</p>}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 mt-1"><X size={20} /></button>
@@ -1140,8 +1137,7 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
         <div className="p-5 border-t border-gray-200">
           <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Close</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

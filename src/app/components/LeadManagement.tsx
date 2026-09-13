@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import * as XLSX from 'xlsx';
 import {
@@ -6,6 +6,7 @@ import {
   Plus, Search, X, Edit2, Trash2, Upload, Download, Loader2, ExternalLink, Printer, Mail, RefreshCw,
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
+import { Modal } from './Modal';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -260,6 +261,7 @@ function LeadFormModal({ editing, courses, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [assignees, setAssignees] = useState<HrEmployee[]>([]);
+  const titleId = useId();
 
   useEffect(() => {
     fetchIctEmployees().then(setAssignees).catch(console.error);
@@ -303,10 +305,9 @@ function LeadFormModal({ editing, courses, onClose, onSaved }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'New'} Lead</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'New'} Lead</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
@@ -370,8 +371,7 @@ function LeadFormModal({ editing, courses, onClose, onSaved }: {
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -393,6 +393,7 @@ function BulkLeadUploadModal({ courses, onClose, onUploaded }: { courses: Course
   const [uploading, setUploading] = useState(false);
   const [summary, setSummary] = useState<{ created: number; skipped: number; failed: number; errors: { row: number; message: string }[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
 
   const downloadSample = () => {
     const worksheet = XLSX.utils.json_to_sheet([
@@ -445,10 +446,9 @@ function BulkLeadUploadModal({ courses, onClose, onUploaded }: { courses: Course
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
         <div className="flex items-center justify-between border-b border-gray-200 p-5">
-          <h3 className="text-lg font-bold text-gray-900">Upload Leads from Excel</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">Upload Leads from Excel</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -489,8 +489,7 @@ function BulkLeadUploadModal({ courses, onClose, onUploaded }: { courses: Course
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -509,6 +508,7 @@ function GoogleSheetSyncModal({ onClose, onSynced }: { onClose: () => void; onSy
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [summary, setSummary] = useState<{ created: number; skipped: number; failed: number; errors: { row: number; message: string }[] } | null>(null);
+  const titleId = useId();
 
   const loadConfig = () => {
     setLoadingConfig(true);
@@ -552,10 +552,9 @@ function GoogleSheetSyncModal({ onClose, onSynced }: { onClose: () => void; onSy
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
         <div className="flex items-center justify-between border-b border-gray-200 p-5">
-          <h3 className="text-lg font-bold text-gray-900">Sync with Google Sheet</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">Sync with Google Sheet</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -628,8 +627,7 @@ function GoogleSheetSyncModal({ onClose, onSynced }: { onClose: () => void; onSy
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -649,6 +647,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
   const [showSheetSync, setShowSheetSync] = useState(false);
   const [followupLead, setFollowupLead] = useState<Lead | null>(null);
   const [deleting, setDeleting] = useState<Lead | null>(null);
+  const deleteTitleId = useId();
 
   const load = () => {
     setLoading(true);
@@ -784,16 +783,14 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
         <FollowupFormModal leads={leads} initialLeadId={followupLead.id} onClose={() => setFollowupLead(null)} onSaved={load} />
       )}
       {deleting && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Lead</h3>
+        <Modal onClose={() => setDeleting(null)} titleId={deleteTitleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 id={deleteTitleId} className="text-lg font-bold text-gray-900 mb-2">Delete Lead</h3>
             <p className="text-sm text-gray-600 mb-4">Delete <span className="font-medium">{deleting.full_name}</span>? This cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleting(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
               <button onClick={deleteLead} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium">Delete</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -809,6 +806,7 @@ function CoursesTab() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Partial<Course> | null>(null);
   const [saving, setSaving] = useState(false);
+  const titleId = useId();
 
   const load = () => {
     setLoading(true);
@@ -860,9 +858,8 @@ function CoursesTab() {
       </div>
 
       {form !== null && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">{form.id ? 'Edit' : 'New'} Course</h3>
+        <Modal onClose={() => setForm(null)} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 id={titleId} className="text-lg font-bold text-gray-900 mb-4">{form.id ? 'Edit' : 'New'} Course</h3>
             <div className="space-y-3">
               <div><label className={lbl}>Name *</label><input value={form.name ?? ''} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={inp} /></div>
               <div><label className={lbl}>Code</label><input value={form.code ?? ''} onChange={e => setForm(p => ({ ...p, code: e.target.value }))} className={inp} /></div>
@@ -875,8 +872,7 @@ function CoursesTab() {
               <button onClick={() => setForm(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
               <button onClick={save} disabled={saving} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -891,6 +887,7 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
   const [otherText, setOtherText] = useState('');
   const [existingCount, setExistingCount] = useState(0);
   const [courses, setCourses] = useState<Course[]>([]);
+  const titleId = useId();
   const [form, setForm] = useState({
     lead_id: initialLeadId ? String(initialLeadId) : '', followup_date: new Date().toISOString().slice(0, 10), method: 'Call',
     next_followup_date: '', created_by: '', new_status: '', new_course_id: '',
@@ -934,10 +931,9 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900">Log Follow-up</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">Log Follow-up</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="space-y-3">
@@ -999,8 +995,7 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
           <button onClick={save} disabled={saving || limitReached} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

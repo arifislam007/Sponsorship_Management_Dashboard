@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   Users, Plus, Search, X, Edit2, Trash2, Eye, ChevronDown,
   Briefcase, DollarSign, Building2, UserCheck, AlertTriangle,
@@ -6,6 +6,7 @@ import {
   BarChart2, RefreshCw, ChevronRight, UserMinus, Banknote, CalendarDays, Camera, Mail, LogIn, LogOut, Filter
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
+import { Modal } from './Modal';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -291,12 +292,12 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
 
   const inp = 'mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]';
   const lbl = 'text-xs font-medium text-gray-600';
+  const titleId = useId();
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit Employee' : 'New Employee'}</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit Employee' : 'New Employee'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
@@ -464,8 +465,7 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
             {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Employee'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -479,6 +479,7 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
   const [docType, setDocType] = useState('NID');
   const printRef = useRef<HTMLDivElement>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const titleId = useId();
 
   const load = () => {
     setLoading(true);
@@ -513,9 +514,9 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
   const exportPdf = () => window.print();
 
   if (loading) return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-8 text-gray-500">Loading…</div>
-    </div>
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
+        Loading…
+    </Modal>
   );
   if (!emp) return null;
 
@@ -600,8 +601,7 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
       </div>
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
+      <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
           {/* Header */}
           <div className="flex items-start justify-between p-5 border-b border-gray-200">
             <div className="flex items-center gap-4">
@@ -614,7 +614,7 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
                 </div>
               )}
               <div>
-                <h2 className="text-lg font-bold text-gray-900">{emp.full_name}</h2>
+                <h2 id={titleId} className="text-lg font-bold text-gray-900">{emp.full_name}</h2>
                 <p className="text-sm text-gray-500">{emp.employee_code} · {emp.designation_title || '—'} · {emp.department_name || '—'}</p>
                 <div className="flex gap-2 mt-1.5">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[emp.employment_status]}`}>{emp.employment_status}</span>
@@ -752,8 +752,7 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
               </button>
             </div>
           </div>
-        </div>
-      </div>
+      </Modal>
 
       {showEmailModal && emp && (
         <ShareEmailModal
@@ -805,6 +804,7 @@ function EmployeesTab() {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [viewId, setViewId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<Employee | null>(null);
+  const deleteTitleId = useId();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -957,14 +957,13 @@ function EmployeesTab() {
         />
       )}
       {deleting && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <Modal onClose={() => setDeleting(null)} titleId={deleteTitleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
                 <AlertTriangle size={20} className="text-red-600" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900">Remove Employee</h3>
+                <h3 id={deleteTitleId} className="font-bold text-gray-900">Remove Employee</h3>
                 <p className="text-sm text-gray-500">This will deactivate <strong>{deleting.full_name}</strong>.</p>
               </div>
             </div>
@@ -972,8 +971,7 @@ function EmployeesTab() {
               <button onClick={() => setDeleting(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
               <button onClick={deleteEmployee} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">Remove</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -985,6 +983,7 @@ function SalarySlipModal({ payrollId, onClose }: { payrollId: number; onClose: (
   const [slip, setSlip] = useState<Payroll | null>(null);
   const [loading, setLoading] = useState(true);
   const slipRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     hrFetch<Payroll>(`/payroll/${payrollId}/slip`).then(setSlip).catch(console.error).finally(() => setLoading(false));
@@ -993,17 +992,16 @@ function SalarySlipModal({ payrollId, onClose }: { payrollId: number; onClose: (
   const print = () => window.print();
 
   if (loading) return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-8 text-gray-500">Loading slip…</div>
-    </div>
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
+        Loading slip…
+    </Modal>
   );
   if (!slip) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="font-bold text-gray-900">Salary Slip</h3>
+          <h3 id={titleId} className="font-bold text-gray-900">Salary Slip</h3>
           <div className="flex gap-2">
             <button onClick={print} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#14856E] text-white rounded-lg text-sm hover:bg-[#0f6b5a]">
               <Printer size={14} />Print
@@ -1089,8 +1087,7 @@ function SalarySlipModal({ payrollId, onClose }: { payrollId: number; onClose: (
             <div className="border-t border-gray-300 pt-2">Authorized Signature</div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1291,6 +1288,7 @@ function PayrollCreateModal({ employees, components, defaultMonth, onClose, onSa
   const [items, setItems] = useState<PayrollItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   const selectedEmp = employees.find(e => String(e.id) === empId);
 
@@ -1325,10 +1323,9 @@ function PayrollCreateModal({ employees, components, defaultMonth, onClose, onSa
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">Create Payroll</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">Create Payroll</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
@@ -1408,8 +1405,7 @@ function PayrollCreateModal({ employees, components, defaultMonth, onClose, onSa
             {saving ? 'Creating…' : 'Create Payroll'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1420,6 +1416,7 @@ function BulkGenerateModal({ defaultMonth, onClose, onSaved }: { defaultMonth: s
   const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   const generate = async () => {
     setError(''); setResult(null);
@@ -1437,10 +1434,9 @@ function BulkGenerateModal({ defaultMonth, onClose, onSaved }: { defaultMonth: s
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900">Bulk Generate Payroll</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">Bulk Generate Payroll</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <p className="text-sm text-gray-600 mb-4">Generates Draft payroll for all Active/Probation employees for the selected month. Existing records are skipped.</p>
@@ -1467,8 +1463,7 @@ function BulkGenerateModal({ defaultMonth, onClose, onSaved }: { defaultMonth: s
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1481,6 +1476,8 @@ function DepartmentsTab() {
   const [deptForm, setDeptForm] = useState<Partial<Department> | null>(null);
   const [desForm, setDesForm] = useState<Partial<Designation> | null>(null);
   const [saving, setSaving] = useState(false);
+  const deptTitleId = useId();
+  const desTitleId = useId();
 
   const load = () => {
     setLoading(true);
@@ -1600,9 +1597,8 @@ function DepartmentsTab() {
 
       {/* Department Modal */}
       {deptForm !== null && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">{deptForm.id ? 'Edit' : 'New'} Department</h3>
+        <Modal onClose={() => setDeptForm(null)} titleId={deptTitleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 id={deptTitleId} className="text-lg font-bold text-gray-900 mb-4">{deptForm.id ? 'Edit' : 'New'} Department</h3>
             <div className="space-y-3">
               <div><label className="text-xs font-medium text-gray-600">Name *</label>
                 <input value={deptForm.name ?? ''} onChange={e => setDeptForm(p => ({ ...p, name: e.target.value }))} className={inp} /></div>
@@ -1617,15 +1613,13 @@ function DepartmentsTab() {
                 {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Designation Modal */}
       {desForm !== null && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">{desForm.id ? 'Edit' : 'New'} Designation</h3>
+        <Modal onClose={() => setDesForm(null)} titleId={desTitleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 id={desTitleId} className="text-lg font-bold text-gray-900 mb-4">{desForm.id ? 'Edit' : 'New'} Designation</h3>
             <div className="space-y-3">
               <div><label className="text-xs font-medium text-gray-600">Title *</label>
                 <input value={desForm.title ?? ''} onChange={e => setDesForm(p => ({ ...p, title: e.target.value }))} className={inp} /></div>
@@ -1644,8 +1638,7 @@ function DepartmentsTab() {
                 {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

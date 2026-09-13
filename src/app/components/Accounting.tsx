@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useId } from 'react';
 import {
   BookOpen, Plus, X, Check, TrendingUp, TrendingDown, DollarSign, Clock,
   FileText, BarChart2, RefreshCw, Printer, Ban, Send, Eye, CheckCircle,
@@ -18,6 +18,7 @@ import {
 import logo from '../../../logo.png';
 import udaySignature from '../../../Uday_signature.jpg';
 import { ShareEmailModal, wrapSimpleHtml } from './ShareEmailModal';
+import { Modal } from './Modal';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -179,6 +180,7 @@ function AccountsTab() {
   const [form, setForm] = useState({ code: '', name: '', account_type: 'Asset' as AccAccountType, parent_id: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -282,10 +284,9 @@ function AccountsTab() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <Modal onClose={() => setShowModal(false)} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-900">New Account</h3>
+              <h3 id={titleId} className="text-lg font-bold text-gray-900">New Account</h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
             {error && <p className="text-sm text-red-600 mb-3 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
@@ -324,8 +325,7 @@ function AccountsTab() {
                 {saving ? 'Saving…' : 'Create Account'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -355,6 +355,7 @@ function VoucherModal({ accounts, projects, onClose, onSaved, editing }: Voucher
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   const updateLine = (i: number, field: keyof AccVoucherLine, value: string | number) => {
     setLines((prev) => prev.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
@@ -392,10 +393,9 @@ function VoucherModal({ accounts, projects, onClose, onSaved, editing }: Voucher
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'New'} Voucher</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'New'} Voucher</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
@@ -526,8 +526,7 @@ function VoucherModal({ accounts, projects, onClose, onSaved, editing }: Voucher
             {saving ? 'Saving…' : 'Save Voucher'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -537,6 +536,7 @@ function VoucherDetailModal({ id, onClose, onRefresh }: { id: number; onClose: (
   const [voucher, setVoucher] = useState<AccVoucher | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState('');
+  const titleId = useId();
 
   const load = () => {
     setLoading(true);
@@ -553,9 +553,9 @@ function VoucherDetailModal({ id, onClose, onRefresh }: { id: number; onClose: (
   };
 
   if (loading) return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-8 text-gray-500">Loading…</div>
-    </div>
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
+        Loading…
+    </Modal>
   );
   if (!voucher) return null;
 
@@ -563,15 +563,14 @@ function VoucherDetailModal({ id, onClose, onRefresh }: { id: number; onClose: (
   const totalCredit = (voucher.lines ?? []).reduce((s, l) => s + Number(l.credit), 0);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4">
         <div className="flex items-start justify-between p-5 border-b border-gray-200">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className={`text-xs font-bold px-2 py-0.5 rounded ${TYPE_COLORS[voucher.voucher_type]}`}>{voucher.voucher_type}</span>
               <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[voucher.status]}`}>{voucher.status}</span>
             </div>
-            <h3 className="text-lg font-bold text-gray-900">{voucher.voucher_no}</h3>
+            <h3 id={titleId} className="text-lg font-bold text-gray-900">{voucher.voucher_no}</h3>
             <p className="text-sm text-gray-500">{voucher.narration}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 mt-1"><X size={20} /></button>
@@ -660,8 +659,7 @@ function VoucherDetailModal({ id, onClose, onRefresh }: { id: number; onClose: (
           </button>
           <button onClick={onClose} className="ml-auto px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Close</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1260,6 +1258,7 @@ function DonationFormModal({ editing, categories, accounts, onClose, onSaved }: 
   const [accountId, setAccountId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const titleId = useId();
 
   const save = async () => {
     setError('');
@@ -1282,10 +1281,9 @@ function DonationFormModal({ editing, categories, accounts, onClose, onSaved }: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Income</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Income</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -1331,8 +1329,7 @@ function DonationFormModal({ editing, categories, accounts, onClose, onSaved }: 
             {saving ? 'Saving…' : 'Save Income'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1345,6 +1342,7 @@ function ExpenseFormModal({ editing, projects, categories, accounts, employees, 
   const [accountId, setAccountId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const titleId = useId();
 
   const save = async () => {
     setError('');
@@ -1367,10 +1365,9 @@ function ExpenseFormModal({ editing, projects, categories, accounts, employees, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Expense</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'Add'} Expense</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -1425,8 +1422,7 @@ function ExpenseFormModal({ editing, projects, categories, accounts, employees, 
             {saving ? 'Saving…' : 'Save Expense'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1446,6 +1442,7 @@ function MappingModal({
   const [accountId, setAccountId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const titleId = useId();
 
   const save = async () => {
     if (!accountId) { setError('Select an account.'); return; }
@@ -1464,10 +1461,9 @@ function MappingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">Map to an Account</h3>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">Map to an Account</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -1495,8 +1491,7 @@ function MappingModal({
             {saving ? 'Saving…' : 'Save Mapping'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

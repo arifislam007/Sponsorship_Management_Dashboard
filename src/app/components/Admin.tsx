@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer, Bell, Mail, Send, Globe, TestTube } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
+import { Modal } from './Modal';
 
 interface User {
   id: number;
@@ -711,6 +712,7 @@ export function Admin() {
   const [roleUserIds, setRoleUserIds] = useState<number[]>([]);
   const [addUserDropdown, setAddUserDropdown] = useState(false);
   const [permSaving, setPermSaving] = useState<string | null>(null);
+  const editUserTitleId = useId();
 
   useEffect(() => {
     if (token) {
@@ -1438,8 +1440,7 @@ export function Admin() {
       </div>
 
       {selectedUser && (
-        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <Modal onClose={() => setSelectedUser(null)} titleId={editUserTitleId} containerClassName="w-full max-w-3xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-gray-200 p-5">
               <div>
                 <div className="flex items-center gap-2">
@@ -1448,7 +1449,7 @@ export function Admin() {
                     <span className="px-2.5 py-0.5 bg-amber-100 border border-amber-300 text-amber-700 text-xs font-semibold rounded-full">ADMIN</span>
                   )}
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mt-1">{selectedUser.username}</h3>
+                <h3 id={editUserTitleId} className="text-2xl font-bold text-gray-900 mt-1">{selectedUser.username}</h3>
               </div>
               <button onClick={() => setSelectedUser(null)} className="text-gray-400 hover:text-gray-600">
                 <X size={24} />
@@ -1573,8 +1574,7 @@ export function Admin() {
                 </div>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
