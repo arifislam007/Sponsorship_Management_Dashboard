@@ -60,7 +60,6 @@ export function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
             <img src={logo} alt="Sombhabona" className="h-9 w-auto" />
-            <span className="font-black text-lg text-[#14856E] hidden sm:block tracking-tight">Sombhabona</span>
           </Link>
 
           {/* Desktop nav */}
