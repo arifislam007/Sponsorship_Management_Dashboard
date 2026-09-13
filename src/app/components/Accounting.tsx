@@ -1907,7 +1907,7 @@ const MONTHS = [
 ];
 
 function MoneyReceiptTab() {
-  const today = new Date().toISOString().slice(0, 10);
+  const todayStr = today();
 
   const [sponsorships, setSponsorships] = useState<SponsorshipApi[]>([]);
   const [donors, setDonors] = useState<DonorApi[]>([]);
@@ -1923,7 +1923,7 @@ function MoneyReceiptTab() {
   const [emailingHistoryId, setEmailingHistoryId] = useState<number | null>(null);
   const [form, setForm] = useState({
     receivedFrom: '', studentName: '', amount: '', paymentMethod: 'Cash',
-    referenceNo: '', receivedByName: '', receivedByDesignation: '', date: today, month: MONTHS[new Date().getMonth()],
+    referenceNo: '', receivedByName: '', receivedByDesignation: '', date: todayStr, month: MONTHS[new Date().getMonth()],
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -2249,7 +2249,7 @@ function MoneyReceiptTab() {
               <div><span className={lbl}>Received From</span><p className="text-gray-900 font-medium">{form.receivedFrom || '—'}</p></div>
               <div className="text-right"><span className={lbl}>Receipt No</span><p className="text-gray-900 font-medium">{receiptNoPreview}</p></div>
               <div><span className={lbl}>Sponsorship / Purpose</span><p className="text-gray-900 font-medium">{form.studentName ? `Sponsorship for ${form.studentName}` : '—'}</p></div>
-              <div className="text-right"><span className={lbl}>Date</span><p className="text-gray-900 font-medium">{format(new Date(form.date || today), 'MMMM dd, yyyy')}</p></div>
+              <div className="text-right"><span className={lbl}>Date</span><p className="text-gray-900 font-medium">{format(new Date(form.date || todayStr), 'MMMM dd, yyyy')}</p></div>
               <div><span className={lbl}>Month</span><p className="text-gray-900 font-medium">{form.month}</p></div>
               <div className="text-right"><span className={lbl}>Payment Method</span><p className="text-gray-900 font-medium">{form.paymentMethod}</p></div>
               <div><span className={lbl}>Reference No</span><p className="text-gray-900 font-medium">{form.referenceNo || '—'}</p></div>
@@ -2296,7 +2296,7 @@ function MoneyReceiptTab() {
               </tr>
               <tr>
                 <td style={{ padding: '4px 0' }}><strong>Purpose:</strong> {form.studentName ? `Sponsorship for ${form.studentName}` : '—'}</td>
-                <td style={{ padding: '4px 0', textAlign: 'right' }}><strong>Date:</strong> {format(new Date(form.date || today), 'MMMM dd, yyyy')}</td>
+                <td style={{ padding: '4px 0', textAlign: 'right' }}><strong>Date:</strong> {format(new Date(form.date || todayStr), 'MMMM dd, yyyy')}</td>
               </tr>
               <tr>
                 <td style={{ padding: '4px 0' }}><strong>Month:</strong> {form.month}</td>

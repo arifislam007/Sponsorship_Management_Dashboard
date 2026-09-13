@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
-  Users, Plus, Search, X, Edit2, Trash2, Eye, ChevronDown,
-  Briefcase, DollarSign, Building2, UserCheck, AlertTriangle,
+  Users, Plus, Search, X, Edit2, Trash2, Eye,
+  Building2, UserCheck, AlertTriangle,
   CheckCircle2, Clock, TrendingUp, FileText, Printer, Download,
-  BarChart2, RefreshCw, ChevronRight, UserMinus, Banknote, CalendarDays, Camera, Mail, LogIn, LogOut, Filter
+  BarChart2, RefreshCw, Banknote, CalendarDays, Camera, Mail, Filter
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';

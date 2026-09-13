@@ -294,7 +294,6 @@ export function ICT() {
         throw new Error(text || 'Failed to create student');
       }
 
-      const json = await res.json();
       setSuccess('Student profile created successfully');
       setStudentForm(DEFAULT_STUDENT_FORM);
       setIsStudentFormOpen(false);
@@ -325,7 +324,6 @@ export function ICT() {
         throw new Error(text || 'Failed to save admission');
       }
 
-      const json = await res.json();
       setSuccess(admissionEditId ? 'Admission updated successfully' : 'Admission application submitted successfully');
       setAdmissionForm(DEFAULT_ADMISSION_FORM);
       setAdmissionEditId(null);
@@ -380,7 +378,6 @@ export function ICT() {
         const text = await res.text();
         throw new Error(text || 'Failed to process admission');
       }
-      const json = await res.json();
       setSuccess('Admission processed into student profile');
       await loadData();
     } catch (err) {

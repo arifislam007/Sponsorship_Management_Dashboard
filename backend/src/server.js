@@ -14,7 +14,7 @@ import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { accountingRouter } from './routes/accounting.js';
 import { receiptsRouter } from './routes/receipts.js';
-import { authMiddleware, moduleAccessMiddleware, requirePermission } from './middleware/auth.js';
+import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import { auditMiddleware } from './middleware/audit.js';
 import { startBillingScheduler } from './services/sponsorshipBilling.js';
 import { startSponsorshipExpirySummaryScheduler } from './services/sponsorshipExpiryReminder.js';

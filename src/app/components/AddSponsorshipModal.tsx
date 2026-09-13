@@ -101,6 +101,9 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
 
   if (!isOpen) return null;
 
+  let submitLabel = mode === 'edit' ? 'Save Changes' : 'Create Sponsorship';
+  if (isSubmitting) submitLabel = 'Saving...';
+
   const handlePeriodChange = (newPeriod: string) => {
     setFormData({
       ...formData,
@@ -358,7 +361,7 @@ export function AddSponsorshipModal({ isOpen, onClose, onSubmit, mode = 'create'
               disabled={isSubmitting}
               className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Create Sponsorship'}
+              {submitLabel}
             </button>
           </div>
         </div>

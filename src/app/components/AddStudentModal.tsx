@@ -92,6 +92,9 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
 
   if (!isOpen) return null;
 
+  let submitLabel = mode === 'edit' ? 'Save Changes' : 'Add Student';
+  if (isSubmitting) submitLabel = mode === 'edit' ? 'Saving...' : 'Adding...';
+
   const handleNext = () => {
     if (step < 3) setStep(step + 1);
   };
@@ -391,9 +394,7 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
                   disabled={isSubmitting}
                   className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting
-                    ? (mode === 'edit' ? 'Saving...' : 'Adding...')
-                    : (mode === 'edit' ? 'Save Changes' : 'Add Student')}
+                  {submitLabel}
                 </button>
               )}
             </div>

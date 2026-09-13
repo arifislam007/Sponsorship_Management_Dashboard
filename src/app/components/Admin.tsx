@@ -28,15 +28,6 @@ interface Module {
   route_name: string;
 }
 
-const LEAVE_ONLY_MODULE = {
-  moduleName: 'Leave Management',
-  canView: true,
-  canCreate: true,
-  canEdit: true,
-  canDelete: false,
-  overrideRolePermissions: true,
-};
-
 function fmtDT(s: string) {
   if (!s) return '—';
   return new Date(s).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -871,36 +862,6 @@ export function Admin() {
     }
   };
 
-  const handleUpdateUserRoles = async (userId: number, roleNames: string[]) => {
-    setIsLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      const response = await fetch(`/api/v1/admin/users/${userId}/roles`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ roleNames }),
-      });
-
-      if (response.ok) {
-        setSuccess('User roles updated successfully');
-        loadUsers();
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        const data = await response.json();
-        setError(data.message || 'Failed to update user roles');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update user roles');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleToggleUserStatus = async (userId: number, isActive: boolean) => {
     setIsLoading(true);
     setError('');
@@ -1046,52 +1007,6 @@ export function Admin() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGrantLeaveOnlyAccess = async (userId: number, userRoles: { id: number; name: string }[]) => {
-    setIsLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      if (userRoles.length > 0) {
-        const response = await fetch(`/api/v1/admin/users/${userId}/roles`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ roleNames: [] }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.message || 'Failed to remove existing roles');
-        }
-      }
-
-      const accessResponse = await fetch(`/api/v1/admin/users/${userId}/module-access`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(LEAVE_ONLY_MODULE),
-      });
-
-      if (accessResponse.ok) {
-        setSuccess('Leave-only access granted successfully');
-        loadUsers();
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        const data = await accessResponse.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to grant leave-only access');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to grant leave-only access');
     } finally {
       setIsLoading(false);
     }

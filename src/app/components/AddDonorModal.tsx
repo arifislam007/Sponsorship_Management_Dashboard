@@ -1,4 +1,4 @@
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { DonorApi } from '../services/api';
 import { Modal } from './Modal';
@@ -43,6 +43,9 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
   }, [isOpen, mode]);
 
   if (!isOpen) return null;
+
+  let submitLabel = mode === 'edit' ? 'Save Changes' : 'Add Donor';
+  if (isSubmitting) submitLabel = 'Saving...';
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.email) {
@@ -156,7 +159,7 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
               disabled={isSubmitting}
               className="px-6 py-2 bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Add Donor'}
+              {submitLabel}
             </button>
           </div>
         </div>

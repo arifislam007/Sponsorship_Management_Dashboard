@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import {
-  Briefcase, Plus, Search, X, ChevronRight, MoreHorizontal,
+  Briefcase, Plus, Search, X,
   Calendar, Users, TrendingUp, AlertCircle, CheckCircle2, Clock,
-  Flag, MessageSquare, Paperclip, Edit2, Trash2, Eye, ListTodo,
-  BarChart2, Activity, AlertTriangle, RefreshCw, FolderOpen
+  MessageSquare, Edit2, Trash2, Eye, ListTodo,
+  BarChart2, Activity, AlertTriangle, FolderOpen
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Modal } from './Modal';
