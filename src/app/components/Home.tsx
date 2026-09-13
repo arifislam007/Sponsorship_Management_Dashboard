@@ -7,6 +7,7 @@ import {
 import { Link } from 'react-router';
 import { api, StudentApi } from '../services/api';
 import { ImageWithFallback } from './ImageWithFallback';
+import { LoadingState } from './Spinner';
 import logo from '../../../logo.png';
 
 function useCountUp(target: number, duration = 1400) {
@@ -31,9 +32,10 @@ export function Home() {
   const [students, setStudents] = useState<StudentApi[]>([]);
   const [filter, setFilter] = useState<'all' | 'sponsored' | 'unsponsored'>('all');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getStudents('all').then(setStudents).catch(() => setStudents([]));
+    api.getStudents('all').then(setStudents).catch(() => setStudents([])).finally(() => setLoading(false));
   }, []);
 
   const sponsored   = students.filter((s) => s.is_sponsored);
@@ -340,7 +342,9 @@ export function Home() {
           </div>
 
           {/* Grid */}
-          {visibleStudents.length === 0 ? (
+          {loading ? (
+            <LoadingState label="Loading students…" fullHeight />
+          ) : visibleStudents.length === 0 ? (
             <div className="text-center py-24 text-gray-400">
               <Users size={48} className="mx-auto mb-4 opacity-40" />
               <p className="font-medium">No students to display</p>

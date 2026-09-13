@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Search, Plus, Mail, Phone, MapPin, X, Users } from 'lucide-react';
 import { api, DonorApi, StudentApi } from '../services/api';
 import { AddDonorModal } from './AddDonorModal';
+import { LoadingState } from './Spinner';
+import { EmptyState } from './EmptyState';
+import { ErrorBanner } from './ErrorBanner';
 
 export function Donors() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -13,8 +16,12 @@ export function Donors() {
   const [sponsoredStudents, setSponsoredStudents] = useState<StudentApi[]>([]);
   const [isSponsoredStudentsOpen, setIsSponsoredStudentsOpen] = useState(false);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const loadDonors = async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const response = await api.getDonors(50, 0, searchTerm || undefined);
       // Handle paginated response
@@ -23,6 +30,9 @@ export function Donors() {
     } catch (error) {
       console.error('Failed to load donors:', error);
       setDonors([]);
+      setLoadError('Failed to load donors. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -115,7 +125,23 @@ export function Donors() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="mb-6">
+          <ErrorBanner message={loadError} />
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow overflow-hidden">
+        {loading ? (
+          <LoadingState label="Loading donors…" />
+        ) : filteredDonors.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No donors found"
+            description={searchTerm ? 'No donors match your search.' : 'Add your first donor to get started.'}
+            action={searchTerm ? undefined : { label: 'Add Donor', icon: Plus, onClick: () => { setEditingDonor(null); setIsModalOpen(true); } }}
+          />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -188,11 +214,6 @@ export function Donors() {
             </tbody>
           </table>
         </div>
-
-        {filteredDonors.length === 0 && (
-          <div className="p-12 text-center">
-            <p className="text-gray-500">No donors found matching your criteria.</p>
-          </div>
         )}
       </div>
 
@@ -266,13 +287,9 @@ export function Donors() {
             </div>
             <div className="flex-1 overflow-y-auto p-5">
               {isLoadingStudents ? (
-                <div className="flex items-center justify-center py-8">
-                  <p className="text-gray-600">Loading...</p>
-                </div>
+                <LoadingState label="Loading sponsored students…" />
               ) : sponsoredStudents.length === 0 ? (
-                <div className="flex items-center justify-center py-8">
-                  <p className="text-gray-500">No students sponsored by this donor.</p>
-                </div>
+                <EmptyState icon={Users} title="No sponsored students" description="This donor is not currently sponsoring any students." />
               ) : (
                 <div className="space-y-3">
                   {sponsoredStudents.map((student) => (

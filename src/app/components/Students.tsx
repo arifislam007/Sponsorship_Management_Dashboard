@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Search, Upload, Plus, User, X, Mail } from 'lucide-react';
+import { Search, Upload, Plus, User, X, Mail, Users } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
 import { AddStudentModal } from './AddStudentModal';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { api, CreateStudentPayload } from '../services/api';
+import { LoadingState } from './Spinner';
+import { EmptyState } from './EmptyState';
+import { ErrorBanner } from './ErrorBanner';
 
 interface Student {
   id: number;
@@ -33,6 +36,8 @@ export function Students() {
   const [studentPhotoDataUrl, setStudentPhotoDataUrl] = useState('');
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const resolvePhotoForEmail = async (photo: string): Promise<string> => {
     if (!photo) return '';
@@ -66,6 +71,8 @@ export function Students() {
   };
 
   const loadStudents = async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const response = await api.getStudents(statusFilter);
       setStudents(
@@ -88,6 +95,9 @@ export function Students() {
     } catch (error) {
       console.error('Failed to load students:', error);
       setStudents([]);
+      setLoadError('Failed to load students. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -167,6 +177,23 @@ export function Students() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="mb-6">
+          <ErrorBanner message={loadError} />
+        </div>
+      )}
+
+      {loading ? (
+        <LoadingState label="Loading students…" fullHeight />
+      ) : filteredStudents.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No students found"
+          description={searchTerm || statusFilter !== 'all' ? 'No students match your search or filter.' : 'Add your first student to get started.'}
+          action={searchTerm || statusFilter !== 'all' ? undefined : { label: 'Add Student', icon: Plus, onClick: () => { setEditingStudent(null); setIsModalOpen(true); } }}
+          bordered
+        />
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredStudents.map((student) => (
           <div key={student.id} className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition-shadow group relative">
@@ -248,6 +275,7 @@ export function Students() {
           </div>
         ))}
       </div>
+      )}
 
       <AddStudentModal
         isOpen={isModalOpen}
@@ -347,11 +375,6 @@ export function Students() {
         </div>
       )}
 
-      {filteredStudents.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <p className="text-gray-500">No students found matching your criteria.</p>
-        </div>
-      )}
 
       {showEmailModal && selectedStudent && (
         <ShareEmailModal

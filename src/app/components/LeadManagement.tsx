@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
+import { EmptyState } from './EmptyState';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -759,7 +760,14 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
                   </tr>
                 ))}
                 {leads.length === 0 && (
-                  <tr><td colSpan={8} className="text-center py-10 text-gray-400">No leads found</td></tr>
+                  <tr><td colSpan={8}>
+                    <EmptyState
+                      icon={PhoneCall}
+                      title="No leads found"
+                      description={admissionsView ? 'No admitted leads yet.' : 'Add your first lead to start tracking prospective students.'}
+                      action={admissionsView ? undefined : { label: 'Add Lead', icon: Plus, onClick: () => { setEditing(null); setShowForm(true); } }}
+                    />
+                  </td></tr>
                 )}
               </tbody>
             </table>

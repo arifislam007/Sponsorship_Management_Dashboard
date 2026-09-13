@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
+import { LoadingState } from './Spinner';
+import { EmptyState } from './EmptyState';
+import { ErrorBanner } from './ErrorBanner';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -129,7 +132,7 @@ function DashboardTab() {
       .then(setData).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="py-16 text-center text-gray-400">Loading dashboard…</div>;
+  if (loading) return <LoadingState label="Loading dashboard…" fullHeight />;
   if (!data) return null;
 
   const { employee_stats: es, payroll_this_month: pm } = data;
@@ -310,7 +313,7 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
         </div>
 
         <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <ErrorBanner message={error} />
 
           {section === 'personal' && (
             <>
@@ -514,8 +517,8 @@ function EmployeeDetailModal({ empId, onClose, onEdit }: { empId: number; onClos
   const exportPdf = () => window.print();
 
   if (loading) return (
-    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
-        Loading…
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8">
+        <LoadingState />
     </Modal>
   );
   if (!emp) return null;
@@ -869,7 +872,7 @@ function EmployeesTab() {
         </button>
       </div>
 
-      {loading ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
+      {loading ? <LoadingState label="Loading employees…" /> : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -923,7 +926,14 @@ function EmployeesTab() {
                   </tr>
                 ))}
                 {employees.length === 0 && (
-                  <tr><td colSpan={8} className="text-center py-10 text-gray-400">No employees found</td></tr>
+                  <tr><td colSpan={8}>
+                    <EmptyState
+                      icon={Users}
+                      title="No employees found"
+                      description="Add your first employee to start building the HR roster."
+                      action={{ label: 'Add Employee', icon: Plus, onClick: () => { setEditing(null); setShowForm(true); } }}
+                    />
+                  </td></tr>
                 )}
               </tbody>
             </table>
@@ -992,8 +1002,8 @@ function SalarySlipModal({ payrollId, onClose }: { payrollId: number; onClose: (
   const print = () => window.print();
 
   if (loading) return (
-    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
-        Loading slip…
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8">
+        <LoadingState label="Loading slip…" />
     </Modal>
   );
   if (!slip) return null;
@@ -1180,7 +1190,7 @@ function PayrollTab() {
         </div>
       )}
 
-      {loading ? <div className="text-center py-12 text-gray-400">Loading payrolls…</div> : (
+      {loading ? <LoadingState label="Loading payrolls…" /> : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1329,7 +1339,7 @@ function PayrollCreateModal({ employees, components, defaultMonth, onClose, onSa
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <ErrorBanner message={error} />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-600">Employee *</label>
@@ -1440,7 +1450,7 @@ function BulkGenerateModal({ defaultMonth, onClose, onSaved }: { defaultMonth: s
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <p className="text-sm text-gray-600 mb-4">Generates Draft payroll for all Active/Probation employees for the selected month. Existing records are skipped.</p>
-        {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{error}</p>}
+        <ErrorBanner message={error} className="mb-3" />
         {result && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3 text-sm">
             <p className="font-medium text-green-800">Done!</p>
@@ -1537,7 +1547,7 @@ function DepartmentsTab() {
 
   const inp = 'mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]';
 
-  if (loading) return <div className="text-center py-12 text-gray-400">Loading…</div>;
+  if (loading) return <LoadingState label="Loading departments…" />;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1976,10 +1986,10 @@ function AttendanceTab() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {loading && (
-                    <tr><td colSpan={11} className="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+                    <tr><td colSpan={11}><LoadingState label="Loading attendance…" /></td></tr>
                   )}
                   {!loading && rows.length === 0 && (
-                    <tr><td colSpan={11} className="text-center py-8 text-gray-400 text-sm">No records found</td></tr>
+                    <tr><td colSpan={11}><EmptyState icon={CalendarDays} title="No records found" description="No attendance records match the selected filters." /></td></tr>
                   )}
                   {rows.map(r => (
                     <tr key={r.id} className="hover:bg-gray-50">
@@ -2039,7 +2049,7 @@ function AttendanceTab() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {monthLoading && (
-                    <tr><td colSpan={8} className="text-center py-8 text-gray-400 text-sm">Loading…</td></tr>
+                    <tr><td colSpan={8}><LoadingState label="Loading attendance…" /></td></tr>
                   )}
                   {!monthLoading && monthly.length === 0 && (
                     <tr><td colSpan={8} className="text-center py-8 text-gray-400 text-sm">No data</td></tr>

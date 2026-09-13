@@ -7,11 +7,15 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { api, DashboardSummary, DonationTrendPoint, DashboardAnalytics } from '../services/api';
+import { LoadingState } from './Spinner';
+import { ErrorBanner } from './ErrorBanner';
 
 export function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [donationTrendData, setDonationTrendData] = useState<DonationTrendPoint[]>([]);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -26,7 +30,9 @@ export function Dashboard() {
       })
       .catch((error) => {
         console.error('Failed to load dashboard data:', error);
-      });
+        setLoadError('Failed to load dashboard data. Please try again.');
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const sponsoredCount = summary?.sponsored_students ?? 0;
@@ -121,6 +127,14 @@ export function Dashboard() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="mb-6">
+          <ErrorBanner message={loadError} />
+        </div>
+      )}
+
+      {loading ? <LoadingState label="Loading dashboard…" fullHeight /> : (
+      <>
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {stats.map((stat) => (
@@ -306,6 +320,8 @@ export function Dashboard() {
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

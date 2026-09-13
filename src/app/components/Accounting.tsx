@@ -7,6 +7,7 @@ import {
 import { format } from 'date-fns';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { EmptyState } from './EmptyState';
 import {
   api,
   AccAccount, AccProject, AccVoucher, AccVoucherLine,
@@ -759,7 +760,14 @@ function VouchersTab() {
                   </tr>
                 ))}
                 {vouchers.length === 0 && (
-                  <tr><td colSpan={7} className="text-center py-10 text-gray-400">No vouchers found</td></tr>
+                  <tr><td colSpan={7}>
+                    <EmptyState
+                      icon={Receipt}
+                      title="No vouchers found"
+                      description={typeFilter || statusFilter || dateFrom || dateTo ? 'No vouchers match the selected filters.' : 'Create your first voucher to start recording transactions.'}
+                      action={typeFilter || statusFilter || dateFrom || dateTo ? undefined : { label: 'New Voucher', icon: Plus, onClick: () => setShowModal(true) }}
+                    />
+                  </td></tr>
                 )}
               </tbody>
             </table>

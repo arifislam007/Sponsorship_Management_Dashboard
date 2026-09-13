@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Modal } from './Modal';
+import { LoadingState } from './Spinner';
+import { EmptyState } from './EmptyState';
+import { ErrorBanner } from './ErrorBanner';
 
 // ── HR Employee Helper ────────────────────────────────────────────────────────
 
@@ -241,7 +244,7 @@ function DashboardTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="py-16 text-center text-gray-400">Loading dashboard…</div>;
+  if (loading) return <LoadingState label="Loading dashboard…" fullHeight />;
   if (!data) return null;
 
   const { project_stats: ps, task_stats: ts } = data;
@@ -470,7 +473,7 @@ function ProjectFormModal({ editing, onClose, onSaved }: { editing?: Project | n
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-4">
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <ErrorBanner message={error} />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-600">Project Code *</label>
@@ -588,8 +591,8 @@ function ProjectDetailModal({ project, onClose, onRefresh }: { project: Project;
   };
 
   if (loading) return (
-    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
-        Loading…
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8">
+        <LoadingState />
     </Modal>
   );
   if (!detail) return null;
@@ -774,14 +777,15 @@ function ProjectsTab() {
 
       {/* Projects grid */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">Loading projects…</div>
+        <LoadingState label="Loading projects…" />
       ) : projects.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 py-16 text-center">
-          <Briefcase size={40} className="text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No projects found.</p>
-          <button onClick={() => setShowModal(true)}
-            className="mt-3 text-[#14856E] text-sm font-medium hover:underline">Create your first project</button>
-        </div>
+        <EmptyState
+          icon={Briefcase}
+          title="No projects found"
+          description="Create your first project to start tracking progress and tasks."
+          action={{ label: 'New Project', icon: Plus, onClick: () => setShowModal(true) }}
+          bordered
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -958,7 +962,7 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <ErrorBanner message={error} />
           <div>
             <label className="text-xs font-medium text-gray-600">Project *</label>
             <select value={form.project_id} onChange={f('project_id')} disabled={!!editing}
@@ -1071,8 +1075,8 @@ function TaskDetailModal({ taskId, onClose, onRefresh }: { taskId: number; onClo
   };
 
   if (loading) return (
-    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8 text-gray-500">
-        Loading…
+    <Modal onClose={onClose} containerClassName="bg-white rounded-2xl p-8">
+        <LoadingState />
     </Modal>
   );
   if (!task) return null;
@@ -1221,7 +1225,7 @@ function TasksTab() {
 
       {/* Task list */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">Loading tasks…</div>
+        <LoadingState label="Loading tasks…" />
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">

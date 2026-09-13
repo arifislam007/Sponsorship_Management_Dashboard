@@ -5,6 +5,9 @@ import {
   ChevronDown, Save, Send, Trash2, BookOpen, TrendingUp, AlertCircle,
 } from 'lucide-react';
 import { Modal } from './Modal';
+import { LoadingState } from './Spinner';
+import { EmptyState } from './EmptyState';
+import { ErrorBanner } from './ErrorBanner';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -134,7 +137,7 @@ function DashboardTab({ classes }: { classes: ScClass[] }) {
       .then(setData).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="py-16 text-center text-gray-400">Loading…</div>;
+  if (loading) return <LoadingState label="Loading dashboard…" fullHeight />;
   if (!data) return null;
 
   const ta = data.today_attendance;
@@ -419,7 +422,7 @@ function _ClassAttendanceSummaryModal_UNUSED({ classes, onClose, onSaved }: {
         </div>
 
         <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <ErrorBanner message={error} />
 
           <div>
             <label className="text-xs font-medium text-gray-600">তারিখ *</label>
@@ -599,7 +602,7 @@ function AttendanceTab({ classes }: { classes: ScClass[] }) {
       {/* Inline grid */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
-          <div className="py-16 text-center text-gray-400 text-sm">Loading…</div>
+          <LoadingState label="Loading attendance…" fullHeight />
         ) : (
           <div className="overflow-x-auto">
             <table className="border-collapse text-xs" style={{ minWidth: `${96 + cols.length * 176}px` }}>
@@ -839,7 +842,7 @@ function MonitoringFormModal({ formId, classes, onClose, onSaved }: {
 
         {/* Single scrollable body */}
         <div className="p-5 space-y-6 max-h-[75vh] overflow-y-auto">
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <ErrorBanner message={error} />
 
           {/* Section 1: প্রাথমিক তথ্য */}
           <div>
@@ -1032,7 +1035,7 @@ function MonitoringTab({ classes }: { classes: ScClass[] }) {
         </button>
       </div>
 
-      {loading ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
+      {loading ? <LoadingState label="Loading monitoring forms…" /> : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1066,7 +1069,11 @@ function MonitoringTab({ classes }: { classes: ScClass[] }) {
                     </td>
                   </tr>
                 ))}
-                {forms.length === 0 && <tr><td colSpan={7} className="text-center py-10 text-gray-400">No monitoring forms</td></tr>}
+                {forms.length === 0 && (
+                  <tr><td colSpan={7}>
+                    <EmptyState icon={ClipboardList} title="No monitoring forms" description="Classroom monitoring forms will appear here once submitted." />
+                  </td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1128,7 +1135,7 @@ function StudentsTab({ classes }: { classes: ScClass[] }) {
         </button>
       </div>
 
-      {loading ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
+      {loading ? <LoadingState label="Loading students…" /> : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1156,7 +1163,16 @@ function StudentsTab({ classes }: { classes: ScClass[] }) {
                     </td>
                   </tr>
                 ))}
-                {students.length === 0 && <tr><td colSpan={5} className="text-center py-10 text-gray-400">No students found</td></tr>}
+                {students.length === 0 && (
+                  <tr><td colSpan={5}>
+                    <EmptyState
+                      icon={Users}
+                      title="No students found"
+                      description={search || classFilter ? 'No students match your search or filter.' : 'Add your first student to this class list.'}
+                      action={search || classFilter ? undefined : { label: 'Add Student', icon: Plus, onClick: () => { setEditing(null); setShowForm(true); } }}
+                    />
+                  </td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1218,7 +1234,7 @@ function StudentFormModal({ editing, classes, onClose, onSaved }: {
           <h3 id={titleId} className="font-bold text-gray-900">{editing ? 'Edit Student' : 'Add Student'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
-        {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{error}</p>}
+        <ErrorBanner message={error} className="mb-3" />
         <div className="space-y-3">
           <div><label className={lbl}>Full Name *</label><input value={form.full_name} onChange={f('full_name')} className={inp} /></div>
           <div><label className={lbl}>Class</label>

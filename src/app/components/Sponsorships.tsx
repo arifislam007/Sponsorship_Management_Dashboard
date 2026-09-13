@@ -3,6 +3,7 @@ import { Search, Plus, Link2, User, Heart, X, Trash2, AlertTriangle, Mail, Loade
 import { api, SponsorshipApi } from '../services/api';
 import { AddSponsorshipModal } from './AddSponsorshipModal';
 import { formatDate } from '../utils/dateFormat';
+import { EmptyState } from './EmptyState';
 
 function isEndingSoon(endDate: string, withinDays = 30): boolean {
   const end = new Date(endDate);
@@ -195,6 +196,14 @@ export function Sponsorships() {
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
+        {filteredSponsorships.length === 0 ? (
+          <EmptyState
+            icon={Link2}
+            title="No sponsorships found"
+            description={searchTerm || statusFilter !== 'all' ? 'No sponsorships match your search or filter.' : 'Create your first sponsorship to link a donor with a student.'}
+            action={searchTerm || statusFilter !== 'all' ? undefined : { label: 'New Sponsorship', icon: Plus, onClick: () => { setEditingSponsorship(null); setIsModalOpen(true); } }}
+          />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -300,11 +309,6 @@ export function Sponsorships() {
             </tbody>
           </table>
         </div>
-
-        {filteredSponsorships.length === 0 && (
-          <div className="p-12 text-center">
-            <p className="text-gray-500">No sponsorships found matching your criteria.</p>
-          </div>
         )}
       </div>
 
