@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useId } from 'react';
 import { X, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
 import { CreateStudentPayload, StudentApi } from '../services/api';
+import { Modal } from './Modal';
 
 interface AddStudentModalProps {
   isOpen: boolean;
@@ -59,6 +60,7 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
   const [submitError, setSubmitError] = useState('');
   const [formData, setFormData] = useState(defaultFormState);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -134,11 +136,14 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+    <Modal
+      onClose={onClose}
+      titleId={titleId}
+      containerClassName="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+    >
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{mode === 'edit' ? 'Edit Student' : 'Add New Student'}</h2>
+            <h2 id={titleId} className="text-2xl font-bold text-gray-900">{mode === 'edit' ? 'Edit Student' : 'Add New Student'}</h2>
             <p className="text-sm text-gray-600 mt-1">Step {step} of 3</p>
           </div>
           <button
@@ -394,7 +399,6 @@ export function AddStudentModal({ isOpen, onClose, onSubmit, initialData, mode =
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

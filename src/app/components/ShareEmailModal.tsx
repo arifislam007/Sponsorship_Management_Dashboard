@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { Mail, X, Send, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import logoUrl from '../../../logo.png';
+import { Modal } from './Modal';
 
 interface ExtraAttachment {
   filename: string;
@@ -102,6 +103,7 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', extra
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errMsg, setErrMsg] = useState('');
   const [logoDataUrl, setLogoDataUrl] = useState('');
+  const titleId = useId();
 
   useEffect(() => {
     fetchLogoBase64().then(setLogoDataUrl);
@@ -151,12 +153,16 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', extra
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+    <Modal
+      onClose={onClose}
+      titleId={titleId}
+      overlayClassName="z-[200]"
+      containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-md"
+    >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Mail size={18} className="text-[#14856E]" />
-            <h3 className="font-semibold text-gray-900">Share via Email</h3>
+            <h3 id={titleId} className="font-semibold text-gray-900">Share via Email</h3>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
         </div>
@@ -234,7 +240,6 @@ export function ShareEmailModal({ defaultSubject, getHtml, defaultTo = '', extra
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

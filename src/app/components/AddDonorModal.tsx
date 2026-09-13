@@ -1,6 +1,7 @@
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { DonorApi } from '../services/api';
+import { Modal } from './Modal';
 
 interface AddDonorModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [formData, setFormData] = useState(defaultFormState);
+  const titleId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -68,11 +70,10 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-lg shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{mode === 'edit' ? 'Edit Donor' : 'Add New Donor'}</h2>
+            <h2 id={titleId} className="text-2xl font-bold text-gray-900">{mode === 'edit' ? 'Edit Donor' : 'Add New Donor'}</h2>
             <p className="text-sm text-gray-600 mt-1">{mode === 'edit' ? 'Update donor information' : 'Register a new donor/supporter'}</p>
           </div>
           <button
@@ -159,7 +160,6 @@ export function AddDonorModal({ isOpen, onClose, onSubmit, initialData, mode = '
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

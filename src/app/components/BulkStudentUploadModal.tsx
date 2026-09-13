@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Upload, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { CreateStudentPayload, api } from '../services/api';
+import { Modal } from './Modal';
 
 const SAMPLE_FILE_URL = '/templates/student-bulk-upload-sample.xlsx';
 
@@ -111,6 +112,7 @@ export function BulkStudentUploadModal({ isOpen, onClose, onUploaded }: BulkStud
   const [isUploading, setIsUploading] = useState(false);
   const [summary, setSummary] = useState<{ created: number; failed: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
 
   const canUpload = useMemo(() => Boolean(selectedFile) && !isUploading, [isUploading, selectedFile]);
 
@@ -211,12 +213,15 @@ export function BulkStudentUploadModal({ isOpen, onClose, onUploaded }: BulkStud
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl overflow-hidden">
+    <Modal
+      onClose={onClose}
+      titleId={titleId}
+      containerClassName="w-full max-w-2xl rounded-2xl bg-white shadow-xl overflow-hidden"
+    >
         <div className="flex items-center justify-between border-b border-gray-200 p-5">
           <div>
             <p className="text-sm font-semibold text-[#14856E] uppercase tracking-[0.18em]">Bulk upload</p>
-            <h3 className="text-2xl font-bold text-gray-900 mt-1">Upload students from Excel</h3>
+            <h3 id={titleId} className="text-2xl font-bold text-gray-900 mt-1">Upload students from Excel</h3>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={24} />
@@ -308,7 +313,6 @@ export function BulkStudentUploadModal({ isOpen, onClose, onUploaded }: BulkStud
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
