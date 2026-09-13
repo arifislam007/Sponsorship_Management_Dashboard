@@ -1,12 +1,20 @@
+import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Users, FileText, Plus, AlertCircle, CheckCircle2, Loader2, X, Pencil, Package, Printer, Trash2, Power } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatDate } from '../utils/dateFormat';
 import { useAuth } from '../contexts/AuthContext';
+import { TabBar } from './TabBar';
 import logo from '../../../logo.png';
 
 type ICTTab = 'student-profile' | 'admission-form' | 'inventory';
+
+const TABS: { id: ICTTab; label: string; icon: React.ElementType }[] = [
+  { id: 'student-profile', label: 'Student Profiles', icon: Users },
+  { id: 'admission-form', label: 'Admission Forms', icon: FileText },
+  { id: 'inventory', label: 'Inventory', icon: Package },
+];
 
 const fileToDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -1109,43 +1117,7 @@ export function ICT() {
         ))}
       </div>
 
-      <div className="mb-6 border-b border-gray-200">
-        <div className="flex gap-4 md:gap-8">
-          <button
-            onClick={() => setActiveTab('student-profile')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors ${
-              activeTab === 'student-profile'
-                ? 'border-[#14856E] text-[#14856E]'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Users size={18} />
-            <span>Student Profiles</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('admission-form')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors ${
-              activeTab === 'admission-form'
-                ? 'border-[#14856E] text-[#14856E]'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <FileText size={18} />
-            <span>Admission Forms</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('inventory')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-3 font-medium transition-colors ${
-              activeTab === 'inventory'
-                ? 'border-[#14856E] text-[#14856E]'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Package size={18} />
-            <span>Inventory</span>
-          </button>
-        </div>
-      </div>
+      <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'student-profile' && (
         <div className="rounded-lg bg-white shadow">

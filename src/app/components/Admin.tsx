@@ -1,8 +1,10 @@
+import type React from 'react';
 import { useEffect, useId, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer, Bell, Mail, Send, Globe, TestTube } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader, AlertCircle, CheckCircle, X, Save, KeyRound, ClipboardList, Clock, Printer, Bell, Mail, Send, Globe, TestTube, Users, Activity } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
+import { TabBar } from './TabBar';
 
 interface User {
   id: number;
@@ -687,9 +689,19 @@ function NotificationsTab({ token }: { token: string }) {
   );
 }
 
+type AdminTab = 'users' | 'roles' | 'audit' | 'activity' | 'notifications';
+
+const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'roles', label: 'Roles & Perms', icon: KeyRound },
+  { id: 'audit', label: 'Audit Logs', icon: ClipboardList },
+  { id: 'activity', label: 'Activity', icon: Activity },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+];
+
 export function Admin() {
   const { token } = useAuth();
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState<AdminTab>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
@@ -1111,30 +1123,7 @@ export function Admin() {
       )}
 
       <div className="bg-white rounded-lg shadow border border-gray-200 mb-6">
-        <div className="overflow-x-auto border-b border-gray-200">
-          <div className="flex min-w-max">
-            {[
-              { id: 'users', label: 'Users' },
-              { id: 'roles', label: 'Roles & Perms' },
-              { id: 'audit', label: 'Audit Logs' },
-              { id: 'activity', label: 'Activity' },
-              { id: 'notifications', label: 'Notifications' },
-            ].map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`px-4 md:px-6 py-3 text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                  activeTab === id
-                    ? 'text-[#14856E] border-b-2 border-[#14856E]'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {id === 'notifications' && <Bell size={13} />}
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
         <div className="p-3 md:p-6">
           {activeTab === 'users' && (
