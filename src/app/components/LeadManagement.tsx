@@ -8,6 +8,7 @@ import {
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
 import { EmptyState } from './EmptyState';
+import { TabBar } from './TabBar';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1390,16 +1391,7 @@ export function LeadManagement() {
         <p className="text-sm text-gray-600 mt-1">ICT student lead pipeline, follow-ups and admissions</p>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto pb-1 mb-6 border-b border-gray-200">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors border-b-2 -mb-px ${
-              tab === t.id ? 'border-[#14856E] text-[#14856E] bg-green-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}>
-            <t.icon size={16} />{t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === 'dashboard'  && <DashboardTab />}
       {tab === 'leads'      && <LeadsTab />}

@@ -8,6 +8,7 @@ import { Modal } from './Modal';
 import { LoadingState } from './Spinner';
 import { EmptyState } from './EmptyState';
 import { ErrorBanner } from './ErrorBanner';
+import { TabBar } from './TabBar';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -88,7 +89,9 @@ const MONITORING_ITEMS_DEF: { key: string; label: string }[] = [
   { key: 'classroom_environment',      label: 'শ্রেণিকক্ষের পরিবেশ সুন্দর' },
 ];
 
-const TABS = [
+type SchoolTab = 'dashboard' | 'attendance' | 'monitoring' | 'students' | 'reports';
+
+const TABS: { id: SchoolTab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'attendance', label: 'Attendance', icon: CalendarDays },
   { id: 'monitoring', label: 'Evaluation', icon: ClipboardList },
@@ -1631,7 +1634,7 @@ function ReportsTab({ classes }: { classes: ScClass[] }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function School() {
-  const [tab, setTab] = useState<'dashboard' | 'attendance' | 'monitoring' | 'students' | 'reports'>('dashboard');
+  const [tab, setTab] = useState<SchoolTab>('dashboard');
   const [classes, setClasses] = useState<ScClass[]>([]);
 
   useEffect(() => {
@@ -1648,16 +1651,7 @@ export function School() {
         <p className="text-sm text-gray-600 mt-1">Attendance tracking, classroom monitoring & reports</p>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto pb-1 mb-6 border-b border-gray-200">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id as any)}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors border-b-2 -mb-px ${
-              tab === t.id ? 'border-[#14856E] text-[#14856E] bg-green-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}>
-            <t.icon size={16} /><span className="hidden sm:inline">{t.label}</span>
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} active={tab} onChange={setTab} compact />
 
       {tab === 'dashboard'   && <DashboardTab classes={classes} />}
       {tab === 'attendance'  && <AttendanceTab classes={classes} />}
