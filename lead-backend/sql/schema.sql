@@ -49,7 +49,24 @@ CREATE TABLE IF NOT EXISTS lead_sheet_config (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS lead_whatsapp_messages (
+  id SERIAL PRIMARY KEY,
+  lead_id INTEGER REFERENCES lead_leads(id) ON DELETE CASCADE,
+  external_message_id VARCHAR(100),
+  chat_id VARCHAR(50) NOT NULL,
+  direction VARCHAR(10) NOT NULL, -- 'outbound' | 'inbound'
+  message_type VARCHAR(20) NOT NULL DEFAULT 'text',
+  body TEXT,
+  from_me BOOLEAN NOT NULL DEFAULT false,
+  is_group BOOLEAN NOT NULL DEFAULT false,
+  status VARCHAR(20) NOT NULL DEFAULT 'sent', -- 'sent' | 'failed' | 'received'
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_lead_leads_status      ON lead_leads(status);
 CREATE INDEX IF NOT EXISTS idx_lead_leads_course       ON lead_leads(course_id);
 CREATE INDEX IF NOT EXISTS idx_lead_followups_lead     ON lead_followups(lead_id);
 CREATE INDEX IF NOT EXISTS idx_lead_followups_next     ON lead_followups(next_followup_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_messages_external_id ON lead_whatsapp_messages(external_message_id) WHERE external_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_wa_messages_lead_id ON lead_whatsapp_messages(lead_id);

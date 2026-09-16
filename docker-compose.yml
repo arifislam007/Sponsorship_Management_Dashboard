@@ -152,6 +152,10 @@ services:
       DB_NAME: ${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      OPENWA_API_URL: ${OPENWA_API_URL:-}
+      OPENWA_API_KEY: ${OPENWA_API_KEY:-}
+      OPENWA_SESSION_ID: ${OPENWA_SESSION_ID:-}
+      OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:-}
       PORT: 5006
       NODE_ENV: ${NODE_ENV:-development}
     depends_on:
