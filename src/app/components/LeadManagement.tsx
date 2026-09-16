@@ -4,11 +4,14 @@ import * as XLSX from 'xlsx';
 import {
   LayoutDashboard, Users, BookOpen, PhoneCall, GraduationCap, FileBarChart,
   Plus, Search, X, Edit2, Trash2, Upload, Download, Loader2, ExternalLink, Printer, Mail, RefreshCw,
+  MessageCircle, Send,
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
 import { EmptyState } from './EmptyState';
 import { TabBar } from './TabBar';
+import { LoadingState } from './Spinner';
+import { ErrorBanner } from './ErrorBanner';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -36,6 +39,11 @@ interface DashboardData {
   leads_by_month: { month: string; month_label: string; count: number }[];
   status_by_source: { source: string; new: number; contacted: number; interested: number; followup: number; admitted: number; lost: number }[];
   admitted_by_attempts: { attempts: number; lead_count: number }[];
+}
+interface WhatsAppMessage {
+  id: number; lead_id: number; external_message_id: string | null; chat_id: string;
+  direction: 'outbound' | 'inbound'; message_type: string; body: string | null;
+  from_me: boolean; is_group: boolean; status: string; created_by: number | null; created_at: string;
 }
 interface MonthCount { month: string; month_label: string; count: number; }
 interface ReportsData {
@@ -113,6 +121,11 @@ const STATUS_COLORS: Record<string, string> = {
 function fmtDate(d?: string) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function fmtDateTime(d?: string) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 const MAX_FOLLOWUP_ATTEMPTS = 5;
@@ -633,6 +646,112 @@ function GoogleSheetSyncModal({ onClose, onSynced }: { onClose: () => void; onSy
   );
 }
 
+// ── WhatsApp Thread Modal ─────────────────────────────────────────────────────
+
+function WhatsAppThreadModal({ lead, onClose }: { lead: Lead; onClose: () => void }) {
+  const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const titleId = useId();
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    leadFetch<{ data: WhatsAppMessage[] }>(`/whatsapp/${lead.id}?limit=100&offset=0`)
+      .then(r => setMessages(r.data))
+      .catch(e => setLoadError(e.message))
+      .finally(() => setLoading(false));
+  }, [lead.id]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [messages]);
+
+  const send = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setSendError('');
+    setSending(true);
+    try {
+      const created = await leadFetch<WhatsAppMessage>('/whatsapp/send', {
+        method: 'POST',
+        body: JSON.stringify({ lead_id: lead.id, text: trimmed }),
+      });
+      setMessages(prev => [...prev, created]);
+      setText('');
+    } catch (e: any) {
+      setSendError(e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+      <div className="flex items-center justify-between p-5 border-b border-gray-200">
+        <div>
+          <h3 id={titleId} className="text-lg font-bold text-gray-900">WhatsApp — {lead.full_name}</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{lead.phone}</p>
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+      </div>
+
+      <div className="p-5 max-h-[70vh] overflow-y-auto bg-gray-50">
+        {loading && <LoadingState label="Loading messages…" />}
+        {!loading && loadError && <ErrorBanner message={loadError} />}
+        {!loading && !loadError && messages.length === 0 && (
+          <p className="text-center py-10 text-gray-400 text-sm">No messages yet. Send the first one below.</p>
+        )}
+        {!loading && !loadError && messages.length > 0 && (
+          <div className="space-y-2">
+            {messages.map(m => (
+              <div key={m.id} className={`flex ${m.from_me ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                    m.from_me ? 'bg-[#14856E] text-white rounded-br-sm' : 'bg-gray-200 text-gray-800 rounded-bl-sm'
+                  }`}
+                >
+                  {m.body !== null ? (
+                    <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                  ) : (
+                    <p className={`italic ${m.from_me ? 'text-white/70' : 'text-gray-500'}`}>[non-text message]</p>
+                  )}
+                  <p className={`text-[10px] mt-1 text-right ${m.from_me ? 'text-white/70' : 'text-gray-500'}`}>{fmtDateTime(m.created_at)}</p>
+                </div>
+              </div>
+            ))}
+            <div ref={threadEndRef} />
+          </div>
+        )}
+      </div>
+
+      <div className="p-5 border-t border-gray-200 space-y-2">
+        {sendError && <ErrorBanner message={sendError} />}
+        <div className="flex gap-2">
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            placeholder="Type a message…"
+            className={`${inp} mt-0 flex-1`}
+          />
+          <button
+            onClick={send}
+            disabled={sending || !text.trim()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0"
+          >
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {sending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Leads Tab ─────────────────────────────────────────────────────────────────
 
 function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatus; admissionsView?: boolean }) {
@@ -648,6 +767,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
   const [showBulk, setShowBulk] = useState(false);
   const [showSheetSync, setShowSheetSync] = useState(false);
   const [followupLead, setFollowupLead] = useState<Lead | null>(null);
+  const [whatsappLead, setWhatsappLead] = useState<Lead | null>(null);
   const [deleting, setDeleting] = useState<Lead | null>(null);
   const deleteTitleId = useId();
 
@@ -754,6 +874,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
                           <Link to="/dashboard/ict?tab=admission-form&new=1" className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Open ICT Admission Form"><ExternalLink size={14} /></Link>
                         )}
                         <button onClick={() => setFollowupLead(l)} className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Log Follow-up"><PhoneCall size={14} /></button>
+                        <button onClick={() => setWhatsappLead(l)} className="p-1.5 text-gray-400 hover:text-[#14856E]" title="Send WhatsApp Message"><MessageCircle size={14} /></button>
                         <button onClick={() => { setEditing(l); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-gray-700"><Edit2 size={14} /></button>
                         <button onClick={() => setDeleting(l)} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
                       </div>
@@ -790,6 +911,9 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
       )}
       {followupLead && (
         <FollowupFormModal leads={leads} initialLeadId={followupLead.id} onClose={() => setFollowupLead(null)} onSaved={load} />
+      )}
+      {whatsappLead && (
+        <WhatsAppThreadModal lead={whatsappLead} onClose={() => setWhatsappLead(null)} />
       )}
       {deleting && (
         <Modal onClose={() => setDeleting(null)} titleId={deleteTitleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
