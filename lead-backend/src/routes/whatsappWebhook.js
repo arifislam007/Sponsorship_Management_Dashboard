@@ -64,7 +64,7 @@ async function handleMessageReceived(event) {
       `INSERT INTO lead_whatsapp_messages
          (lead_id, external_message_id, chat_id, direction, message_type, body, from_me, is_group, status)
        VALUES ($1,$2,$3,'inbound',$4,$5,$6,$7,'received')
-       ON CONFLICT (external_message_id) DO NOTHING`,
+       ON CONFLICT (external_message_id) WHERE external_message_id IS NOT NULL DO NOTHING`,
       [leadId, externalMessageId, chatId, messageType, body, fromMe, isGroup]
     );
   } catch (err) {
