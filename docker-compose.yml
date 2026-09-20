@@ -151,6 +151,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-sombhabona_internal_secret_2026}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
       OPENWA_API_URL: ${OPENWA_API_URL:-}
       OPENWA_API_KEY: ${OPENWA_API_KEY:-}

@@ -619,7 +619,7 @@ function NotificationsTab({ token }: { token: string }) {
           <span className="text-xs text-gray-400">(applies to your account)</span>
         </div>
         <form onSubmit={savePrefs} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Email prefs */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -651,6 +651,18 @@ function NotificationsTab({ token }: { token: string }) {
                 <label htmlFor="wp_enabled" className="text-sm font-medium text-gray-700">Browser Push Notifications</label>
               </div>
               <p className="text-xs text-gray-400">Subscribe via the bell icon in the sidebar.</p>
+            </div>
+            {/* WhatsApp prefs */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="wa_enabled" {...pf('whatsapp_enabled')} className="accent-[#14856E]" />
+                <label htmlFor="wa_enabled" className="text-sm font-medium text-gray-700">WhatsApp Notifications</label>
+              </div>
+              <p className="text-xs text-gray-400">Sent to your mobile number on file in HR.</p>
+              <button type="button" onClick={() => test('whatsapp')} disabled={!!testing}
+                className="text-xs text-[#14856E] hover:underline disabled:opacity-50">
+                {testing === 'whatsapp' ? 'Sending…' : 'Send test message'}
+              </button>
             </div>
           </div>
           <div>

@@ -14,7 +14,13 @@ import { TabBar } from './TabBar';
 
 // ── HR Employee Helper ────────────────────────────────────────────────────────
 
-interface HrEmployee { id: number; employee_code: string; full_name: string; department_name?: string; designation_title?: string; linked_user_id?: number | null; }
+interface HrEmployee {
+  id: number; employee_code: string; full_name: string; department_name?: string; designation_title?: string;
+  linked_user_id?: number | null;
+  // Resolved login user id: explicit linked_user_id, falling back to an email match
+  // against the users table (same resolution HR's attendance module already uses).
+  effective_user_id?: number | null;
+}
 
 async function fetchHrEmployees(): Promise<HrEmployee[]> {
   const token = localStorage.getItem('authToken');
@@ -913,9 +919,10 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
     !!editing && !editing.assigned_user_id && !!editing.assigned_user_name
   );
   // Tracks the selected HR employee record (for the dropdown), independent from
-  // form.assigned_user_id — which stores the employee's linked LOGIN user id
-  // (hr_employees.linked_user_id), not the HR employee record id, so that tasks
-  // can be matched to the assignee's own "My Tasks" dashboard view.
+  // form.assigned_user_id — which stores the employee's resolved LOGIN user id
+  // (effective_user_id: explicit link, or an email match against users), not the
+  // HR employee record id, so tasks can be matched to the assignee's own
+  // "My Tasks" dashboard view.
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -924,10 +931,10 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
   useEffect(() => { fetchHrEmployees().then(setEmployees); }, []);
 
   // Pre-select the assignee dropdown when editing an existing task, once the
-  // employee list has loaded, by matching on the linked login user id.
+  // employee list has loaded, by matching on the resolved login user id.
   useEffect(() => {
     if (!editing?.assigned_user_id || !employees.length) return;
-    const emp = employees.find(em => em.linked_user_id === editing.assigned_user_id);
+    const emp = employees.find(em => em.effective_user_id === editing.assigned_user_id);
     if (emp) setSelectedEmployeeId(String(emp.id));
   }, [editing, employees]);
 
@@ -943,7 +950,7 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
       const emp = employees.find(em => String(em.id) === id);
       setForm(p => ({
         ...p,
-        assigned_user_id: emp?.linked_user_id ? String(emp.linked_user_id) : '',
+        assigned_user_id: emp?.effective_user_id ? String(emp.effective_user_id) : '',
         assigned_user_name: emp?.full_name ?? '',
       }));
     }
@@ -1012,7 +1019,7 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
                 {employees.map(e => (
                   <option key={e.id} value={e.id}>
                     {e.full_name}{e.designation_title ? ` (${e.designation_title})` : ''}
-                    {!e.linked_user_id ? ' — no dashboard access' : ''}
+                    {!e.effective_user_id ? ' — no dashboard access' : ''}
                   </option>
                 ))}
                 <option value="__manual__">✎ Enter manually...</option>

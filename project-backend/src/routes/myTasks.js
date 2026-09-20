@@ -1,26 +1,12 @@
 import { Router } from 'express';
 import { query } from '../db.js';
+import { recalcProjectProgress, notifyManagerOfTaskUpdate } from '../lib/taskHelpers.js';
 
 // Self-scoped task access, mounted WITHOUT the Projects module gate — any
 // authenticated user can see and update progress on tasks assigned to them,
 // even without full Projects module permission (e.g. staff who receive an
 // occasional task but don't manage projects).
 export const myTasksRouter = Router();
-
-async function recalcProjectProgress(projectId) {
-  await query(
-    `UPDATE pm_projects SET
-       progress = (
-         SELECT CASE WHEN COUNT(*) = 0 THEN 0
-                ELSE ROUND(COUNT(*) FILTER (WHERE status = 'Completed') * 100.0 / COUNT(*))
-                END
-         FROM pm_tasks WHERE project_id = $1
-       ),
-       updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1`,
-    [projectId]
-  );
-}
 
 myTasksRouter.get('/', async (req, res, next) => {
   try {
@@ -70,8 +56,14 @@ myTasksRouter.put('/:id', async (req, res, next) => {
       [id, status || null, progress !== undefined ? Number(progress) : null]
     );
 
-    await recalcProjectProgress(existing.rows[0].project_id);
+    const task = result.rows[0];
+    await recalcProjectProgress(task.project_id);
 
-    res.json(result.rows[0]);
+    const changedFields = Object.entries({ status, progress })
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${k} → ${v}`);
+    notifyManagerOfTaskUpdate(task.project_id, task, changedFields, req.user?.userId, req.user?.username);
+
+    res.json(task);
   } catch (err) { next(err); }
 });

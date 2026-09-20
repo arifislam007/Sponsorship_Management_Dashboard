@@ -26,8 +26,12 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
   notify_task_assigned BOOLEAN DEFAULT true,
   notify_leave_update BOOLEAN DEFAULT true,
   notify_system BOOLEAN DEFAULT true,
+  whatsapp_enabled BOOLEAN DEFAULT true,
   updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+-- Opt-out (not opt-in) since the phone number comes from the employee's HR
+-- record already on file — no per-user setup needed, unlike email/Telegram.
+ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id SERIAL PRIMARY KEY,

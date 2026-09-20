@@ -448,7 +448,7 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
                 <p className="text-[11px] text-gray-400 mt-1">
                   {loginAccounts.length === 0
                     ? 'Only Admin can link an employee to a login account.'
-                    : 'Required for this employee to see attendance and assigned tasks on their dashboard.'}
+                    : 'Usually not needed — accounts with a matching email are linked automatically. Set this only when the login email differs from the employee\'s email.'}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">

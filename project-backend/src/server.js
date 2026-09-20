@@ -7,6 +7,7 @@ import { projectsRouter } from './routes/projects.js';
 import { tasksRouter } from './routes/tasks.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { myTasksRouter } from './routes/myTasks.js';
+import { startOverdueReminderJob } from './jobs/overdueReminder.js';
 
 const app = express();
 
@@ -43,6 +44,7 @@ async function start() {
     app.listen(config.port, () => {
       console.log(`✓ Project Service running on port ${config.port}`);
     });
+    startOverdueReminderJob();
   } catch (err) {
     console.error('✗ Failed to start:', err.message);
     process.exit(1);

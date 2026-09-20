@@ -11,6 +11,7 @@ import { reportsRouter } from './routes/reports.js';
 import { sheetSyncRouter } from './routes/sheetSync.js';
 import { whatsappRouter } from './routes/whatsapp.js';
 import { whatsappWebhookRouter } from './routes/whatsappWebhook.js';
+import { whatsappInternalRouter } from './routes/whatsappInternal.js';
 
 const app = express();
 app.use(express.json({
@@ -37,6 +38,10 @@ app.use('/api/leads/sheet-sync', authMiddleware, leadAccess, sheetSyncRouter);
 // Mounted BEFORE the authenticated /api/leads/whatsapp route so Express
 // resolves this more specific public path first.
 app.use('/api/leads/whatsapp/webhook', whatsappWebhookRouter);
+// Public (internal-secret guarded): other backend services send plain
+// WhatsApp notifications through here. Mounted before the authenticated
+// route below for the same reason as the webhook route above.
+app.use('/api/leads/whatsapp/internal', whatsappInternalRouter);
 app.use('/api/leads/whatsapp',   authMiddleware, leadAccess, whatsappRouter);
 app.use('/api/leads',            authMiddleware, leadAccess, leadsRouter);
 

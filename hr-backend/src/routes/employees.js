@@ -51,12 +51,14 @@ employeesRouter.get('/', async (req, res, next) => {
       `SELECT e.id, e.employee_code, e.full_name, e.photo, e.gender, e.mobile, e.email,
               e.employee_type, e.employment_status, e.joining_date, e.work_email,
               e.basic_salary::float8, e.payment_method, e.linked_user_id,
+              COALESCE(e.linked_user_id, u.id) AS effective_user_id,
               d.name AS department_name, des.title AS designation_title,
               m.full_name AS manager_name
        FROM hr_employees e
        LEFT JOIN hr_departments d   ON d.id = e.department_id
        LEFT JOIN hr_designations des ON des.id = e.designation_id
        LEFT JOIN hr_employees m     ON m.id = e.reporting_manager_id
+       LEFT JOIN users u           ON LOWER(u.email) = LOWER(e.email)
        ${where}
        ORDER BY e.created_at DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,

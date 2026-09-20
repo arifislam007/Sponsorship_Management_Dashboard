@@ -97,6 +97,43 @@ async function sendTelegramNotif(userId, eventType, title, body) {
   }
 }
 
+// Resolve an employee's mobile number from a login user id, using the same
+// linked_user_id / email-match resolution HR's attendance module already uses.
+async function resolveEmployeePhone(userId) {
+  const r = await query(
+    `SELECT e.mobile FROM hr_employees e
+     LEFT JOIN users u ON LOWER(u.email) = LOWER(e.email)
+     WHERE (e.linked_user_id = $1 OR u.id = $1) AND NOT e.is_deleted
+     LIMIT 1`,
+    [userId]
+  );
+  return r.rows[0]?.mobile || null;
+}
+
+async function sendWhatsAppNotif(userId, eventType, title, body) {
+  const prefs = await getPrefs(userId);
+  if (prefs?.whatsapp_enabled === false) return;
+
+  const secret = process.env.INTERNAL_SECRET;
+  if (!secret) return;
+
+  const phone = await resolveEmployeePhone(userId);
+  if (!phone) return;
+
+  const text = `*${title}*\n${body}`;
+  try {
+    const res = await fetch('http://lead-backend:5006/api/leads/whatsapp/internal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+      body: JSON.stringify({ phone, text }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    await logNotif(userId, 'whatsapp', eventType, title, body, 'sent', null);
+  } catch (err) {
+    await logNotif(userId, 'whatsapp', eventType, title, body, 'failed', err.message);
+  }
+}
+
 async function sendWebPushNotif(userId, eventType, title, body, url = '/') {
   const prefs = await getPrefs(userId);
   if (prefs?.web_push_enabled === false) return;
@@ -143,6 +180,7 @@ export async function notify(userId, eventType, title, body, url = '/') {
       sendWebPushNotif(userId, eventType, title, body, url),
       sendEmailNotif(userId, eventType, title, emailHtml),
       sendTelegramNotif(userId, eventType, title, body),
+      sendWhatsAppNotif(userId, eventType, title, body),
     ]);
   } catch (err) {
     console.error('notify() error:', err.message);
@@ -191,5 +229,7 @@ export async function testChannel(userId, channel) {
     await sendTelegramNotif(userId, 'test', title, body);
   } else if (channel === 'web') {
     await sendWebPushNotif(userId, 'test', title, body, '/');
+  } else if (channel === 'whatsapp') {
+    await sendWhatsAppNotif(userId, 'test', title, body);
   }
 }

@@ -85,6 +85,7 @@ notificationsRouter.get('/preferences', async (req, res, next) => {
       telegram_enabled: false, telegram_chat_id: '',
       web_push_enabled: true,
       notify_task_assigned: true, notify_leave_update: true, notify_system: true,
+      whatsapp_enabled: true,
     });
   } catch (err) { next(err); }
 });
@@ -96,23 +97,27 @@ notificationsRouter.put('/preferences', async (req, res, next) => {
       telegram_enabled, telegram_chat_id,
       web_push_enabled,
       notify_task_assigned, notify_leave_update, notify_system,
+      whatsapp_enabled,
     } = req.body;
     await query(
       `INSERT INTO notification_preferences
          (user_id, email_enabled, email_address, telegram_enabled, telegram_chat_id,
-          web_push_enabled, notify_task_assigned, notify_leave_update, notify_system, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+          web_push_enabled, notify_task_assigned, notify_leave_update, notify_system,
+          whatsapp_enabled, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          email_enabled = $2, email_address = $3,
          telegram_enabled = $4, telegram_chat_id = $5,
          web_push_enabled = $6,
          notify_task_assigned = $7, notify_leave_update = $8, notify_system = $9,
+         whatsapp_enabled = $10,
          updated_at = NOW()`,
       [req.user.userId,
        email_enabled ?? false, email_address || null,
        telegram_enabled ?? false, telegram_chat_id || null,
        web_push_enabled ?? true,
-       notify_task_assigned ?? true, notify_leave_update ?? true, notify_system ?? true]
+       notify_task_assigned ?? true, notify_leave_update ?? true, notify_system ?? true,
+       whatsapp_enabled ?? true]
     );
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -187,8 +192,8 @@ notificationsRouter.post('/send-email', async (req, res, next) => {
 notificationsRouter.post('/test', async (req, res, next) => {
   try {
     const { channel } = req.body;
-    if (!['email', 'telegram', 'web'].includes(channel)) {
-      return res.status(400).json({ message: 'channel must be email, telegram, or web' });
+    if (!['email', 'telegram', 'web', 'whatsapp'].includes(channel)) {
+      return res.status(400).json({ message: 'channel must be email, telegram, web, or whatsapp' });
     }
     await testChannel(req.user.userId, channel);
     res.json({ ok: true });

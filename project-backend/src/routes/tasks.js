@@ -1,36 +1,10 @@
 import { Router } from 'express';
 import { query } from '../db.js';
+import { recalcProjectProgress, notifyUser, notifyManagerOfTaskUpdate } from '../lib/taskHelpers.js';
 
 export const tasksRouter = Router();
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-async function recalcProjectProgress(projectId) {
-  await query(
-    `UPDATE pm_projects SET
-       progress = (
-         SELECT CASE WHEN COUNT(*) = 0 THEN 0
-                ELSE ROUND(COUNT(*) FILTER (WHERE status = 'Completed') * 100.0 / COUNT(*))
-                END
-         FROM pm_tasks WHERE project_id = $1
-       ),
-       updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1`,
-    [projectId]
-  );
-}
-
-async function notifyUser(userId, eventType, title, body, url) {
-  const secret = process.env.INTERNAL_SECRET;
-  if (!secret || !userId) return;
-  try {
-    await fetch('http://backend:8000/api/v1/notifications/internal/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
-      body: JSON.stringify({ userId, eventType, title, body, url }),
-    });
-  } catch { /* non-fatal */ }
-}
 
 async function logActivity(projectId, taskId, userId, userName, action, details) {
   await query(
@@ -201,6 +175,12 @@ tasksRouter.put('/:id', async (req, res, next) => {
         '/dashboard/projects'
       );
     }
+
+    // Notify the project manager whenever a task under their project changes.
+    const changedFields = Object.entries({ name, status, progress, priority, due_date, assigned_user_name })
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${k.replace(/_/g, ' ')} → ${v}`);
+    notifyManagerOfTaskUpdate(task.project_id, task, changedFields, req.user?.userId, req.user?.username);
 
     res.json(task);
   } catch (err) { next(err); }
