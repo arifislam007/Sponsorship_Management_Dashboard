@@ -37,6 +37,7 @@ interface Employee {
   payment_method?: string; bank_name?: string; bank_branch?: string;
   account_number?: string; routing_number?: string;
   mobile_wallet_number?: string; tax_id?: string;
+  linked_user_id?: number | null;
   documents?: EmpDoc[];
 }
 interface EmpDoc { id: number; document_type: string; file_name: string; file_size?: number; uploaded_by_name?: string; created_at: string; }
@@ -263,7 +264,17 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
     routing_number: editing?.routing_number ?? '',
     mobile_wallet_number: editing?.mobile_wallet_number ?? '',
     tax_id: editing?.tax_id ?? '',
+    linked_user_id: editing?.linked_user_id ? String(editing.linked_user_id) : '',
   });
+  const [loginAccounts, setLoginAccounts] = useState<{ id: number; username: string; full_name: string }[]>([]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    fetch('/api/v1/admin/users', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setLoginAccounts(data.users ?? data ?? []))
+      .catch(() => setLoginAccounts([])); // non-admin users can't list accounts — field just stays empty
+  }, []);
 
   const f = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
@@ -280,6 +291,7 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
         designation_id: form.designation_id ? Number(form.designation_id) : null,
         reporting_manager_id: form.reporting_manager_id ? Number(form.reporting_manager_id) : null,
         basic_salary: Number(form.basic_salary || 0),
+        linked_user_id: form.linked_user_id ? Number(form.linked_user_id) : null,
       };
       if (editing) {
         await hrFetch(`/employees/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -419,6 +431,25 @@ function EmployeeFormModal({ editing, departments, designations, employees, onCl
                   <option value="">None</option>
                   {employees.filter(e => e.id !== editing?.id).map(e => <option key={e.id} value={e.id}>{e.full_name} ({e.employee_code})</option>)}
                 </select>
+              </div>
+              <div>
+                <label className={lbl}>Linked Login Account</label>
+                <select value={form.linked_user_id} onChange={f('linked_user_id')} className={inp} disabled={loginAccounts.length === 0}>
+                  <option value="">— Not linked —</option>
+                  {loginAccounts.map(u => {
+                    const linkedElsewhere = employees.find(e => e.id !== editing?.id && e.linked_user_id === u.id);
+                    return (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.username}){linkedElsewhere ? ` — already linked to ${linkedElsewhere.full_name}` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {loginAccounts.length === 0
+                    ? 'Only Admin can link an employee to a login account.'
+                    : 'Required for this employee to see attendance and assigned tasks on their dashboard.'}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className={lbl}>Joining Date</label><input type="date" value={form.joining_date} onChange={f('joining_date')} className={inp} /></div>

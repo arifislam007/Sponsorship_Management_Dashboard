@@ -10,8 +10,11 @@ import { format } from 'date-fns';
 import { api, DashboardSummary, DonationTrendPoint, DashboardAnalytics } from '../services/api';
 import { LoadingState } from './Spinner';
 import { ErrorBanner } from './ErrorBanner';
+import { useAuth } from '../contexts/AuthContext';
 
 export function Dashboard() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('admin');
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [donationTrendData, setDonationTrendData] = useState<DonationTrendPoint[]>([]);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
@@ -152,10 +155,10 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* Attendance + My Tasks */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 max-w-2xl">
+      {/* Attendance + My Tasks (My Tasks hidden for Admin — task management belongs in Projects, not a personal assignee view) */}
+      <div className={`grid grid-cols-1 ${isAdmin ? '' : 'sm:grid-cols-2'} gap-4 mb-6 max-w-2xl`}>
         <AttendancePanel />
-        <MyTasksPanel />
+        {!isAdmin && <MyTasksPanel />}
       </div>
 
       {/* Sponsorship rate progress bar */}
