@@ -6,6 +6,7 @@ import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import { projectsRouter } from './routes/projects.js';
 import { tasksRouter } from './routes/tasks.js';
 import { dashboardRouter } from './routes/dashboard.js';
+import { myTasksRouter } from './routes/myTasks.js';
 
 const app = express();
 
@@ -18,6 +19,10 @@ app.get('/api/health', (req, res) => {
 });
 
 const projectAccess = moduleAccessMiddleware('Projects');
+// Mounted ahead of the module-gated routes below, and without projectAccess,
+// so any authenticated user can see/update tasks assigned to them even
+// without full Projects module permission.
+app.use('/api/projects/tasks/mine', authMiddleware, myTasksRouter);
 app.use('/api/projects/dashboard', authMiddleware, projectAccess, dashboardRouter);
 app.use('/api/projects/tasks',     authMiddleware, projectAccess, tasksRouter);
 app.use('/api/projects',           authMiddleware, projectAccess, projectsRouter);

@@ -50,7 +50,7 @@ employeesRouter.get('/', async (req, res, next) => {
     const result = await query(
       `SELECT e.id, e.employee_code, e.full_name, e.photo, e.gender, e.mobile, e.email,
               e.employee_type, e.employment_status, e.joining_date, e.work_email,
-              e.basic_salary::float8, e.payment_method,
+              e.basic_salary::float8, e.payment_method, e.linked_user_id,
               d.name AS department_name, des.title AS designation_title,
               m.full_name AS manager_name
        FROM hr_employees e

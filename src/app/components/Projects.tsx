@@ -14,7 +14,7 @@ import { TabBar } from './TabBar';
 
 // ── HR Employee Helper ────────────────────────────────────────────────────────
 
-interface HrEmployee { id: number; employee_code: string; full_name: string; department_name?: string; designation_title?: string; }
+interface HrEmployee { id: number; employee_code: string; full_name: string; department_name?: string; designation_title?: string; linked_user_id?: number | null; }
 
 async function fetchHrEmployees(): Promise<HrEmployee[]> {
   const token = localStorage.getItem('authToken');
@@ -912,21 +912,40 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
   const [isManualAssignee, setIsManualAssignee] = useState(
     !!editing && !editing.assigned_user_id && !!editing.assigned_user_name
   );
+  // Tracks the selected HR employee record (for the dropdown), independent from
+  // form.assigned_user_id — which stores the employee's linked LOGIN user id
+  // (hr_employees.linked_user_id), not the HR employee record id, so that tasks
+  // can be matched to the assignee's own "My Tasks" dashboard view.
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const titleId = useId();
 
   useEffect(() => { fetchHrEmployees().then(setEmployees); }, []);
 
+  // Pre-select the assignee dropdown when editing an existing task, once the
+  // employee list has loaded, by matching on the linked login user id.
+  useEffect(() => {
+    if (!editing?.assigned_user_id || !employees.length) return;
+    const emp = employees.find(em => em.linked_user_id === editing.assigned_user_id);
+    if (emp) setSelectedEmployeeId(String(emp.id));
+  }, [editing, employees]);
+
   const handleAssigneeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value;
     if (id === '__manual__') {
       setIsManualAssignee(true);
+      setSelectedEmployeeId('');
       setForm(p => ({ ...p, assigned_user_id: '', assigned_user_name: '' }));
     } else {
       setIsManualAssignee(false);
+      setSelectedEmployeeId(id);
       const emp = employees.find(em => String(em.id) === id);
-      setForm(p => ({ ...p, assigned_user_id: id, assigned_user_name: emp?.full_name ?? '' }));
+      setForm(p => ({
+        ...p,
+        assigned_user_id: emp?.linked_user_id ? String(emp.linked_user_id) : '',
+        assigned_user_name: emp?.full_name ?? '',
+      }));
     }
   };
 
@@ -986,13 +1005,14 @@ function TaskFormModal({ projects, editing, defaultProjectId, onClose, onSaved }
             <div>
               <label className="text-xs font-medium text-gray-600">Assigned To</label>
               <select
-                value={form.assigned_user_id ? form.assigned_user_id : isManualAssignee ? '__manual__' : ''}
+                value={selectedEmployeeId || (isManualAssignee ? '__manual__' : '')}
                 onChange={handleAssigneeChange}
                 className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14856E]">
                 <option value="">— Unassigned —</option>
                 {employees.map(e => (
                   <option key={e.id} value={e.id}>
                     {e.full_name}{e.designation_title ? ` (${e.designation_title})` : ''}
+                    {!e.linked_user_id ? ' — no dashboard access' : ''}
                   </option>
                 ))}
                 <option value="__manual__">✎ Enter manually...</option>
