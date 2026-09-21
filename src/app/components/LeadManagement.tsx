@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import {
   LayoutDashboard, Users, BookOpen, PhoneCall, GraduationCap, FileBarChart,
   Plus, Search, X, Edit2, Trash2, Upload, Download, Loader2, ExternalLink, Printer, Mail, RefreshCw,
-  MessageCircle, Send,
+  MessageCircle, Send, Building2,
 } from 'lucide-react';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
@@ -18,9 +18,15 @@ import { ErrorBanner } from './ErrorBanner';
 type LeadStatus = 'New' | 'Contacted' | 'Interested' | 'Follow-up' | 'Admitted' | 'Lost';
 
 interface Course { id: number; name: string; code?: string; duration_months?: number; fee?: number; is_active: boolean; lead_count?: number; }
+interface Institute {
+  id: number; name: string; institute_type: string; location?: string;
+  contact_person_name?: string; contact_person_designation?: string; contact_person_phone?: string;
+  approx_student_count?: number; status: string; notes?: string; created_at?: string;
+}
 interface Lead {
   id: number; full_name: string; phone: string; email?: string; gender?: string; address?: string;
   course_id?: number | null; course_name?: string; source: string; reference_name?: string; status: LeadStatus;
+  institute_id?: number | null; institute_name?: string;
   assigned_to?: string; notes?: string; admission_date?: string; batch?: string;
   created_at: string; updated_at: string;
 }
@@ -116,6 +122,16 @@ const STATUS_COLORS: Record<string, string> = {
   'Follow-up': 'bg-orange-100 text-orange-700',
   Admitted: 'bg-green-100 text-green-700',
   Lost: 'bg-gray-100 text-gray-600',
+};
+
+const INSTITUTE_TYPES = ['School', 'College', 'University', 'Coaching Center', 'Madrasa', 'Other'];
+const INSTITUTE_STATUSES = ['Prospect', 'Contacted', 'Visited', 'Partnered', 'Not Interested'];
+const INSTITUTE_STATUS_COLORS: Record<string, string> = {
+  Prospect: 'bg-blue-100 text-blue-700',
+  Contacted: 'bg-amber-100 text-amber-700',
+  Visited: 'bg-purple-100 text-purple-700',
+  Partnered: 'bg-green-100 text-green-700',
+  'Not Interested': 'bg-gray-100 text-gray-600',
 };
 
 function fmtDate(d?: string) {
@@ -270,8 +286,8 @@ function DashboardTab() {
 
 // ── Lead Form Modal ───────────────────────────────────────────────────────────
 
-function LeadFormModal({ editing, courses, onClose, onSaved }: {
-  editing?: Lead | null; courses: Course[]; onClose: () => void; onSaved: () => void;
+function LeadFormModal({ editing, courses, institutes, onClose, onSaved }: {
+  editing?: Lead | null; courses: Course[]; institutes: Institute[]; onClose: () => void; onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -289,6 +305,7 @@ function LeadFormModal({ editing, courses, onClose, onSaved }: {
     gender: editing?.gender ?? '',
     address: editing?.address ?? '',
     course_id: editing?.course_id ? String(editing.course_id) : '',
+    institute_id: editing?.institute_id ? String(editing.institute_id) : '',
     source: editing?.source ?? 'Other',
     reference_name: editing?.reference_name ?? '',
     status: editing?.status ?? 'New',
@@ -308,7 +325,11 @@ function LeadFormModal({ editing, courses, onClose, onSaved }: {
     if (form.source === 'Reference' && !form.reference_name.trim()) { setError('Reference name is required'); return; }
     setSaving(true);
     try {
-      const payload = { ...form, course_id: form.course_id ? Number(form.course_id) : null };
+      const payload = {
+        ...form,
+        course_id: form.course_id ? Number(form.course_id) : null,
+        institute_id: form.institute_id ? Number(form.institute_id) : null,
+      };
       if (editing) {
         await leadFetch(`/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       } else {
@@ -353,6 +374,12 @@ function LeadFormModal({ editing, courses, onClose, onSaved }: {
                 {SOURCES.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
+          </div>
+          <div><label className={lbl}>Institute</label>
+            <select value={form.institute_id} onChange={f('institute_id')} className={inp}>
+              <option value="">— None —</option>
+              {institutes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
           </div>
           {form.source === 'Reference' && (
             <div><label className={lbl}>Reference Name *</label>
@@ -757,10 +784,12 @@ function WhatsAppThreadModal({ lead, onClose }: { lead: Lead; onClose: () => voi
 function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatus; admissionsView?: boolean }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [institutes, setInstitutes] = useState<Institute[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState(statusFilter ?? '');
   const [courseFilter, setCourseFilter] = useState('');
+  const [instituteFilter, setInstituteFilter] = useState('');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Lead | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -776,14 +805,16 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
     const qs = new URLSearchParams({ limit: '100' });
     if (status) qs.set('status', status);
     if (courseFilter) qs.set('course_id', courseFilter);
+    if (instituteFilter) qs.set('institute_id', instituteFilter);
     if (search) qs.set('search', search);
     Promise.all([
       leadFetch<{ data: Lead[]; total: number }>(`/?${qs}`),
       leadFetch<{ data: Course[] }>('/courses/'),
-    ]).then(([lr, cr]) => { setLeads(lr.data); setTotal(lr.total); setCourses(cr.data); })
+      leadFetch<{ data: Institute[] }>('/institutes/'),
+    ]).then(([lr, cr, ir]) => { setLeads(lr.data); setTotal(lr.total); setCourses(cr.data); setInstitutes(ir.data); })
       .catch(console.error).finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, [status, courseFilter, search]);
+  useEffect(() => { load(); }, [status, courseFilter, instituteFilter, search]);
 
   const deleteLead = async () => {
     if (!deleting) return;
@@ -807,6 +838,10 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
         <select value={courseFilter} onChange={e => setCourseFilter(e.target.value)} className={`${inp} mt-0 flex-1 min-w-0`}>
           <option value="">All Courses</option>
           {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={instituteFilter} onChange={e => setInstituteFilter(e.target.value)} className={`${inp} mt-0 flex-1 min-w-0`}>
+          <option value="">All Institutes</option>
+          {institutes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
         </select>
         <div className="flex gap-3 shrink-0">
           {admissionsView ? (
@@ -849,6 +884,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
                   <th className="px-4 py-3 text-left">Name</th>
                   <th className="px-4 py-3 text-left">Phone</th>
                   <th className="px-4 py-3 text-left">Course</th>
+                  <th className="px-4 py-3 text-left">Institute</th>
                   <th className="px-4 py-3 text-left">Source</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   {statusFilter === 'Admitted' && <th className="px-4 py-3 text-left">Batch</th>}
@@ -862,6 +898,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
                     <td className="px-4 py-3 font-medium text-gray-900">{l.full_name}</td>
                     <td className="px-4 py-3 text-gray-600">{l.phone}</td>
                     <td className="px-4 py-3 text-gray-600">{l.course_name || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{l.institute_name || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{l.source}{l.source === 'Reference' && l.reference_name ? ` (${l.reference_name})` : ''}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[l.status] ?? 'bg-gray-100 text-gray-600'}`}>{l.status}</span>
@@ -882,7 +919,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
                   </tr>
                 ))}
                 {leads.length === 0 && (
-                  <tr><td colSpan={8}>
+                  <tr><td colSpan={9}>
                     <EmptyState
                       icon={PhoneCall}
                       title="No leads found"
@@ -901,7 +938,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
       )}
 
       {showForm && (
-        <LeadFormModal editing={editing} courses={courses} onClose={() => { setShowForm(false); setEditing(null); }} onSaved={load} />
+        <LeadFormModal editing={editing} courses={courses} institutes={institutes} onClose={() => { setShowForm(false); setEditing(null); }} onSaved={load} />
       )}
       {showBulk && (
         <BulkLeadUploadModal courses={courses} onClose={() => setShowBulk(false)} onUploaded={load} />
@@ -1005,6 +1042,200 @@ function CoursesTab() {
               <button onClick={() => setForm(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
               <button onClick={save} disabled={saving} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
             </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── Institutes Tab ────────────────────────────────────────────────────────────
+
+function InstituteFormModal({ editing, onClose, onSaved }: { editing?: Institute | null; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState<Partial<Institute>>(editing ?? { institute_type: 'School', status: 'Prospect' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const titleId = useId();
+
+  const f = (field: keyof Institute) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm(p => ({ ...p, [field]: e.target.value }));
+
+  const save = async () => {
+    setError('');
+    if (!form.name?.trim()) { setError('Institute name is required.'); return; }
+    setSaving(true);
+    try {
+      const payload = { ...form, approx_student_count: form.approx_student_count ? Number(form.approx_student_count) : null };
+      if (editing) await leadFetch(`/institutes/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await leadFetch('/institutes/', { method: 'POST', body: JSON.stringify(payload) });
+      onSaved(); onClose();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-lg my-4">
+      <div className="flex items-center justify-between p-5 border-b border-gray-200">
+        <h3 id={titleId} className="text-lg font-bold text-gray-900">{editing ? 'Edit' : 'New'} Institute</h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+      </div>
+      <div className="p-5 space-y-3">
+        <ErrorBanner message={error} />
+        <div><label className={lbl}>Institute Name *</label>
+          <input value={form.name ?? ''} onChange={f('name')} className={inp} placeholder="e.g. Kalshi High School" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={lbl}>Type</label>
+            <select value={form.institute_type ?? 'School'} onChange={f('institute_type')} className={inp}>
+              {INSTITUTE_TYPES.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div><label className={lbl}>Status</label>
+            <select value={form.status ?? 'Prospect'} onChange={f('status')} className={inp}>
+              {INSTITUTE_STATUSES.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <div><label className={lbl}>Location</label>
+          <input value={form.location ?? ''} onChange={f('location')} className={inp} placeholder="Area, city" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={lbl}>Contact Person Name</label>
+            <input value={form.contact_person_name ?? ''} onChange={f('contact_person_name')} className={inp} />
+          </div>
+          <div><label className={lbl}>Designation</label>
+            <input value={form.contact_person_designation ?? ''} onChange={f('contact_person_designation')} className={inp} placeholder="e.g. Headmaster" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={lbl}>Contact Phone</label>
+            <input value={form.contact_person_phone ?? ''} onChange={f('contact_person_phone')} className={inp} />
+          </div>
+          <div><label className={lbl}>Approx. Student Count</label>
+            <input type="number" min="0" value={form.approx_student_count ?? ''} onChange={f('approx_student_count')} className={inp} />
+          </div>
+        </div>
+        <div><label className={lbl}>Notes</label>
+          <textarea value={form.notes ?? ''} onChange={f('notes')} rows={2} className={`${inp} resize-none`} />
+        </div>
+      </div>
+      <div className="flex gap-3 p-5 border-t border-gray-200">
+        <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
+        <button onClick={save} disabled={saving} className="flex-1 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium disabled:opacity-50">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function InstitutesTab() {
+  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState<Institute | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [deleting, setDeleting] = useState<Institute | null>(null);
+  const deleteTitleId = useId();
+
+  const load = () => {
+    setLoading(true);
+    const qs = new URLSearchParams({ limit: '100' });
+    if (search) qs.set('search', search);
+    leadFetch<{ data: Institute[]; total: number }>(`/institutes/?${qs}`)
+      .then(r => { setInstitutes(r.data); setTotal(r.total); })
+      .catch(console.error).finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, [search]);
+
+  const remove = async () => {
+    if (!deleting) return;
+    try { await leadFetch(`/institutes/${deleting.id}`, { method: 'DELETE' }); setDeleting(null); load(); }
+    catch (e: any) { alert(e.message); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-nowrap items-center gap-3">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, location, contact person…" className={`pl-9 ${inp} mt-0 w-full`} />
+        </div>
+        <button onClick={() => { setEditing(null); setShowForm(true); }}
+          className="flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] whitespace-nowrap shrink-0">
+          <Plus size={16} />Add Institute
+        </button>
+      </div>
+
+      {loading ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                <tr>
+                  <th className="px-4 py-3 text-left">Name</th>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="px-4 py-3 text-left">Location</th>
+                  <th className="px-4 py-3 text-left">Contact Person</th>
+                  <th className="px-4 py-3 text-left">Phone</th>
+                  <th className="px-4 py-3 text-right">Students</th>
+                  <th className="px-4 py-3 text-center">Status</th>
+                  <th className="px-4 py-3 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {institutes.map(i => (
+                  <tr key={i.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{i.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{i.institute_type}</td>
+                    <td className="px-4 py-3 text-gray-600">{i.location || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {i.contact_person_name || '—'}
+                      {i.contact_person_designation && <span className="text-xs text-gray-400 block">{i.contact_person_designation}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{i.contact_person_phone || '—'}</td>
+                    <td className="px-4 py-3 text-right text-gray-600">{i.approx_student_count ?? '—'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${INSTITUTE_STATUS_COLORS[i.status] ?? 'bg-gray-100 text-gray-600'}`}>{i.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center gap-1">
+                        <button onClick={() => { setEditing(i); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-gray-700"><Edit2 size={14} /></button>
+                        <button onClick={() => setDeleting(i)} className="p-1.5 text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {institutes.length === 0 && (
+                  <tr><td colSpan={8}>
+                    <EmptyState
+                      icon={Building2}
+                      title="No institutes yet"
+                      description="Add schools, colleges, or coaching centers you're reaching out to for outreach programs."
+                      action={{ label: 'Add Institute', icon: Plus, onClick: () => { setEditing(null); setShowForm(true); } }}
+                    />
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {institutes.length > 0 && (
+            <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">Showing {institutes.length} of {total} institutes</div>
+          )}
+        </div>
+      )}
+
+      {showForm && (
+        <InstituteFormModal editing={editing} onClose={() => { setShowForm(false); setEditing(null); }} onSaved={load} />
+      )}
+      {deleting && (
+        <Modal onClose={() => setDeleting(null)} titleId={deleteTitleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <h3 id={deleteTitleId} className="text-lg font-bold text-gray-900 mb-2">Delete Institute</h3>
+          <p className="text-sm text-gray-600 mb-4">Delete <span className="font-medium">{deleting.name}</span>? This cannot be undone.</p>
+          <div className="flex gap-3">
+            <button onClick={() => setDeleting(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
+            <button onClick={remove} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium">Delete</button>
+          </div>
         </Modal>
       )}
     </div>
@@ -1491,12 +1722,13 @@ function ReportsTab() {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'leads' | 'courses' | 'followups' | 'admissions' | 'reports';
+type Tab = 'dashboard' | 'leads' | 'courses' | 'institutes' | 'followups' | 'admissions' | 'reports';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'leads', label: 'Leads', icon: Users },
   { id: 'courses', label: 'Courses', icon: BookOpen },
+  { id: 'institutes', label: 'Institutes', icon: Building2 },
   { id: 'followups', label: 'Follow-ups', icon: PhoneCall },
   { id: 'admissions', label: 'Admissions', icon: GraduationCap },
   { id: 'reports', label: 'Reports', icon: FileBarChart },
@@ -1520,6 +1752,7 @@ export function LeadManagement() {
       {tab === 'dashboard'  && <DashboardTab />}
       {tab === 'leads'      && <LeadsTab />}
       {tab === 'courses'    && <CoursesTab />}
+      {tab === 'institutes' && <InstitutesTab />}
       {tab === 'followups'  && <FollowupsTab />}
       {tab === 'admissions' && <AdmissionsTab />}
       {tab === 'reports'    && <ReportsTab />}

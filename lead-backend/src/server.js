@@ -6,6 +6,7 @@ import { authMiddleware, moduleAccessMiddleware } from './middleware/auth.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { coursesRouter } from './routes/courses.js';
 import { leadsRouter } from './routes/leads.js';
+import { institutesRouter } from './routes/institutes.js';
 import { followupsRouter } from './routes/followups.js';
 import { reportsRouter } from './routes/reports.js';
 import { sheetSyncRouter } from './routes/sheetSync.js';
@@ -33,6 +34,7 @@ app.use('/api/leads/courses',    authMiddleware, leadAccess, coursesRouter);
 app.use('/api/leads/followups',  authMiddleware, leadAccess, followupsRouter);
 app.use('/api/leads/reports',    authMiddleware, leadAccess, reportsRouter);
 app.use('/api/leads/sheet-sync', authMiddleware, leadAccess, sheetSyncRouter);
+app.use('/api/leads/institutes', authMiddleware, leadAccess, institutesRouter);
 // Public: OpenWA calls this directly and cannot authenticate as one of our
 // users. It's secured by the HMAC signature check inside the route itself.
 // Mounted BEFORE the authenticated /api/leads/whatsapp route so Express

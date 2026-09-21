@@ -10,16 +10,17 @@ const STATUSES = ['New', 'Contacted', 'Interested', 'Follow-up', 'Admitted', 'Lo
 leadsRouter.get('/', async (req, res, next) => {
   try {
     const {
-      status, course_id, source, search,
+      status, course_id, institute_id, source, search,
       limit = 50, offset = 0,
     } = req.query;
 
     const params = [];
     const clauses = ['1=1'];
 
-    if (status)    { params.push(status);         clauses.push(`l.status = $${params.length}`); }
-    if (course_id) { params.push(Number(course_id)); clauses.push(`l.course_id = $${params.length}`); }
-    if (source)    { params.push(source);         clauses.push(`l.source = $${params.length}`); }
+    if (status)      { params.push(status);            clauses.push(`l.status = $${params.length}`); }
+    if (course_id)   { params.push(Number(course_id));    clauses.push(`l.course_id = $${params.length}`); }
+    if (institute_id) { params.push(Number(institute_id)); clauses.push(`l.institute_id = $${params.length}`); }
+    if (source)      { params.push(source);            clauses.push(`l.source = $${params.length}`); }
     if (search) {
       params.push(`%${search}%`);
       clauses.push(`(l.full_name ILIKE $${params.length} OR l.phone ILIKE $${params.length} OR l.email ILIKE $${params.length})`);
@@ -32,9 +33,10 @@ leadsRouter.get('/', async (req, res, next) => {
     params.push(Math.min(Number(limit), 200), Math.max(Number(offset), 0));
 
     const result = await query(
-      `SELECT l.*, c.name AS course_name
+      `SELECT l.*, c.name AS course_name, i.name AS institute_name
        FROM lead_leads l
        LEFT JOIN lead_courses c ON c.id = l.course_id
+       LEFT JOIN lead_institutes i ON i.id = l.institute_id
        ${where}
        ORDER BY l.created_at DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -52,9 +54,10 @@ leadsRouter.get('/:id', async (req, res, next) => {
     const id = Number(req.params.id);
     const [leadResult, followupsResult] = await Promise.all([
       query(
-        `SELECT l.*, c.name AS course_name
+        `SELECT l.*, c.name AS course_name, i.name AS institute_name
          FROM lead_leads l
          LEFT JOIN lead_courses c ON c.id = l.course_id
+         LEFT JOIN lead_institutes i ON i.id = l.institute_id
          WHERE l.id = $1`,
         [id]
       ),
@@ -128,15 +131,15 @@ leadsRouter.post('/', async (req, res, next) => {
     const err = validateLead(req.body);
     if (err) return res.status(400).json({ message: err });
     const {
-      full_name, phone, email, gender, address, course_id, source,
+      full_name, phone, email, gender, address, course_id, institute_id, source,
       status, assigned_to, notes, admission_date, batch, reference_name,
     } = req.body;
     const r = await query(
       `INSERT INTO lead_leads
-         (full_name, phone, email, gender, address, course_id, source, status, assigned_to, notes, admission_date, batch, reference_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+         (full_name, phone, email, gender, address, course_id, institute_id, source, status, assigned_to, notes, admission_date, batch, reference_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [full_name.trim(), phone.trim(), email?.trim() || null, gender || null, address?.trim() || null,
-       course_id || null, source?.trim() || 'Other', status || 'New', assigned_to?.trim() || null,
+       course_id || null, institute_id || null, source?.trim() || 'Other', status || 'New', assigned_to?.trim() || null,
        notes?.trim() || null, admission_date || null, batch?.trim() || null,
        source === 'Reference' ? (reference_name?.trim() || null) : null]
     );
@@ -163,16 +166,16 @@ leadsRouter.put('/:id', async (req, res, next) => {
     const err = validateLead(req.body);
     if (err) return res.status(400).json({ message: err });
     const {
-      full_name, phone, email, gender, address, course_id, source,
+      full_name, phone, email, gender, address, course_id, institute_id, source,
       status, assigned_to, notes, admission_date, batch, reference_name,
     } = req.body;
     const r = await query(
       `UPDATE lead_leads SET
-         full_name=$1, phone=$2, email=$3, gender=$4, address=$5, course_id=$6, source=$7,
-         status=$8, assigned_to=$9, notes=$10, admission_date=$11, batch=$12, reference_name=$13, updated_at=CURRENT_TIMESTAMP
-       WHERE id=$14 RETURNING *`,
+         full_name=$1, phone=$2, email=$3, gender=$4, address=$5, course_id=$6, institute_id=$7, source=$8,
+         status=$9, assigned_to=$10, notes=$11, admission_date=$12, batch=$13, reference_name=$14, updated_at=CURRENT_TIMESTAMP
+       WHERE id=$15 RETURNING *`,
       [full_name.trim(), phone.trim(), email?.trim() || null, gender || null, address?.trim() || null,
-       course_id || null, source?.trim() || 'Other', status || 'New', assigned_to?.trim() || null,
+       course_id || null, institute_id || null, source?.trim() || 'Other', status || 'New', assigned_to?.trim() || null,
        notes?.trim() || null, admission_date || null, batch?.trim() || null,
        source === 'Reference' ? (reference_name?.trim() || null) : null, Number(req.params.id)]
     );

@@ -64,9 +64,34 @@ CREATE TABLE IF NOT EXISTS lead_whatsapp_messages (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Institutes (schools/colleges/coaching centers, etc.) targeted for bulk
+-- outreach — a separate directory from individual leads, not linked to them.
+CREATE TABLE IF NOT EXISTS lead_institutes (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  institute_type VARCHAR(50) NOT NULL DEFAULT 'School',
+  location TEXT,
+  contact_person_name VARCHAR(150),
+  contact_person_designation VARCHAR(100),
+  contact_person_phone VARCHAR(30),
+  approx_student_count INTEGER,
+  status VARCHAR(20) NOT NULL DEFAULT 'Prospect',
+  notes TEXT,
+  created_by VARCHAR(150),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Added after lead_leads/lead_institutes already exist elsewhere in this file —
+-- ALTER instead of inline in CREATE TABLE lead_leads, since lead_institutes is
+-- defined later in this same script and the FK would fail on a fresh database.
+ALTER TABLE lead_leads ADD COLUMN IF NOT EXISTS institute_id INTEGER REFERENCES lead_institutes(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_lead_leads_status      ON lead_leads(status);
 CREATE INDEX IF NOT EXISTS idx_lead_leads_course       ON lead_leads(course_id);
+CREATE INDEX IF NOT EXISTS idx_lead_leads_institute    ON lead_leads(institute_id);
 CREATE INDEX IF NOT EXISTS idx_lead_followups_lead     ON lead_followups(lead_id);
 CREATE INDEX IF NOT EXISTS idx_lead_followups_next     ON lead_followups(next_followup_date);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_messages_external_id ON lead_whatsapp_messages(external_message_id) WHERE external_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_wa_messages_lead_id ON lead_whatsapp_messages(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_institutes_status ON lead_institutes(status);
