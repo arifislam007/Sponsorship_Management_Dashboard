@@ -18,9 +18,10 @@ followupsRouter.get('/', async (req, res, next) => {
     params.push(Math.min(Number(limit), 200), Math.max(Number(offset), 0));
 
     const result = await query(
-      `SELECT f.*, l.full_name AS lead_name, l.phone AS lead_phone, l.status AS lead_status
+      `SELECT f.*, l.full_name AS lead_name, l.phone AS lead_phone, l.status AS lead_status, c.name AS lead_course_name
        FROM lead_followups f
        JOIN lead_leads l ON l.id = f.lead_id
+       LEFT JOIN lead_courses c ON c.id = l.course_id
        ${where}
        ORDER BY f.followup_date DESC, f.id DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,

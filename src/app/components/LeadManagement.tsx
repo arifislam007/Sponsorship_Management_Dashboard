@@ -2,6 +2,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import * as XLSX from 'xlsx';
 import {
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts';
+import {
   LayoutDashboard, Users, BookOpen, PhoneCall, GraduationCap, FileBarChart,
   Plus, Search, X, Edit2, Trash2, Upload, Download, Loader2, ExternalLink, Printer, Mail, RefreshCw,
   MessageCircle, Send, Building2,
@@ -33,7 +37,7 @@ interface Lead {
 interface Followup {
   id: number; lead_id: number; attempt_number: number; followup_date: string; method: string; outcome?: string;
   next_followup_date?: string; created_by?: string; created_at: string;
-  lead_name?: string; lead_phone?: string; lead_status?: string;
+  lead_name?: string; lead_phone?: string; lead_status?: string; lead_course_name?: string;
 }
 interface DashboardData {
   lead_stats: { total_leads: number; admitted_leads: number; new_this_month: number; conversion_rate: number };
@@ -157,6 +161,8 @@ const lbl = 'text-xs font-medium text-gray-600';
 
 // ── Dashboard Tab ──────────────────────────────────────────────────────────────
 
+const PIE_COLORS = ['#14856E', '#F59E0B', '#8B5CF6', '#F97316', '#22C55E', '#9CA3AF'];
+
 function DashboardTab() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -176,38 +182,10 @@ function DashboardTab() {
     { label: 'Conversion Rate', value: `${data.lead_stats.conversion_rate}%` },
   ];
 
-  const maxStatus = Math.max(...data.status_breakdown.map(s => s.count), 1);
-  const maxCourse = Math.max(...data.course_breakdown.map(c => c.lead_count), 1);
-  const maxMonth = Math.max(...data.leads_by_month.map(m => m.count), 1);
-  const maxAttempts = Math.max(...data.admitted_by_attempts.map(a => a.lead_count), 1);
-
-  // Always show every current lead source, zero-filled if it has no data yet;
-  // legacy sources no longer in the list are dropped.
-  const bySourceMap = new Map(data.status_by_source.map(row => [row.source, row]));
-  const emptyRow = { new: 0, contacted: 0, interested: 0, followup: 0, admitted: 0, lost: 0 };
-  const statusBySource = SOURCES.map(s => ({ source: s, ...emptyRow, ...bySourceMap.get(s) }));
-
-  const BarList = ({ title, rows, max }: { title: string; rows: { label: string; value: number }[]; max: number }) => (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-800 mb-4">{title}</h3>
-      {rows.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">No data yet</p>
-      ) : (
-        <div className="space-y-3">
-          {rows.map(r => (
-            <div key={r.label} className="flex items-center gap-3">
-              <span className="text-xs w-28 text-gray-600 truncate">{r.label}</span>
-              <div className="flex-1 bg-gray-100 rounded-full h-2.5">
-                <div className="bg-[#14856E] h-2.5 rounded-full" style={{ width: `${(r.value / max) * 100}%` }} />
-              </div>
-              <span className="text-xs font-medium text-gray-700 w-6 text-right">{r.value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
+  // This tab is the live "at a glance" snapshot — current status mix, recent
+  // trend, and latest activity. Deeper/period-filterable breakdowns (by
+  // course, by source, by follow-up effort) live in the Reports tab instead
+  // of being duplicated here.
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -219,49 +197,50 @@ function DashboardTab() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <BarList title="Leads in a Month" rows={data.leads_by_month.map(m => ({ label: m.month_label, value: m.count }))} max={maxMonth} />
-        <BarList title="Leads by Status" rows={data.status_breakdown.map(s => ({ label: s.status, value: s.count }))} max={maxStatus} />
-        <BarList title="Leads by Course" rows={data.course_breakdown.map(c => ({ label: c.course_name, value: c.lead_count }))} max={maxCourse} />
-        <BarList
-          title="Admitted by Follow-up Calls"
-          rows={data.admitted_by_attempts.map(a => ({ label: a.attempts === 0 ? 'No calls logged' : `${ordinal(a.attempts)} call`, value: a.lead_count }))}
-          max={maxAttempts}
-        />
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="font-semibold text-gray-800 mb-4">Leads Trend (12 months)</h3>
+          {data.leads_by_month.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-16">No data yet</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={data.leads_by_month}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month_label" stroke="#9ca3af" tick={{ fontSize: 12 }} />
+                <YAxis stroke="#9ca3af" tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                <Line type="monotone" dataKey="count" name="New Leads" stroke="#14856E" strokeWidth={2.5} dot={{ fill: '#14856E', r: 4 }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200"><h3 className="font-semibold text-gray-800">Follow-up Status by Source</h3></div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-2 text-left">Source</th>
-                <th className="px-4 py-2 text-right">New</th>
-                <th className="px-4 py-2 text-right">Contacted</th>
-                <th className="px-4 py-2 text-right">Interested</th>
-                <th className="px-4 py-2 text-right">Follow-up</th>
-                <th className="px-4 py-2 text-right">Admitted</th>
-                <th className="px-4 py-2 text-right">Lost</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {statusBySource.map(row => (
-                <tr key={row.source}>
-                  <td className="px-4 py-2.5 text-gray-800 font-medium">{row.source}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">{row.new}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">{row.contacted}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">{row.interested}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-600">{row.followup}</td>
-                  <td className="px-4 py-2.5 text-right text-green-700 font-medium">{row.admitted}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-400">{row.lost}</td>
-                </tr>
-              ))}
-              {statusBySource.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-6 text-gray-400">No data yet</td></tr>
-              )}
-            </tbody>
-          </table>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="font-semibold text-gray-800 mb-2">Leads by Status</h3>
+          {data.status_breakdown.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-16">No data yet</p>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie data={data.status_breakdown} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="count" nameKey="status">
+                    {data.status_breakdown.map((entry, index) => (
+                      <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ? PIE_COLORS[index % PIE_COLORS.length] : '#9CA3AF'} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number, n: string) => [v, n]} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1">
+                {data.status_breakdown.map((s, i) => (
+                  <div key={s.status} className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="text-xs text-gray-600">{s.status} ({s.count})</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1424,7 +1403,7 @@ function FollowupsTab() {
                 {fu.lead_name} <span className="text-gray-400 font-normal">· {fu.lead_phone}</span>
                 <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">{ordinal(fu.attempt_number)} follow-up</span>
               </p>
-              <p className="text-xs text-gray-500">{fmtDate(fu.followup_date)} · {fu.method}{fu.outcome ? ` — ${fu.outcome}` : ''}</p>
+              <p className="text-xs text-gray-500">{fmtDate(fu.followup_date)} · {fu.method} · {fu.lead_course_name || 'No course'}{fu.outcome ? ` — ${fu.outcome}` : ''}</p>
               {fu.next_followup_date && <p className="text-xs text-amber-600 mt-0.5">Next: {fmtDate(fu.next_followup_date)}</p>}
             </div>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[fu.lead_status ?? ''] ?? 'bg-gray-100 text-gray-600'}`}>{fu.lead_status}</span>
@@ -1499,8 +1478,18 @@ function ReportsTab() {
   const [period, setPeriod] = useState<ReportPeriod>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [dailyDate, setDailyDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dailyFollowups, setDailyFollowups] = useState<Followup[] | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
 
   const range = getReportRange(period, customFrom, customTo);
+
+  useEffect(() => {
+    setDailyLoading(true);
+    leadFetch<{ data: Followup[] }>(`/followups/?date=${dailyDate}`)
+      .then(r => setDailyFollowups(r.data))
+      .catch(console.error).finally(() => setDailyLoading(false));
+  }, [dailyDate]);
 
   useEffect(() => {
     setLoading(true);
@@ -1549,16 +1538,32 @@ function ReportsTab() {
     { label: 'Follow-ups Due', value: dash.overdue_followups },
   ];
 
-  const trendSections: { title: string; rows: { label: string; value: number }[] }[] = [
-    { title: 'Admitted in a Month', rows: rep.admitted_by_month.map(m => ({ label: m.month_label, value: m.count })) },
-    { title: 'New Leads by Month', rows: rep.new_leads_by_month.map(m => ({ label: m.month_label, value: m.count })) },
-    { title: 'Follow-up Calls by Month', rows: rep.followup_calls_by_month.map(m => ({ label: m.month_label, value: m.total_calls })) },
-  ];
+  // One combined timeline instead of three separate bar-lists — merges New
+  // Leads / Admitted / Follow-up Calls by month, keyed on the raw `month`
+  // value (not the label) so the merge is correct even if a month is
+  // present in one series but not another.
+  const monthMap = new Map<string, { month: string; month_label: string; new: number; admitted: number; calls: number }>();
+  for (const m of rep.new_leads_by_month) monthMap.set(m.month, { month: m.month, month_label: m.month_label, new: m.count, admitted: 0, calls: 0 });
+  for (const m of rep.admitted_by_month) {
+    const row = monthMap.get(m.month) ?? { month: m.month, month_label: m.month_label, new: 0, admitted: 0, calls: 0 };
+    row.admitted = m.count; monthMap.set(m.month, row);
+  }
+  for (const m of rep.followup_calls_by_month) {
+    const row = monthMap.get(m.month) ?? { month: m.month, month_label: m.month_label, new: 0, admitted: 0, calls: 0 };
+    row.calls = m.total_calls; monthMap.set(m.month, row);
+  }
+  const monthlyTrendData = [...monthMap.values()].sort((a, b) => a.month.localeCompare(b.month));
 
-  const distributionSections: { title: string; rows: { label: string; value: number }[] }[] = [
-    { title: 'Lost Leads by Source', rows: rep.lost_by_source.map(s => ({ label: s.source, value: s.count })) },
-    { title: 'Leads by Status', rows: dash.status_breakdown.map(s => ({ label: s.status, value: s.count })) },
-  ];
+  const admittedByAttemptsData = dash.admitted_by_attempts.map(a => ({
+    label: a.attempts === 0 ? 'No calls logged' : `${ordinal(a.attempts)} call`,
+    value: a.lead_count,
+  }));
+
+  // Every current lead source, zero-filled if it has no data yet; legacy
+  // sources no longer in the list are dropped.
+  const bySourceMap = new Map(dash.status_by_source.map(row => [row.source, row]));
+  const emptyRow = { new: 0, contacted: 0, interested: 0, followup: 0, admitted: 0, lost: 0 };
+  const statusBySource = SOURCES.map(s => ({ source: s, ...emptyRow, ...bySourceMap.get(s) }));
 
   const sectionHead = 'text-xs font-semibold uppercase tracking-wide text-[#14856E] mb-1';
 
@@ -1611,42 +1616,140 @@ function ReportsTab() {
       </div>
 
       <div>
-        <p className={sectionHead}>Monthly Trends</p>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
-          {trendSections.map(t => (
-            <div key={t.title} className="bg-white rounded-xl border border-gray-200">
-              <div className="px-4 py-3 border-b border-gray-200"><h3 className="font-semibold text-gray-800">{t.title}</h3></div>
-              <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-                {t.rows.map(r => (
-                  <div key={r.label} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                    <span className="text-gray-700">{r.label}</span>
-                    <span className="font-medium text-gray-900">{r.value}</span>
+        <div className="flex items-center justify-between mb-1">
+          <p className={sectionHead}>Daily Call Activity</p>
+          <input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)} className={`${inp} mt-0 w-auto`} />
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 mt-2">
+          {dailyLoading ? (
+            <p className="text-center py-8 text-gray-400 text-sm">Loading…</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 border-b border-gray-200">
+                <div>
+                  <p className="text-2xl font-bold text-[#14856E]">{dailyFollowups?.filter(f => f.method === 'Call').length ?? 0}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Calls Conducted</p>
+                </div>
+                {METHODS.filter(m => m !== 'Call').map(m => (
+                  <div key={m}>
+                    <p className="text-2xl font-bold text-gray-900">{dailyFollowups?.filter(f => f.method === m).length ?? 0}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{m}</p>
                   </div>
                 ))}
-                {t.rows.length === 0 && <p className="text-center py-6 text-gray-400 text-sm">No data</p>}
               </div>
-            </div>
-          ))}
+              <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                {(dailyFollowups ?? []).map(fu => (
+                  <div key={fu.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                    <div>
+                      <span className="text-gray-800 font-medium">{fu.lead_name}</span>
+                      <span className="text-gray-400"> · {fu.lead_phone} · {fu.method}</span>
+                      {fu.outcome && <span className="text-gray-500"> — {fu.outcome}</span>}
+                    </div>
+                    {fu.created_by && <span className="text-xs text-gray-400 shrink-0 ml-2">{fu.created_by}</span>}
+                  </div>
+                ))}
+                {(dailyFollowups ?? []).length === 0 && <p className="text-center py-6 text-gray-400 text-sm">No follow-up activity on this day</p>}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className={sectionHead}>Monthly Trends</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mt-2">
+          {monthlyTrendData.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-16">No data yet</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={monthlyTrendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month_label" stroke="#9ca3af" tick={{ fontSize: 12 }} />
+                <YAxis stroke="#9ca3af" tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="new" name="New Leads" stroke="#3B82F6" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="admitted" name="Admitted" stroke="#14856E" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="calls" name="Follow-up Calls" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
       <div>
         <p className={sectionHead}>Distribution</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-2">
-          {distributionSections.map(t => (
-            <div key={t.title} className="bg-white rounded-xl border border-gray-200">
-              <div className="px-4 py-3 border-b border-gray-200"><h3 className="font-semibold text-gray-800">{t.title}</h3></div>
-              <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-                {t.rows.map(r => (
-                  <div key={r.label} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                    <span className="text-gray-700">{r.label}</span>
-                    <span className="font-medium text-gray-900">{r.value}</span>
-                  </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="font-semibold text-gray-800 mb-4">Lost Leads by Source</h3>
+            {rep.lost_by_source.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-16">No data</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={rep.lost_by_source} layout="vertical" margin={{ left: 16 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis type="number" stroke="#9ca3af" tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="source" stroke="#9ca3af" tick={{ fontSize: 12 }} width={110} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                  <Bar dataKey="count" name="Lost" fill="#EF4444" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="font-semibold text-gray-800 mb-4">Admitted by Follow-up Calls</h3>
+            {admittedByAttemptsData.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-16">No data</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={admittedByAttemptsData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#9ca3af" tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                  <Bar dataKey="value" name="Admitted" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p className={sectionHead}>Follow-up Status by Source</p>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-2">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                <tr>
+                  <th className="px-4 py-2 text-left">Source</th>
+                  <th className="px-4 py-2 text-right">New</th>
+                  <th className="px-4 py-2 text-right">Contacted</th>
+                  <th className="px-4 py-2 text-right">Interested</th>
+                  <th className="px-4 py-2 text-right">Follow-up</th>
+                  <th className="px-4 py-2 text-right">Admitted</th>
+                  <th className="px-4 py-2 text-right">Lost</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {statusBySource.map(row => (
+                  <tr key={row.source}>
+                    <td className="px-4 py-2.5 text-gray-800 font-medium">{row.source}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-600">{row.new}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-600">{row.contacted}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-600">{row.interested}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-600">{row.followup}</td>
+                    <td className="px-4 py-2.5 text-right text-green-700 font-medium">{row.admitted}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-400">{row.lost}</td>
+                  </tr>
                 ))}
-                {t.rows.length === 0 && <p className="text-center py-6 text-gray-400 text-sm">No data</p>}
-              </div>
-            </div>
-          ))}
+                {statusBySource.length === 0 && (
+                  <tr><td colSpan={7} className="text-center py-6 text-gray-400">No data yet</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1655,6 +1758,21 @@ function ReportsTab() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-2">
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200"><h3 className="font-semibold text-gray-800">Conversion by Course</h3></div>
+            {rep.course_conversion.length > 0 && (
+              <div className="px-4 pt-4">
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={rep.course_conversion}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="course_name" stroke="#9ca3af" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={40} />
+                    <YAxis stroke="#9ca3af" tick={{ fontSize: 12 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="total_leads" name="Leads" fill="#93C5FD" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="admitted" name="Admitted" fill="#14856E" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
