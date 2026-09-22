@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { query } from '../db.js';
-import { recalcProjectProgress, notifyUser, notifyManagerOfTaskUpdate } from '../lib/taskHelpers.js';
+import { recalcProjectProgress, notifyUser, notifyManagerOfTaskUpdate, buildTaskAssignedWhatsAppText } from '../lib/taskHelpers.js';
 
 export const tasksRouter = Router();
 
@@ -120,7 +120,8 @@ tasksRouter.post('/', async (req, res, next) => {
         Number(assigned_user_id), 'task_assigned',
         'Task Assigned to You',
         `You have been assigned: "${name}" (${priority} priority)`,
-        '/dashboard/projects'
+        '/dashboard/projects',
+        buildTaskAssignedWhatsAppText(assigned_user_name, name, due_date)
       );
     }
 
@@ -172,7 +173,8 @@ tasksRouter.put('/:id', async (req, res, next) => {
         task.assigned_user_id, 'task_assigned',
         'Task Assigned to You',
         `You have been assigned: "${task.name}"`,
-        '/dashboard/projects'
+        '/dashboard/projects',
+        buildTaskAssignedWhatsAppText(task.assigned_user_name, task.name, task.due_date)
       );
     }
 

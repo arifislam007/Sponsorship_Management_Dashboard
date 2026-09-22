@@ -110,7 +110,7 @@ async function resolveEmployeePhone(userId) {
   return r.rows[0]?.mobile || null;
 }
 
-async function sendWhatsAppNotif(userId, eventType, title, body) {
+async function sendWhatsAppNotif(userId, eventType, title, body, whatsappText) {
   const prefs = await getPrefs(userId);
   if (prefs?.whatsapp_enabled === false) return;
 
@@ -120,7 +120,10 @@ async function sendWhatsAppNotif(userId, eventType, title, body) {
   const phone = await resolveEmployeePhone(userId);
   if (!phone) return;
 
-  const text = `*${title}*\n${body}`;
+  // Callers that need WhatsApp-specific formatting (greeting, numbered list,
+  // sign-off, etc. — richer than the generic title/body used by the other
+  // channels) can pass whatsappText to override the default `*title*\nbody`.
+  const text = whatsappText || `*${title}*\n${body}`;
   try {
     const res = await fetch('http://lead-backend:5006/api/leads/whatsapp/internal', {
       method: 'POST',
@@ -161,7 +164,7 @@ async function sendWebPushNotif(userId, eventType, title, body, url = '/') {
   );
 }
 
-export async function notify(userId, eventType, title, body, url = '/') {
+export async function notify(userId, eventType, title, body, url = '/', whatsappText) {
   if (!userId) return;
   try {
     const prefs = await getPrefs(userId);
@@ -180,7 +183,7 @@ export async function notify(userId, eventType, title, body, url = '/') {
       sendWebPushNotif(userId, eventType, title, body, url),
       sendEmailNotif(userId, eventType, title, emailHtml),
       sendTelegramNotif(userId, eventType, title, body),
-      sendWhatsAppNotif(userId, eventType, title, body),
+      sendWhatsAppNotif(userId, eventType, title, body, whatsappText),
     ]);
   } catch (err) {
     console.error('notify() error:', err.message);

@@ -15,16 +15,35 @@ export async function recalcProjectProgress(projectId) {
   );
 }
 
-export async function notifyUser(userId, eventType, title, body, url) {
+export async function notifyUser(userId, eventType, title, body, url, whatsappText) {
   const secret = process.env.INTERNAL_SECRET;
   if (!secret || !userId) return;
   try {
     await fetch('http://backend:8000/api/v1/notifications/internal/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
-      body: JSON.stringify({ userId, eventType, title, body, url }),
+      body: JSON.stringify({ userId, eventType, title, body, url, whatsappText }),
     });
   } catch { /* non-fatal */ }
+}
+
+function fmtDueDate(dueDate) {
+  if (!dueDate) return 'No due date set';
+  return new Date(dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// WhatsApp-specific message for a new task assignment — richer/greeting-style
+// formatting than the generic title/body used by email/web-push/Telegram.
+export function buildTaskAssignedWhatsAppText(assigneeName, taskName, dueDate) {
+  return [
+    `Dear ${assigneeName || 'Team Member'},`,
+    '',
+    'You have been assigned the following task:',
+    `1. *${taskName}* — Due: ${fmtDueDate(dueDate)}`,
+    '',
+    'Thanks By',
+    '*Sombhabona Portal*',
+  ].join('\n');
 }
 
 // Resolve a project's manager to their login user id, using the same

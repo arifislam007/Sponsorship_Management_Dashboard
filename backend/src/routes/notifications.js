@@ -27,9 +27,9 @@ notificationsRouter.post('/internal/send', async (req, res, next) => {
     if (!process.env.INTERNAL_SECRET || secret !== process.env.INTERNAL_SECRET) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
-    const { userId, eventType, title, body, url } = req.body;
+    const { userId, eventType, title, body, url, whatsappText } = req.body;
     if (!userId || !title) return res.status(400).json({ message: 'userId and title required' });
-    await notify(userId, eventType || 'system', title, body || '', url || '/');
+    await notify(userId, eventType || 'system', title, body || '', url || '/', whatsappText);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
