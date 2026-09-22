@@ -29,9 +29,17 @@ reportsRouter.get('/', async (req, res, next) => {
     const staffRangeClause = ranged ? 'AND created_at::date BETWEEN $1 AND $2' : '';
     const staffParams = ranged ? [from, to] : [];
 
+    // Unlike the monthly breakdowns above, a day-by-day view has no sane
+    // "all time" default — cap it to the trailing 30 days when no range is
+    // selected, same spirit as the "LIMIT 12" months used elsewhere.
+    const dailyStatusRangeClause = ranged
+      ? 'AND created_at::date BETWEEN $1 AND $2'
+      : "AND created_at::date >= CURRENT_DATE - INTERVAL '30 days'";
+    const dailyStatusParams = ranged ? [from, to] : [];
+
     const [
       admittedByMonth, followupCallsByMonth, lostBySource,
-      newLeadsByMonth, courseConversion, staffPerformance,
+      newLeadsByMonth, courseConversion, staffPerformance, leadsByDateStatus,
     ] = await Promise.all([
       query(`SELECT TO_CHAR(${admittedDateExpr}, 'YYYY-MM') AS month,
                     TO_CHAR(${admittedDateExpr}, 'Mon YYYY') AS month_label,
@@ -83,6 +91,19 @@ reportsRouter.get('/', async (req, res, next) => {
              WHERE 1=1 ${staffRangeClause}
              GROUP BY 1
              ORDER BY total_leads DESC`, staffParams),
+
+      // One row per (date, status) — leads grouped by the date they were
+      // created and their current status. Pivoted into a date × status
+      // table on the frontend, same convention as the source × status
+      // "Follow-up Status by Source" breakdown.
+      query(`SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') AS date,
+                    TO_CHAR(created_at::date, 'DD Mon YYYY') AS date_label,
+                    status,
+                    COUNT(*)::int AS count
+             FROM lead_leads
+             WHERE 1=1 ${dailyStatusRangeClause}
+             GROUP BY 1, 2, status
+             ORDER BY 1 DESC`, dailyStatusParams),
     ]);
 
     res.json({
@@ -92,6 +113,7 @@ reportsRouter.get('/', async (req, res, next) => {
       new_leads_by_month: newLeadsByMonth.rows.reverse(),
       course_conversion: courseConversion.rows,
       staff_performance: staffPerformance.rows,
+      leads_by_date_status: leadsByDateStatus.rows,
     });
   } catch (err) { next(err); }
 });

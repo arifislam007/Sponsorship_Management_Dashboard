@@ -36,7 +36,7 @@ interface Lead {
 }
 interface Followup {
   id: number; lead_id: number; attempt_number: number; followup_date: string; method: string; outcome?: string;
-  next_followup_date?: string; created_by?: string; created_at: string;
+  comment?: string; next_followup_date?: string; created_by?: string; created_at: string;
   lead_name?: string; lead_phone?: string; lead_status?: string; lead_course_name?: string;
 }
 interface DashboardData {
@@ -63,6 +63,7 @@ interface ReportsData {
   new_leads_by_month: MonthCount[];
   course_conversion: { course_name: string; total_leads: number; admitted: number; conversion_pct: number | null }[];
   staff_performance: { assigned_to: string; total_leads: number; admitted: number }[];
+  leads_by_date_status: { date: string; date_label: string; status: string; count: number }[];
 }
 
 // ── API Helper ─────────────────────────────────────────────────────────────────
@@ -1233,7 +1234,7 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
   const titleId = useId();
   const [form, setForm] = useState({
     lead_id: initialLeadId ? String(initialLeadId) : '', followup_date: new Date().toISOString().slice(0, 10), method: 'Call',
-    next_followup_date: '', created_by: '', new_status: '', new_course_id: '',
+    comment: '', next_followup_date: '', created_by: '', new_status: '', new_course_id: '',
   });
   const f = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
@@ -1318,6 +1319,9 @@ function FollowupFormModal({ leads, initialLeadId, onClose, onSaved }: { leads: 
               <input value={otherText} onChange={e => setOtherText(e.target.value)} placeholder="Briefly describe…" className={`${inp} mt-2`} />
             )}
           </div>
+          <div><label className={lbl}>Comment</label>
+            <textarea value={form.comment} onChange={f('comment')} rows={2} placeholder="Any additional notes about this follow-up…" className={`${inp} resize-none`} />
+          </div>
           <div><label className={lbl}>Next Follow-up Date</label><input type="date" value={form.next_followup_date} onChange={f('next_followup_date')} className={inp} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lbl}>Update Status</label>
@@ -1395,21 +1399,47 @@ function FollowupsTab() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-        {visibleFollowups.map(fu => (
-          <div key={fu.id} className="flex items-center justify-between px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-gray-800">
-                {fu.lead_name} <span className="text-gray-400 font-normal">· {fu.lead_phone}</span>
-                <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">{ordinal(fu.attempt_number)} follow-up</span>
-              </p>
-              <p className="text-xs text-gray-500">{fmtDate(fu.followup_date)} · {fu.method} · {fu.lead_course_name || 'No course'}{fu.outcome ? ` — ${fu.outcome}` : ''}</p>
-              {fu.next_followup_date && <p className="text-xs text-amber-600 mt-0.5">Next: {fmtDate(fu.next_followup_date)}</p>}
-            </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[fu.lead_status ?? ''] ?? 'bg-gray-100 text-gray-600'}`}>{fu.lead_status}</span>
-          </div>
-        ))}
-        {visibleFollowups.length === 0 && <p className="text-center py-10 text-gray-400 text-sm">No follow-ups found</p>}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="px-4 py-3 text-left">Lead</th>
+                <th className="px-4 py-3 text-left">Date</th>
+                <th className="px-4 py-3 text-left">Method</th>
+                <th className="px-4 py-3 text-left">Course</th>
+                <th className="px-4 py-3 text-left">Outcome</th>
+                <th className="px-4 py-3 text-left">Comment</th>
+                <th className="px-4 py-3 text-left">Next Follow-up</th>
+                <th className="px-4 py-3 text-center">Lead Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {visibleFollowups.map(fu => (
+                <tr key={fu.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-800">{fu.lead_name}</p>
+                    <p className="text-xs text-gray-400">{fu.lead_phone} · {ordinal(fu.attempt_number)} follow-up</p>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmtDate(fu.followup_date)}</td>
+                  <td className="px-4 py-3 text-gray-600">{fu.method}</td>
+                  <td className="px-4 py-3 text-gray-600">{fu.lead_course_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600 max-w-[180px]">{fu.outcome || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600 italic max-w-[220px]">{fu.comment || '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {fu.next_followup_date ? <span className="text-amber-600">{fmtDate(fu.next_followup_date)}</span> : <span className="text-gray-400">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[fu.lead_status ?? ''] ?? 'bg-gray-100 text-gray-600'}`}>{fu.lead_status}</span>
+                  </td>
+                </tr>
+              ))}
+              {visibleFollowups.length === 0 && (
+                <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">No follow-ups found</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showForm && <FollowupFormModal leads={leads} onClose={() => setShowForm(false)} onSaved={load} />}
@@ -1513,6 +1543,11 @@ function ReportsTab() {
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rep.new_leads_by_month), 'New Leads by Month');
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rep.course_conversion), 'Course Conversion');
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rep.staff_performance), 'Staff Performance');
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(leadsByDateStatus.map(({ date, ...row }) => row)),
+      'Daily Lead Summary'
+    );
     const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -1564,6 +1599,18 @@ function ReportsTab() {
   const bySourceMap = new Map(dash.status_by_source.map(row => [row.source, row]));
   const emptyRow = { new: 0, contacted: 0, interested: 0, followup: 0, admitted: 0, lost: 0 };
   const statusBySource = SOURCES.map(s => ({ source: s, ...emptyRow, ...bySourceMap.get(s) }));
+
+  // Pivot leads_by_date_status (one row per date+status) into one row per
+  // date with a column per status, newest date first.
+  const dateStatusMap = new Map<string, { date: string; date_label: string } & Record<string, number>>();
+  for (const row of rep.leads_by_date_status) {
+    const existing = dateStatusMap.get(row.date) ?? { date: row.date, date_label: row.date_label };
+    existing[row.status] = row.count;
+    dateStatusMap.set(row.date, existing);
+  }
+  const leadsByDateStatus = [...dateStatusMap.values()]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map(row => ({ ...row, total: STATUSES.reduce((sum, s) => sum + (row[s] ?? 0), 0) }));
 
   const sectionHead = 'text-xs font-semibold uppercase tracking-wide text-[#14856E] mb-1';
 
@@ -1746,6 +1793,42 @@ function ReportsTab() {
                 ))}
                 {statusBySource.length === 0 && (
                   <tr><td colSpan={7} className="text-center py-6 text-gray-400">No data yet</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <p className={sectionHead}>Daily Lead Summary</p>
+          {period === 'all' && <span className="text-xs text-gray-400">Trailing 30 days (select a period above for a wider range)</span>}
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-2">
+          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0">
+                <tr>
+                  <th className="px-4 py-2 text-left">Date</th>
+                  {STATUSES.map(s => <th key={s} className="px-4 py-2 text-right">{s}</th>)}
+                  <th className="px-4 py-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {leadsByDateStatus.map(row => (
+                  <tr key={row.date}>
+                    <td className="px-4 py-2.5 text-gray-800 font-medium whitespace-nowrap">{row.date_label}</td>
+                    {STATUSES.map(s => (
+                      <td key={s} className={`px-4 py-2.5 text-right ${s === 'Admitted' ? 'text-green-700 font-medium' : s === 'Lost' ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {row[s] ?? 0}
+                      </td>
+                    ))}
+                    <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{row.total}</td>
+                  </tr>
+                ))}
+                {leadsByDateStatus.length === 0 && (
+                  <tr><td colSpan={STATUSES.length + 2} className="text-center py-6 text-gray-400">No leads in this period</td></tr>
                 )}
               </tbody>
             </table>

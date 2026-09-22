@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS lead_followups (
   created_by VARCHAR(150),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- Free-form note distinct from `outcome` (which is a set of fixed tags).
+ALTER TABLE lead_followups ADD COLUMN IF NOT EXISTS comment TEXT;
 
 CREATE TABLE IF NOT EXISTS lead_sheet_config (
   id SERIAL PRIMARY KEY,

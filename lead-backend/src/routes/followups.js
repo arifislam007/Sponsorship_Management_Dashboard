@@ -35,7 +35,7 @@ const MAX_FOLLOWUP_ATTEMPTS = 5;
 
 followupsRouter.post('/', async (req, res, next) => {
   try {
-    const { lead_id, followup_date, method, outcome, next_followup_date, created_by, new_status, new_course_id } = req.body;
+    const { lead_id, followup_date, method, outcome, comment, next_followup_date, created_by, new_status, new_course_id } = req.body;
     if (!lead_id) return res.status(400).json({ message: 'lead_id is required' });
 
     const countResult = await query('SELECT COUNT(*)::int AS cnt FROM lead_followups WHERE lead_id=$1', [Number(lead_id)]);
@@ -45,10 +45,10 @@ followupsRouter.post('/', async (req, res, next) => {
     }
 
     const r = await query(
-      `INSERT INTO lead_followups (lead_id, attempt_number, followup_date, method, outcome, next_followup_date, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      `INSERT INTO lead_followups (lead_id, attempt_number, followup_date, method, outcome, comment, next_followup_date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [Number(lead_id), attemptNumber, followup_date || new Date().toISOString().slice(0, 10), method || 'Call',
-       outcome?.trim() || null, next_followup_date || null, created_by?.trim() || null]
+       outcome?.trim() || null, comment?.trim() || null, next_followup_date || null, created_by?.trim() || null]
     );
 
     if (new_status) {
@@ -64,11 +64,11 @@ followupsRouter.post('/', async (req, res, next) => {
 
 followupsRouter.put('/:id', async (req, res, next) => {
   try {
-    const { followup_date, method, outcome, next_followup_date, created_by } = req.body;
+    const { followup_date, method, outcome, comment, next_followup_date, created_by } = req.body;
     const r = await query(
-      `UPDATE lead_followups SET followup_date=$1, method=$2, outcome=$3, next_followup_date=$4, created_by=$5
-       WHERE id=$6 RETURNING *`,
-      [followup_date, method, outcome?.trim() || null, next_followup_date || null, created_by?.trim() || null, Number(req.params.id)]
+      `UPDATE lead_followups SET followup_date=$1, method=$2, outcome=$3, comment=$4, next_followup_date=$5, created_by=$6
+       WHERE id=$7 RETURNING *`,
+      [followup_date, method, outcome?.trim() || null, comment?.trim() || null, next_followup_date || null, created_by?.trim() || null, Number(req.params.id)]
     );
     if (!r.rows.length) return res.status(404).json({ message: 'Follow-up not found' });
     res.json(r.rows[0]);
