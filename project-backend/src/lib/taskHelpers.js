@@ -46,6 +46,36 @@ export function buildTaskAssignedWhatsAppText(assigneeName, taskName, dueDate) {
   ].join('\n');
 }
 
+// WhatsApp-specific message for a task field change (status, priority, due date, etc.)
+export function buildTaskUpdatedWhatsAppText(recipientName, taskName, actorName, changedFields) {
+  return [
+    `Dear ${recipientName || 'Team Member'},`,
+    '',
+    'The following task has been updated:',
+    `1. *${taskName}*`,
+    changedFields.length ? changedFields.map(f => `   • ${f}`).join('\n') : '   • Details updated',
+    `Updated by: ${actorName || 'Someone'}`,
+    '',
+    'Thanks By',
+    '*Sombhabona Portal*',
+  ].join('\n');
+}
+
+// WhatsApp-specific message for a new comment on a task.
+export function buildTaskCommentWhatsAppText(recipientName, taskName, actorName, commentText) {
+  return [
+    `Dear ${recipientName || 'Team Member'},`,
+    '',
+    'A new comment was added to your task:',
+    `1. *${taskName}*`,
+    `   "${commentText}"`,
+    `— ${actorName || 'Someone'}`,
+    '',
+    'Thanks By',
+    '*Sombhabona Portal*',
+  ].join('\n');
+}
+
 // Resolve a project's manager to their login user id, using the same
 // linked_user_id / email-match resolution HR's attendance module uses —
 // pm_projects.project_manager_id is an HR employee id, not a login user id.
@@ -72,7 +102,8 @@ export async function notifyManagerOfTaskUpdate(projectId, task, changedFields, 
         pmUserId, 'task_updated',
         `Task Updated: ${task.name}`,
         `${actorUsername || 'Someone'} updated "${task.name}": ${changedFields.join(', ')}`,
-        '/dashboard/projects'
+        '/dashboard/projects',
+        buildTaskUpdatedWhatsAppText('Project Manager', task.name, actorUsername, changedFields)
       );
     }
   } catch { /* non-fatal */ }

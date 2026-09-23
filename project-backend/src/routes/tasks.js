@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { query } from '../db.js';
-import { recalcProjectProgress, notifyUser, notifyManagerOfTaskUpdate, buildTaskAssignedWhatsAppText } from '../lib/taskHelpers.js';
+import {
+  recalcProjectProgress, notifyUser, notifyManagerOfTaskUpdate, resolveProjectManagerUserId,
+  buildTaskAssignedWhatsAppText, buildTaskUpdatedWhatsAppText, buildTaskCommentWhatsAppText,
+} from '../lib/taskHelpers.js';
 
 export const tasksRouter = Router();
 
@@ -167,8 +170,10 @@ tasksRouter.put('/:id', async (req, res, next) => {
 
     await logActivity(task.project_id, id, req.user?.userId, req.user?.username, 'task_updated', { status, progress });
 
+    const wasReassigned = assigned_user_id && Number(assigned_user_id) !== req.user?.userId;
+
     // Notify newly assigned user (if assignee changed)
-    if (assigned_user_id && task.assigned_user_id && Number(assigned_user_id) !== req.user?.userId) {
+    if (wasReassigned) {
       notifyUser(
         task.assigned_user_id, 'task_assigned',
         'Task Assigned to You',
@@ -183,6 +188,19 @@ tasksRouter.put('/:id', async (req, res, next) => {
       .filter(([, v]) => v !== undefined && v !== null)
       .map(([k, v]) => `${k.replace(/_/g, ' ')} → ${v}`);
     notifyManagerOfTaskUpdate(task.project_id, task, changedFields, req.user?.userId, req.user?.username);
+
+    // Notify the currently-assigned person about the change (e.g. status update),
+    // unless they made the change themselves or were just freshly assigned above
+    // (that case already sent its own "assigned to you" message).
+    if (!wasReassigned && changedFields.length && task.assigned_user_id && task.assigned_user_id !== req.user?.userId) {
+      notifyUser(
+        task.assigned_user_id, 'task_updated',
+        `Task Updated: ${task.name}`,
+        `${req.user?.username || 'Someone'} updated "${task.name}": ${changedFields.join(', ')}`,
+        '/dashboard/projects',
+        buildTaskUpdatedWhatsAppText(task.assigned_user_name, task.name, req.user?.username, changedFields)
+      );
+    }
 
     res.json(task);
   } catch (err) { next(err); }
@@ -218,10 +236,14 @@ tasksRouter.post('/:id/comments', async (req, res, next) => {
     const { comment, progress } = req.body;
     if (!comment?.trim()) return res.status(400).json({ message: 'comment is required.' });
 
-    const taskResult = await query('SELECT project_id, status, progress FROM pm_tasks WHERE id = $1', [taskId]);
+    const taskResult = await query(
+      'SELECT project_id, name, status, progress, assigned_user_id, assigned_user_name FROM pm_tasks WHERE id = $1',
+      [taskId]
+    );
     if (!taskResult.rows.length) return res.status(404).json({ message: 'Task not found.' });
 
-    const projectId = taskResult.rows[0].project_id;
+    const task = taskResult.rows[0];
+    const projectId = task.project_id;
     const newProgress = (progress !== undefined && progress !== null) ? Math.min(100, Math.max(0, Number(progress))) : null;
 
     // Insert comment with optional progress snapshot
@@ -246,6 +268,31 @@ tasksRouter.post('/:id/comments', async (req, res, next) => {
 
     await logActivity(projectId, taskId, req.user?.userId, req.user?.username, 'comment_added',
       newProgress !== null ? { progress: newProgress } : null);
+
+    // Notify the assignee and the project manager about the new comment,
+    // skipping whichever of them wrote it themselves.
+    const commentText = comment.trim();
+    if (task.assigned_user_id && task.assigned_user_id !== req.user?.userId) {
+      notifyUser(
+        task.assigned_user_id, 'task_updated',
+        `New Comment: ${task.name}`,
+        `${req.user?.username || 'Someone'} commented on "${task.name}": ${commentText}`,
+        '/dashboard/projects',
+        buildTaskCommentWhatsAppText(task.assigned_user_name, task.name, req.user?.username, commentText)
+      );
+    }
+    resolveProjectManagerUserId(projectId).then(pmUserId => {
+      if (pmUserId && pmUserId !== req.user?.userId) {
+        notifyUser(
+          pmUserId, 'task_updated',
+          `New Comment: ${task.name}`,
+          `${req.user?.username || 'Someone'} commented on "${task.name}": ${commentText}`,
+          '/dashboard/projects',
+          buildTaskCommentWhatsAppText('Project Manager', task.name, req.user?.username, commentText)
+        );
+      }
+    }).catch(() => {});
+
     res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
 });
