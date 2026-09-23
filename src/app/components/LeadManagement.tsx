@@ -770,7 +770,10 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
   const [status, setStatus] = useState(statusFilter ?? '');
   const [courseFilter, setCourseFilter] = useState('');
   const [instituteFilter, setInstituteFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 100;
   const [editing, setEditing] = useState<Lead | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
@@ -782,10 +785,11 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
 
   const load = () => {
     setLoading(true);
-    const qs = new URLSearchParams({ limit: '100' });
+    const qs = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
     if (status) qs.set('status', status);
     if (courseFilter) qs.set('course_id', courseFilter);
     if (instituteFilter) qs.set('institute_id', instituteFilter);
+    if (sourceFilter) qs.set('source', sourceFilter);
     if (search) qs.set('search', search);
     Promise.all([
       leadFetch<{ data: Lead[]; total: number }>(`/?${qs}`),
@@ -794,7 +798,7 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
     ]).then(([lr, cr, ir]) => { setLeads(lr.data); setTotal(lr.total); setCourses(cr.data); setInstitutes(ir.data); })
       .catch(console.error).finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, [status, courseFilter, instituteFilter, search]);
+  useEffect(() => { load(); }, [status, courseFilter, instituteFilter, sourceFilter, search, page]);
 
   const deleteLead = async () => {
     if (!deleting) return;
@@ -807,21 +811,25 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
       <div className="flex flex-nowrap items-center gap-3">
         <div className="relative flex-[2] min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, phone…" className={`pl-9 ${inp} mt-0 w-full`} />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name, phone…" className={`pl-9 ${inp} mt-0 w-full`} />
         </div>
         {!statusFilter && (
-          <select value={status} onChange={e => setStatus(e.target.value)} className={`${inp} mt-0 flex-1 min-w-0`}>
+          <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className={`${inp} mt-0 flex-1 min-w-0`}>
             <option value="">All Status</option>
             {STATUSES.map(s => <option key={s}>{s}</option>)}
           </select>
         )}
-        <select value={courseFilter} onChange={e => setCourseFilter(e.target.value)} className={`${inp} mt-0 flex-1 min-w-0`}>
+        <select value={courseFilter} onChange={e => { setCourseFilter(e.target.value); setPage(1); }} className={`${inp} mt-0 flex-1 min-w-0`}>
           <option value="">All Courses</option>
           {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={instituteFilter} onChange={e => setInstituteFilter(e.target.value)} className={`${inp} mt-0 flex-1 min-w-0`}>
+        <select value={instituteFilter} onChange={e => { setInstituteFilter(e.target.value); setPage(1); }} className={`${inp} mt-0 flex-1 min-w-0`}>
           <option value="">All Institutes</option>
           {institutes.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+        </select>
+        <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} className={`${inp} mt-0 flex-1 min-w-0`}>
+          <option value="">All Sources</option>
+          {SOURCES.map(s => <option key={s}>{s}</option>)}
         </select>
         <div className="flex gap-3 shrink-0">
           {admissionsView ? (
@@ -912,7 +920,32 @@ function LeadsTable({ statusFilter, admissionsView }: { statusFilter?: LeadStatu
             </table>
           </div>
           {leads.length > 0 && (
-            <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">Showing {leads.length} of {total} leads</div>
+            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-400">
+                Showing {(page - 1) * pageSize + 1}–{(page - 1) * pageSize + leads.length} of {total} leads
+              </span>
+              {total > pageSize && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    Page {page} of {Math.max(1, Math.ceil(total / pageSize))}
+                  </span>
+                  <button
+                    onClick={() => setPage(p => (p * pageSize < total ? p + 1 : p))}
+                    disabled={page * pageSize >= total}
+                    className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
