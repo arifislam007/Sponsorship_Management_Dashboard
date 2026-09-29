@@ -74,12 +74,18 @@ async function registerPush() {
   } catch { /* permission denied or unsupported */ }
 }
 
+// Fixed pixel width of the dropdown panel (matches the w-80 utility class below).
+const PANEL_WIDTH = 320;
+const VIEWPORT_MARGIN = 12;
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState<NotifLog[]>([]);
   const [unread, setUnread] = useState(0);
   const [swReady, setSwReady] = useState(false);
+  const [anchor, setAnchor] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const fetchLog = useCallback(async () => {
     try {
@@ -116,10 +122,49 @@ export function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  // Position the panel in fixed (viewport) coordinates, anchored to the bell
+  // icon, so it always renders fully on-screen — the bell lives at the bottom
+  // of the scrollable sidebar, and a normal absolutely-positioned dropdown
+  // gets clipped by the sidebar's own scroll container before it can show
+  // the full notification list.
+  const recalcPosition = useCallback(() => {
+    const btn = triggerRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(VIEWPORT_MARGIN, rect.right - PANEL_WIDTH),
+      window.innerWidth - PANEL_WIDTH - VIEWPORT_MARGIN
+    );
+    // Prefer opening above the bell (it sits at the bottom of the sidebar);
+    // flip below it if there isn't enough room above for the full list.
+    const spaceAbove = rect.top;
+    if (spaceAbove >= 320) {
+      setAnchor({ bottom: window.innerHeight - rect.top + 8, left });
+    } else {
+      setAnchor({ top: rect.bottom + 8, left });
+    }
+  }, []);
+
   const handleOpen = () => {
+    if (!open) {
+      recalcPosition();
+      fetchLog();
+    }
     setOpen((v) => !v);
-    if (!open) fetchLog();
   };
+
+  // Keep the panel aligned with the bell if the window resizes or the
+  // sidebar (or page) scrolls while it's open.
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => recalcPosition();
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('scroll', handler, true);
+    };
+  }, [open, recalcPosition]);
 
   const markAllRead = async () => {
     await fetch(`${API}/log/read-all`, { method: 'POST', headers: authHeaders() });
@@ -135,6 +180,7 @@ export function NotificationBell() {
   return (
     <div className="relative" ref={panelRef}>
       <button
+        ref={triggerRef}
         onClick={handleOpen}
         className="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
         title="Notifications"
@@ -147,8 +193,11 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute bottom-full right-0 mb-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50">
+      {open && anchor && (
+        <div
+          style={{ position: 'fixed', left: anchor.left, top: anchor.top, bottom: anchor.bottom }}
+          className="w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50"
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <span className="text-sm font-semibold text-gray-800">Notifications</span>
             <div className="flex items-center gap-2">
