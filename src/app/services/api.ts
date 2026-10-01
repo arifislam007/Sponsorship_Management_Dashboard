@@ -97,6 +97,7 @@ export interface MoneyReceiptApi {
   received_by_designation?: string | null;
   date: string;
   month?: string | null;
+  donations?: { date: string; amount: string }[];
   created_at: string;
   has_pdf?: boolean;
 }
@@ -472,7 +473,8 @@ export const api = {
   saveReceipt: (payload: {
     sponsorship_id?: number | null; donor_id?: number | null; received_from: string; student_name?: string | null;
     amount: number; amount_words: string; payment_method: string; reference_no?: string | null;
-    received_by_name?: string | null; received_by_designation?: string | null; date: string; month?: string | null; pdf_base64?: string;
+    received_by_name?: string | null; received_by_designation?: string | null; date: string; month?: string | null;
+    donations?: { date: string; amount: string }[]; pdf_base64?: string;
   }) =>
     request<{ receipt: MoneyReceiptApi }>('/receipts', {
       method: 'POST',

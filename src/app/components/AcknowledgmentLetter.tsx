@@ -7,11 +7,47 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { api } from '../services/api';
 import logo from '../../../logo.png';
-import udaySignature from '../../../Uday_signature.jpg';
+import udaySignature from '../../../default_signature.png';
 
+// A donation entry covers a month RANGE (From Month – To Month) at a given
+// monthly rate — e.g. a donor paying several months in advance in one
+// letter — rather than one fixed date, so the line total is months × amount.
+// Mirrors the same change made to Money Receipt (Accounting.tsx).
 interface DonationEntry {
-  date: string;
+  from_month: string;
+  to_month: string;
   amount: string;
+  /** @deprecated kept only so older saved letters (single-date entries) still parse/display correctly */
+  date?: string;
+}
+
+function donationMonthsCount(entry: DonationEntry): number {
+  if (entry.from_month && entry.to_month) {
+    const [fy, fm] = entry.from_month.split('-').map(Number);
+    const [ty, tm] = entry.to_month.split('-').map(Number);
+    const diff = (ty - fy) * 12 + (tm - fm) + 1;
+    return diff > 0 ? diff : 0;
+  }
+  // Legacy saved letters only stored a single `date` — treat as one month.
+  return entry.date ? 1 : 0;
+}
+
+function donationLineTotal(entry: DonationEntry): number {
+  return donationMonthsCount(entry) * (Number(entry.amount) || 0);
+}
+
+function fmtMonthLabel(m: string): string {
+  if (!m) return '—';
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(y, mo - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+function donationPeriodLabel(entry: DonationEntry): string {
+  if (entry.from_month) {
+    if (!entry.to_month || entry.from_month === entry.to_month) return fmtMonthLabel(entry.from_month);
+    return `${fmtMonthLabel(entry.from_month)} – ${fmtMonthLabel(entry.to_month)}`;
+  }
+  return entry.date ? format(new Date(entry.date), 'MMMM dd, yyyy') : '-';
 }
 
 interface LetterData {
@@ -45,7 +81,7 @@ interface SavedLetterRecord {
 
 const defaultLetterData: LetterData = {
   donorName: '',
-  donations: [{ date: '', amount: '' }],
+  donations: [{ from_month: '', to_month: '', amount: '' }],
   donationType: 'Sponsor a Child',
   projectName: '',
   message: '',
@@ -80,7 +116,7 @@ const safeParseLetterData = (content: string): LetterData | null => {
     if (!parsed || typeof parsed !== 'object') return null;
     return {
       donorName: parsed.donorName || '',
-      donations: Array.isArray(parsed.donations) && parsed.donations.length > 0 ? parsed.donations : [{ date: '', amount: '' }],
+      donations: Array.isArray(parsed.donations) && parsed.donations.length > 0 ? parsed.donations : [{ from_month: '', to_month: '', amount: '' }],
       donationType: parsed.donationType || 'Sponsor a Child',
       projectName: parsed.projectName || '',
       message: parsed.message || '',
@@ -144,7 +180,7 @@ export function AcknowledgmentLetter() {
             const formData = safeParseLetterData(letter.content);
             const fallbackDonorName = formData?.donorName || 'Unnamed donor';
             const fallbackProjectName = formData?.projectName || letter.template_name || '';
-            const amount = formData?.donations?.reduce((sum, donation) => sum + (Number(donation.amount) || 0), 0) || 0;
+            const amount = formData?.donations?.reduce((sum, donation) => sum + donationLineTotal(donation), 0) || 0;
 
             return {
               id: letter.id,
@@ -184,13 +220,13 @@ export function AcknowledgmentLetter() {
     loadDonors();
   }, []);
 
-  const totalAmount = useMemo(
-    () =>
-      formData.donations.reduce((sum, donation) => {
-        return sum + (parseFloat(donation.amount) || 0);
-      }, 0),
-    [formData.donations]
-  );
+  // Not memoized on purpose: react-hook-form's watch() can update a nested
+  // donations[i].field in place without replacing the `donations` array
+  // reference, which would leave a useMemo keyed on [formData.donations]
+  // stale after editing an existing row (the per-row figures below are
+  // computed the same un-memoized way and always stay correct).
+  const totalAmount = formData.donations.reduce((sum, donation) => sum + donationLineTotal(donation), 0);
+  const totalMonths = formData.donations.reduce((sum, donation) => sum + donationMonthsCount(donation), 0);
 
   const savedLettersTotal = useMemo(
     () => savedLetters.reduce((sum, letter) => sum + letter.amount, 0),
@@ -208,7 +244,8 @@ export function AcknowledgmentLetter() {
 
   const addDonation = () => {
     const donations = form.getValues('donations');
-    form.setValue('donations', [...donations, { date: '', amount: '' }]);
+    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    form.setValue('donations', [...donations, { from_month: currentMonthStr, to_month: currentMonthStr, amount: '' }]);
   };
 
   const removeDonation = (index: number) => {
@@ -230,9 +267,9 @@ export function AcknowledgmentLetter() {
       const sponsorships = all.filter((s: any) => s.donor_id === donorId);
       setDonorSponsorships(sponsorships);
       if (sponsorships.length > 0) {
-        const today = new Date().toISOString().slice(0, 10);
+        const currentMonthStr = new Date().toISOString().slice(0, 7);
         const totalAmount = sponsorships.reduce((sum: number, s: any) => sum + Number(s.amount), 0);
-        form.setValue('donations', [{ date: today, amount: String(totalAmount) }]);
+        form.setValue('donations', [{ from_month: currentMonthStr, to_month: currentMonthStr, amount: String(totalAmount) }]);
         form.setValue('donationType', 'Sponsor a Child');
         form.setValue('projectName', sponsorships.length === 1
           ? `Sponsorship for ${sponsorships[0].student_name}`
@@ -278,6 +315,20 @@ export function AcknowledgmentLetter() {
     )
   );
 
+  // html2canvas 1.4.1 can't parse modern CSS color functions (oklch, oklab,
+  // color-mix) — Tailwind v4's generated stylesheet declares its whole color
+  // palette via oklch() custom properties, and current Chrome's own default
+  // `outline-color` resolves to oklab(). `letterContentRef`'s subtree is
+  // already pure inline hex styles so it never needs the app's stylesheet;
+  // stripping it from html2canvas's internal clone (onclone) removes the
+  // risk entirely (same fix applied to Money Receipt / HR payslip PDFs).
+  const neutralizeUnsupportedColorsInClone = (clonedDoc: Document) => {
+    clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => el.remove());
+    const style = clonedDoc.createElement('style');
+    style.textContent = '* { outline-color: transparent !important; }';
+    clonedDoc.head.appendChild(style);
+  };
+
   const generatePdfFromPreview = async (): Promise<string | null> => {
     const target = letterContentRef.current;
     if (!target) return null;
@@ -289,6 +340,7 @@ export function AcknowledgmentLetter() {
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
+        onclone: neutralizeUnsupportedColorsInClone,
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -762,7 +814,7 @@ export function AcknowledgmentLetter() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Donation Details <span className="text-red-500">*</span>
+                  Donation Details (month range + monthly amount) <span className="text-red-500">*</span>
                 </label>
                 <button
                   type="button"
@@ -774,32 +826,59 @@ export function AcknowledgmentLetter() {
                 </button>
               </div>
 
-              <div className="space-y-2">
-                {formData.donations.map((_, index) => (
-                  <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                    <input
-                      type="date"
-                      {...form.register(`donations.${index}.date` as const)}
-                      className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
-                    />
-                    <input
-                      type="number"
-                      placeholder="Amount (Tk.)"
-                      {...form.register(`donations.${index}.amount` as const)}
-                      className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
-                    />
-                    {formData.donations.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeDonation(index)}
-                        className="px-3 py-2.5 border border-gray-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </div>
-                ))}
+              <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mb-1 px-0.5">
+                <span className="text-[10px] font-medium text-gray-400 uppercase">From Month</span>
+                <span className="text-[10px] font-medium text-gray-400 uppercase">To Month</span>
+                <span className="text-[10px] font-medium text-gray-400 uppercase">Amount/mo</span>
+                <span />
               </div>
+
+              <div className="space-y-1.5">
+                {formData.donations.map((donation, index) => {
+                  const months = donationMonthsCount(donation);
+                  const lineTotal = donationLineTotal(donation);
+                  return (
+                    <div key={index}>
+                      <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+                        <input
+                          type="month"
+                          {...form.register(`donations.${index}.from_month` as const)}
+                          className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
+                        />
+                        <input
+                          type="month"
+                          min={donation.from_month || undefined}
+                          {...form.register(`donations.${index}.to_month` as const)}
+                          className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Amount (Tk.)"
+                          {...form.register(`donations.${index}.amount` as const)}
+                          className="px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14856E] focus:border-transparent"
+                        />
+                        {formData.donations.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeDonation(index)}
+                            className="px-3 py-2.5 border border-gray-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                      {months > 0 && Number(donation.amount) > 0 && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {months} month{months === 1 ? '' : 's'} × ৳{Number(donation.amount).toLocaleString()} = <span className="font-medium text-[#14856E]">৳{lineTotal.toLocaleString()}</span>
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {totalMonths > 0 && (
+                <p className="text-xs text-gray-500 mt-2">Total: <span className="font-medium text-gray-700">{totalMonths} month{totalMonths === 1 ? '' : 's'}</span> across all entries</p>
+              )}
             </div>
 
             <div>
@@ -1005,7 +1084,9 @@ export function AcknowledgmentLetter() {
                         <table className="w-full border-collapse border border-gray-300">
                           <thead>
                             <tr className="bg-gray-100 text-gray-700">
-                              <th className="border border-gray-300 px-3 py-2 text-left">Date</th>
+                              <th className="border border-gray-300 px-3 py-2 text-left">Period</th>
+                              <th className="border border-gray-300 px-3 py-2 text-center">Months</th>
+                              <th className="border border-gray-300 px-3 py-2 text-right">Rate/mo</th>
                               <th className="border border-gray-300 px-3 py-2 text-right">Amount (BDT)</th>
                             </tr>
                           </thead>
@@ -1014,17 +1095,19 @@ export function AcknowledgmentLetter() {
                               if (!Number(donation.amount)) return null;
                               return (
                                 <tr key={index} className="hover:bg-gray-50">
-                                  <td className="border border-gray-300 px-3 py-2">
-                                    {donation.date ? format(new Date(donation.date), 'MMMM dd, yyyy') : '-'}
-                                  </td>
+                                  <td className="border border-gray-300 px-3 py-2">{donationPeriodLabel(donation)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-center">{donationMonthsCount(donation)}</td>
+                                  <td className="border border-gray-300 px-3 py-2 text-right">৳{Number(donation.amount).toLocaleString()}</td>
                                   <td className="border border-gray-300 px-3 py-2 text-right">
-                                    ৳{Number(donation.amount).toLocaleString()}
+                                    ৳{donationLineTotal(donation).toLocaleString()}
                                   </td>
                                 </tr>
                               );
                             })}
                             <tr className="bg-[#14856E]/10">
-                              <td className="border border-gray-300 px-3 py-2 font-semibold">Total Amount</td>
+                              <td className="border border-gray-300 px-3 py-2 font-semibold" colSpan={3}>
+                                Total Amount ({totalMonths} month{totalMonths === 1 ? '' : 's'})
+                              </td>
                               <td className="border border-gray-300 px-3 py-2 text-right font-semibold">
                                 ৳{Number(totalAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                               </td>
@@ -1119,7 +1202,9 @@ export function AcknowledgmentLetter() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
                     <thead>
                       <tr style={{ background: '#f3f4f6', color: '#374151' }}>
-                        <th style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'left' }}>Date</th>
+                        <th style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'left' }}>Period</th>
+                        <th style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'center' }}>Months</th>
+                        <th style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right' }}>Rate/mo</th>
                         <th style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right' }}>Amount (BDT)</th>
                       </tr>
                     </thead>
@@ -1128,17 +1213,19 @@ export function AcknowledgmentLetter() {
                         if (!Number(donation.amount)) return null;
                         return (
                           <tr key={index}>
-                            <td style={{ border: '1px solid #d1d5db', padding: '8px 12px' }}>
-                              {donation.date ? format(new Date(donation.date), 'MMMM dd, yyyy') : '-'}
-                            </td>
+                            <td style={{ border: '1px solid #d1d5db', padding: '8px 12px' }}>{donationPeriodLabel(donation)}</td>
+                            <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'center' }}>{donationMonthsCount(donation)}</td>
+                            <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right' }}>৳{Number(donation.amount).toLocaleString()}</td>
                             <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right' }}>
-                              ৳{Number(donation.amount).toLocaleString()}
+                              ৳{donationLineTotal(donation).toLocaleString()}
                             </td>
                           </tr>
                         );
                       })}
                       <tr style={{ background: 'rgba(20,133,110,0.1)' }}>
-                        <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', fontWeight: 600 }}>Total Amount</td>
+                        <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', fontWeight: 600 }} colSpan={3}>
+                          Total Amount ({totalMonths} month{totalMonths === 1 ? '' : 's'})
+                        </td>
                         <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>
                           ৳{Number(totalAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                         </td>

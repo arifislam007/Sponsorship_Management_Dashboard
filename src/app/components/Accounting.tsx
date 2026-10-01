@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback, useRef, useId } from 'react';
+import { useEffect, useState, useCallback, useRef, useId, useMemo } from 'react';
 import {
   BookOpen, Plus, X, Check, TrendingUp, TrendingDown, DollarSign, Clock,
   FileText, BarChart2, RefreshCw, Printer, Ban, Send, Eye, CheckCircle,
-  Wallet, Pencil, Trash2, Loader2, AlertCircle, PlayCircle, Receipt, Upload, Mail
+  Wallet, Pencil, Trash2, Loader2, AlertCircle, PlayCircle, Receipt, Upload, Mail,
+  ChevronDown, Users
 } from 'lucide-react';
 import { format } from 'date-fns';
 import html2canvas from 'html2canvas';
@@ -18,7 +19,7 @@ import {
   SponsorshipApi, MoneyReceiptApi, DonorApi,
 } from '../services/api';
 import logo from '../../../logo.png';
-import udaySignature from '../../../Uday_signature.jpg';
+import udaySignature from '../../../default_signature.png';
 import { ShareEmailModal, wrapSimpleHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
 
@@ -1906,15 +1907,48 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+// A donation entry covers a month RANGE (From Month – To Month) at a given
+// monthly rate — e.g. a donor paying 3 months in advance in one receipt —
+// rather than one fixed date, so the line total is months × amount.
+interface DonationEntry { from_month: string; to_month: string; amount: string; }
+
+function donationMonthsCount(entry: DonationEntry): number {
+  if (!entry.from_month || !entry.to_month) return 0;
+  const [fy, fm] = entry.from_month.split('-').map(Number);
+  const [ty, tm] = entry.to_month.split('-').map(Number);
+  const diff = (ty - fy) * 12 + (tm - fm) + 1;
+  return diff > 0 ? diff : 0;
+}
+
+function donationLineTotal(entry: DonationEntry): number {
+  return donationMonthsCount(entry) * (Number(entry.amount) || 0);
+}
+
+function fmtMonthLabel(m: string): string {
+  if (!m) return '—';
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(y, mo - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+function donationPeriodLabel(entry: DonationEntry): string {
+  if (!entry.from_month) return '—';
+  if (!entry.to_month || entry.from_month === entry.to_month) return fmtMonthLabel(entry.from_month);
+  return `${fmtMonthLabel(entry.from_month)} – ${fmtMonthLabel(entry.to_month)}`;
+}
+
 function MoneyReceiptTab() {
   const todayStr = today();
+  const currentMonthStr = todayStr.slice(0, 7);
 
-  const [sponsorships, setSponsorships] = useState<SponsorshipApi[]>([]);
   const [donors, setDonors] = useState<DonorApi[]>([]);
   const [financeEmployees, setFinanceEmployees] = useState<FinanceEmployee[]>([]);
   const [history, setHistory] = useState<MoneyReceiptApi[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [sponsorshipId, setSponsorshipId] = useState('');
+  const [showDonorDropdown, setShowDonorDropdown] = useState(false);
+  const [selectedDonorId, setSelectedDonorId] = useState<number | null>(null);
+  const [donorSponsorships, setDonorSponsorships] = useState<SponsorshipApi[]>([]);
+  const [isLoadingSponsorships, setIsLoadingSponsorships] = useState(false);
+  const [donations, setDonations] = useState<DonationEntry[]>([{ from_month: currentMonthStr, to_month: currentMonthStr, amount: '' }]);
   const [receivedByEmployeeId, setReceivedByEmployeeId] = useState('');
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<{
@@ -1922,7 +1956,7 @@ function MoneyReceiptTab() {
   } | null>(null);
   const [emailingHistoryId, setEmailingHistoryId] = useState<number | null>(null);
   const [form, setForm] = useState({
-    receivedFrom: '', studentName: '', amount: '', paymentMethod: 'Cash',
+    receivedFrom: '', studentName: '', paymentMethod: 'Cash',
     referenceNo: '', receivedByName: '', receivedByDesignation: '', date: todayStr, month: MONTHS[new Date().getMonth()],
   });
   const [saving, setSaving] = useState(false);
@@ -1947,7 +1981,6 @@ function MoneyReceiptTab() {
   };
 
   useEffect(() => {
-    api.getSponsorships(200, 0).then(r => setSponsorships(r.data || r)).catch(console.error);
     api.getDonors(200, 0).then(r => setDonors(r.data || r)).catch(console.error);
     fetchFinanceEmployees().then(setFinanceEmployees).catch(console.error);
     loadHistory();
@@ -1955,9 +1988,8 @@ function MoneyReceiptTab() {
 
   const recipientEmail = (() => {
     if (lastReceipt?.donorId) return donors.find(d => d.id === lastReceipt.donorId)?.email || '';
-    const sp = sponsorships.find(s => String(s.id) === sponsorshipId);
-    if (!sp) return '';
-    return donors.find(d => d.id === sp.donor_id)?.email || '';
+    if (selectedDonorId) return donors.find(d => d.id === selectedDonorId)?.email || '';
+    return '';
   })();
 
   const onReceivedByChange = (id: string) => {
@@ -1968,27 +2000,59 @@ function MoneyReceiptTab() {
     }
   };
 
-  const onSponsorshipChange = (id: string) => {
-    setSponsorshipId(id);
-    const sp = sponsorships.find(s => String(s.id) === id);
-    if (sp) {
-      setForm(f => ({
-        ...f,
-        receivedFrom: sp.donor_name,
-        studentName: sp.student_name,
-        amount: String(sp.amount),
-        paymentMethod: sp.payment_media || f.paymentMethod,
-        referenceNo: sp.reference_number || '',
-      }));
+  // Ported from AcknowledgmentLetter.tsx's fetchAndFillSponsorships — picking a
+  // donor auto-pulls in ALL of their active sponsorships (no per-sponsorship
+  // picking), joins student names into the purpose line, and seeds one
+  // donation entry with the summed monthly amount.
+  const fetchAndFillSponsorships = async (donorId: number, donorName: string) => {
+    setDonorSponsorships([]);
+    setIsLoadingSponsorships(true);
+    setSelectedDonorId(donorId);
+    try {
+      const res = await api.getSponsorships(100, 0, donorName, 'active');
+      const all = Array.isArray(res) ? res : res.data || [];
+      const matched = all.filter((s: SponsorshipApi) => s.donor_id === donorId);
+      setDonorSponsorships(matched);
+      if (matched.length > 0) {
+        const total = matched.reduce((sum: number, s: SponsorshipApi) => sum + Number(s.amount), 0);
+        setDonations([{ from_month: currentMonthStr, to_month: currentMonthStr, amount: String(total) }]);
+        setForm(f => ({
+          ...f,
+          receivedFrom: donorName,
+          studentName: matched.length === 1
+            ? matched[0].student_name
+            : matched.map((s: SponsorshipApi) => s.student_name).join(', '),
+          paymentMethod: matched[0].payment_media || f.paymentMethod,
+          referenceNo: matched[0].reference_number || '',
+        }));
+      } else {
+        setForm(f => ({ ...f, receivedFrom: donorName }));
+      }
+    } catch {
+      setDonorSponsorships([]);
+    } finally {
+      setIsLoadingSponsorships(false);
     }
   };
+
+  const addDonation = () => setDonations(d => [...d, { from_month: currentMonthStr, to_month: currentMonthStr, amount: '' }]);
+  const removeDonation = (index: number) => setDonations(d => (d.length > 1 ? d.filter((_, i) => i !== index) : d));
+  const updateDonation = (index: number, field: keyof DonationEntry, value: string) =>
+    setDonations(d => d.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
 
   const setField = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
 
-  const amountNum = Number(form.amount) || 0;
+  const totalAmount = useMemo(
+    () => donations.reduce((sum, d) => sum + donationLineTotal(d), 0),
+    [donations]
+  );
+  const totalMonths = useMemo(
+    () => donations.reduce((sum, d) => sum + donationMonthsCount(d), 0),
+    [donations]
+  );
   const receiptNoPreview = 'Auto-generated on save';
-  const wordsPreview = amountInWords(amountNum);
+  const wordsPreview = amountInWords(totalAmount);
 
   const waitForImages = (root: HTMLElement) => Promise.all(
     Array.from(root.querySelectorAll('img')).map(img =>
@@ -1999,12 +2063,26 @@ function MoneyReceiptTab() {
     )
   );
 
+  // html2canvas 1.4.1 can't parse modern CSS color functions (oklch, oklab,
+  // color-mix) — Tailwind v4's generated stylesheet declares its whole color
+  // palette via oklch() custom properties, and current Chrome's own default
+  // `outline-color` resolves to oklab(). `contentRef`'s subtree is already
+  // pure inline hex styles so it never needs the app's stylesheet; stripping
+  // it from html2canvas's internal clone (onclone) removes the risk entirely
+  // (same fix applied to the HR payslip/report PDFs).
+  const neutralizeUnsupportedColorsInClone = (clonedDoc: Document) => {
+    clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => el.remove());
+    const style = clonedDoc.createElement('style');
+    style.textContent = '* { outline-color: transparent !important; }';
+    clonedDoc.head.appendChild(style);
+  };
+
   const generatePdfFromPreview = async (): Promise<string | null> => {
     const target = contentRef.current;
     if (!target) return null;
     try {
       await waitForImages(target);
-      const canvas = await html2canvas(target, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false });
+      const canvas = await html2canvas(target, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, onclone: neutralizeUnsupportedColorsInClone });
       const imgData = canvas.toDataURL('image/png');
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
@@ -2035,18 +2113,21 @@ function MoneyReceiptTab() {
   const save = async () => {
     setError(''); setSuccess(''); setLastReceipt(null);
     if (!form.receivedFrom.trim()) { setError('Received From is required'); return; }
-    if (!amountNum || amountNum <= 0) { setError('Enter a valid amount'); return; }
+    if (!totalAmount || totalAmount <= 0) { setError('Enter at least one valid donation amount'); return; }
     if (!form.date) { setError('Date is required'); return; }
     setSaving(true);
     try {
       const pdf_base64 = await generatePdfFromPreview();
-      const sp = sponsorships.find(s => String(s.id) === sponsorshipId);
+      // A single sponsorship still maps cleanly to sponsorship_id; once a
+      // donor's receipt spans multiple sponsorships, no single id represents
+      // it accurately — donor_id stays as the authoritative link.
+      const sponsorship_id = donorSponsorships.length === 1 ? donorSponsorships[0].id : null;
       const result = await api.saveReceipt({
-        sponsorship_id: sp?.id ?? null,
-        donor_id: sp?.donor_id ?? null,
+        sponsorship_id,
+        donor_id: selectedDonorId,
         received_from: form.receivedFrom.trim(),
         student_name: form.studentName.trim() || null,
-        amount: amountNum,
+        amount: totalAmount,
         amount_words: wordsPreview,
         payment_method: form.paymentMethod,
         reference_no: form.referenceNo.trim() || null,
@@ -2054,6 +2135,7 @@ function MoneyReceiptTab() {
         received_by_designation: form.receivedByDesignation.trim() || null,
         date: form.date,
         month: form.month,
+        donations: donations.filter(d => Number(d.amount) > 0),
         pdf_base64: pdf_base64 || undefined,
       });
       setSuccess(
@@ -2066,9 +2148,9 @@ function MoneyReceiptTab() {
           receiptNo: result.receipt.receipt_no,
           pdfBase64: pdf_base64,
           receivedFrom: form.receivedFrom.trim(),
-          amount: amountNum,
+          amount: totalAmount,
           date: form.date,
-          donorId: sp?.donor_id ?? null,
+          donorId: selectedDonorId,
         });
       }
       loadHistory();
@@ -2147,31 +2229,120 @@ function MoneyReceiptTab() {
           {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
 
           <div>
-            <label className={lbl}>Sponsorship (optional, auto-fills below)</label>
-            <select value={sponsorshipId} onChange={e => onSponsorshipChange(e.target.value)} className={inp}>
-              <option value="">Select a sponsorship…</option>
-              {sponsorships.map(s => (
-                <option key={s.id} value={s.id}>{s.donor_name} — {s.student_name} (৳{s.amount.toLocaleString()})</option>
-              ))}
-            </select>
+            <label className={lbl}>Donor Name (optional, auto-fills below)</label>
+            <div className="relative mt-1">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={form.receivedFrom}
+                  onChange={setField('receivedFrom')}
+                  placeholder="Enter donor's full name or select from list"
+                  className={`${inp} mt-0 flex-1`}
+                />
+                <button type="button" onClick={() => setShowDonorDropdown(!showDonorDropdown)}
+                  className="px-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+                  title="Select from existing donors">
+                  <ChevronDown size={16} className={`transition-transform ${showDonorDropdown ? 'rotate-180' : ''}`} />
+                  <Users size={14} />
+                </button>
+              </div>
+
+              {showDonorDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto">
+                  {donors.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-500 text-center">No donors found</div>
+                  ) : (
+                    donors
+                      .filter(d => d.name.toLowerCase().includes(form.receivedFrom.toLowerCase()))
+                      .map(d => (
+                        <button key={d.id} type="button"
+                          onClick={() => { setShowDonorDropdown(false); fetchAndFillSponsorships(d.id, d.name); }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-gray-100 border-b border-gray-100 last:border-b-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-gray-900">{d.name}</span>
+                            <span className="text-xs text-gray-500">৳{d.total_contributed?.toLocaleString() || '0'}</span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-0.5">{d.email}</p>
+                        </button>
+                      ))
+                  )}
+                </div>
+              )}
+
+              {isLoadingSponsorships && <p className="mt-2 text-xs text-gray-500">Loading sponsorships…</p>}
+
+              {!isLoadingSponsorships && donorSponsorships.length > 0 && (
+                <div className="mt-2 rounded-lg border border-[#14856E]/30 bg-[#14856E]/5 p-3">
+                  <p className="text-xs font-semibold text-[#14856E] mb-2">Auto-filled from active sponsorships</p>
+                  <div className="space-y-1.5">
+                    {donorSponsorships.map(s => (
+                      <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-gray-200 px-3 py-2">
+                        <p className="text-sm font-medium text-gray-900">{s.student_name}</p>
+                        <span className="text-xs font-semibold text-[#14856E]">৳{Number(s.amount).toLocaleString()}/mo</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div><label className={lbl}>Received From *</label>
-            <input value={form.receivedFrom} onChange={setField('receivedFrom')} className={inp} /></div>
           <div><label className={lbl}>Student / Purpose</label>
             <input value={form.studentName} onChange={setField('studentName')} placeholder="e.g. Sample Student" className={inp} /></div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className={lbl}>Amount (BDT) *</label>
-              <input type="number" value={form.amount} onChange={setField('amount')} className={inp} /></div>
-            <div><label className={lbl}>Date *</label>
-              <input type="date" value={form.date} onChange={setField('date')} className={inp} /></div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className={lbl}>Donation Details (month range + monthly amount) *</label>
+              <button type="button" onClick={addDonation}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-[#14856E] text-white rounded-md hover:bg-[#0f6b5a]">
+                <Plus size={12} />Add More
+              </button>
+            </div>
+            <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mb-1 px-0.5">
+              <span className="text-[10px] font-medium text-gray-400 uppercase">From Month</span>
+              <span className="text-[10px] font-medium text-gray-400 uppercase">To Month</span>
+              <span className="text-[10px] font-medium text-gray-400 uppercase">Amount/mo</span>
+              <span />
+            </div>
+            <div className="space-y-1.5">
+              {donations.map((entry, index) => {
+                const months = donationMonthsCount(entry);
+                const lineTotal = donationLineTotal(entry);
+                return (
+                  <div key={index}>
+                    <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+                      <input type="month" value={entry.from_month} onChange={e => updateDonation(index, 'from_month', e.target.value)} className={`${inp} mt-0`} />
+                      <input type="month" value={entry.to_month} min={entry.from_month || undefined} onChange={e => updateDonation(index, 'to_month', e.target.value)} className={`${inp} mt-0`} />
+                      <input type="number" placeholder="Tk." value={entry.amount} onChange={e => updateDonation(index, 'amount', e.target.value)} className={`${inp} mt-0`} />
+                      {donations.length > 1 && (
+                        <button type="button" onClick={() => removeDonation(index)}
+                          className="px-3 border border-gray-300 text-red-600 rounded-lg hover:bg-red-50">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                    {months > 0 && Number(entry.amount) > 0 && (
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {months} month{months === 1 ? '' : 's'} × ৳{Number(entry.amount).toLocaleString()} = <span className="font-medium text-[#14856E]">৳{lineTotal.toLocaleString()}</span>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {totalMonths > 0 && (
+              <p className="text-xs text-gray-500 mt-2">Total: <span className="font-medium text-gray-700">{totalMonths} month{totalMonths === 1 ? '' : 's'}</span> across all entries</p>
+            )}
           </div>
 
-          <div><label className={lbl}>Month</label>
-            <select value={form.month} onChange={setField('month')} className={inp}>
-              {MONTHS.map(m => <option key={m}>{m}</option>)}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lbl}>Date *</label>
+              <input type="date" value={form.date} onChange={setField('date')} className={inp} /></div>
+            <div><label className={lbl}>Month</label>
+              <select value={form.month} onChange={setField('month')} className={inp}>
+                {MONTHS.map(m => <option key={m}>{m}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -2256,10 +2427,32 @@ function MoneyReceiptTab() {
             </div>
 
             <div className="border border-gray-300 rounded-lg p-4 mb-6">
-              <div className="flex items-center justify-between mb-1">
-                <span className={lbl}>Amount</span>
-                <span className="text-xl font-bold text-[#14856E]">৳{amountNum.toLocaleString()}</span>
-              </div>
+              <table className="w-full text-sm mb-2">
+                <thead>
+                  <tr className="text-left text-gray-500 text-xs uppercase">
+                    <th className="pb-1 font-medium">Period</th>
+                    <th className="pb-1 font-medium text-center">Months</th>
+                    <th className="pb-1 font-medium text-right">Rate/mo</th>
+                    <th className="pb-1 font-medium text-right">Amount (BDT)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {donations.filter(d => Number(d.amount)).map((d, i) => (
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="py-1 text-gray-700">{donationPeriodLabel(d)}</td>
+                      <td className="py-1 text-center text-gray-700">{donationMonthsCount(d)}</td>
+                      <td className="py-1 text-right text-gray-700">৳{Number(d.amount).toLocaleString()}</td>
+                      <td className="py-1 text-right text-gray-900">৳{donationLineTotal(d).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-gray-300 font-bold">
+                    <td className="py-1.5">Total ({totalMonths} month{totalMonths === 1 ? '' : 's'})</td>
+                    <td />
+                    <td />
+                    <td className="py-1.5 text-right text-[#14856E] text-lg">৳{totalAmount.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
               <p className="text-sm text-gray-700 italic">In Words: {wordsPreview}</p>
             </div>
 
@@ -2309,10 +2502,32 @@ function MoneyReceiptTab() {
             </tbody>
           </table>
           <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '14px', marginBottom: '40px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <strong>Amount</strong>
-              <strong style={{ color: '#14856E', fontSize: '18px' }}>৳{amountNum.toLocaleString()}</strong>
-            </div>
+            <table style={{ width: '100%', fontSize: '13px', marginBottom: '8px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: '11px', textTransform: 'uppercase' as const }}>
+                  <th style={{ paddingBottom: '4px', fontWeight: 500 }}>Period</th>
+                  <th style={{ paddingBottom: '4px', fontWeight: 500, textAlign: 'center' }}>Months</th>
+                  <th style={{ paddingBottom: '4px', fontWeight: 500, textAlign: 'right' }}>Rate/mo</th>
+                  <th style={{ paddingBottom: '4px', fontWeight: 500, textAlign: 'right' }}>Amount (BDT)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {donations.filter(d => Number(d.amount)).map((d, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid #eee' }}>
+                    <td style={{ padding: '4px 0' }}>{donationPeriodLabel(d)}</td>
+                    <td style={{ padding: '4px 0', textAlign: 'center' }}>{donationMonthsCount(d)}</td>
+                    <td style={{ padding: '4px 0', textAlign: 'right' }}>৳{Number(d.amount).toLocaleString()}</td>
+                    <td style={{ padding: '4px 0', textAlign: 'right' }}>৳{donationLineTotal(d).toLocaleString()}</td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: '2px solid #ccc', fontWeight: 'bold' }}>
+                  <td style={{ padding: '6px 0' }}>Total ({totalMonths} month{totalMonths === 1 ? '' : 's'})</td>
+                  <td />
+                  <td />
+                  <td style={{ padding: '6px 0', textAlign: 'right', color: '#14856E', fontSize: '18px' }}>৳{totalAmount.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
             <p style={{ fontStyle: 'italic', fontSize: '13px' }}>In Words: {wordsPreview}</p>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

@@ -364,3 +364,164 @@ payrollRouter.get('/reports/salary-register', async (req, res, next) => {
     res.json({ data: r.rows });
   } catch (err) { next(err); }
 });
+
+// Bulk payslip data for a month — powers the "Print All Payslips" PDF so the
+// frontend doesn't need one request per employee.
+payrollRouter.get('/reports/payslips', async (req, res, next) => {
+  try {
+    const { payroll_month, payment_status } = req.query;
+    if (!payroll_month) return res.status(400).json({ message: 'payroll_month is required' });
+
+    const params = [payroll_month];
+    const clauses = ['p.payroll_month = $1'];
+    if (payment_status) { params.push(payment_status); clauses.push(`p.payment_status = $${params.length}`); }
+
+    const payResult = await query(
+      `SELECT p.*,
+              p.basic_salary::float8, p.total_allowance::float8,
+              p.total_deduction::float8, p.net_salary::float8,
+              e.full_name AS employee_name, e.employee_code,
+              e.mobile, e.joining_date, e.payment_method AS emp_payment_method,
+              e.bank_name, e.account_number, e.tax_id,
+              d.name AS department_name, des.title AS designation_title
+       FROM hr_payrolls p
+       JOIN hr_employees e ON e.id = p.employee_id
+       LEFT JOIN hr_departments d ON d.id = e.department_id
+       LEFT JOIN hr_designations des ON des.id = e.designation_id
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY e.full_name`,
+      params
+    );
+
+    const payrollIds = payResult.rows.map(r => r.id);
+    const itemsResult = payrollIds.length
+      ? await query(
+          `SELECT payroll_id, component_name, component_type, amount::float8
+           FROM hr_payroll_items WHERE payroll_id = ANY($1) ORDER BY payroll_id, component_type DESC, id`,
+          [payrollIds]
+        )
+      : { rows: [] };
+
+    const itemsByPayroll = new Map();
+    for (const item of itemsResult.rows) {
+      if (!itemsByPayroll.has(item.payroll_id)) itemsByPayroll.set(item.payroll_id, []);
+      itemsByPayroll.get(item.payroll_id).push(item);
+    }
+
+    const data = payResult.rows.map(p => {
+      const items = itemsByPayroll.get(p.id) || [];
+      return {
+        ...p,
+        earnings: items.filter(i => i.component_type === 'Earning'),
+        deductions: items.filter(i => i.component_type === 'Deduction'),
+      };
+    });
+
+    res.json({ data });
+  } catch (err) { next(err); }
+});
+
+// ── Report PDFs (saved history) ─────────────────────────────────────────────────
+
+payrollRouter.post('/reports/salary-report-pdf', async (req, res, next) => {
+  try {
+    const { payroll_month, department_id, employee_count, total_net_salary, pdf_base64 } = req.body;
+    if (!payroll_month) return res.status(400).json({ message: 'payroll_month is required' });
+    if (!pdf_base64) return res.status(400).json({ message: 'pdf_base64 is required' });
+
+    const pdfBuffer = Buffer.from(pdf_base64, 'base64');
+    const r = await query(
+      `INSERT INTO hr_salary_report_pdfs
+         (payroll_month, department_id, employee_count, total_net_salary, pdf_data, generated_by_name)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id, payroll_month, department_id, employee_count, total_net_salary::float8, created_at`,
+      [payroll_month, department_id || null, Number(employee_count) || 0, Number(total_net_salary) || 0,
+       pdfBuffer, req.user?.username || null]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) { next(err); }
+});
+
+payrollRouter.get('/reports/salary-report-pdf', async (req, res, next) => {
+  try {
+    const { payroll_month } = req.query;
+    const params = [];
+    const clauses = [];
+    if (payroll_month) { params.push(payroll_month); clauses.push(`r.payroll_month = $${params.length}`); }
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+    const r = await query(
+      `SELECT r.id, r.payroll_month, r.department_id, d.name AS department_name,
+              r.employee_count, r.total_net_salary::float8, r.generated_by_name, r.created_at
+       FROM hr_salary_report_pdfs r
+       LEFT JOIN hr_departments d ON d.id = r.department_id
+       ${where}
+       ORDER BY r.created_at DESC
+       LIMIT 50`,
+      params
+    );
+    res.json({ data: r.rows });
+  } catch (err) { next(err); }
+});
+
+payrollRouter.get('/reports/salary-report-pdf/:id/pdf', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await query('SELECT pdf_data, payroll_month FROM hr_salary_report_pdfs WHERE id = $1', [id]);
+    if (!r.rows.length) return res.status(404).json({ message: 'Not found' });
+    const { pdf_data, payroll_month } = r.rows[0];
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="salary-report-${payroll_month}.pdf"`);
+    res.send(pdf_data);
+  } catch (err) { next(err); }
+});
+
+payrollRouter.post('/reports/payslip-batch-pdf', async (req, res, next) => {
+  try {
+    const { payroll_month, payment_status_filter, employee_count, pdf_base64 } = req.body;
+    if (!payroll_month) return res.status(400).json({ message: 'payroll_month is required' });
+    if (!pdf_base64) return res.status(400).json({ message: 'pdf_base64 is required' });
+
+    const pdfBuffer = Buffer.from(pdf_base64, 'base64');
+    const r = await query(
+      `INSERT INTO hr_payslip_batch_pdfs
+         (payroll_month, payment_status_filter, employee_count, pdf_data, generated_by_name)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id, payroll_month, payment_status_filter, employee_count, created_at`,
+      [payroll_month, payment_status_filter || null, Number(employee_count) || 0, pdfBuffer, req.user?.username || null]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) { next(err); }
+});
+
+payrollRouter.get('/reports/payslip-batch-pdf', async (req, res, next) => {
+  try {
+    const { payroll_month } = req.query;
+    const params = [];
+    const clauses = [];
+    if (payroll_month) { params.push(payroll_month); clauses.push(`payroll_month = $${params.length}`); }
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+    const r = await query(
+      `SELECT id, payroll_month, payment_status_filter, employee_count, generated_by_name, created_at
+       FROM hr_payslip_batch_pdfs
+       ${where}
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      params
+    );
+    res.json({ data: r.rows });
+  } catch (err) { next(err); }
+});
+
+payrollRouter.get('/reports/payslip-batch-pdf/:id/pdf', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await query('SELECT pdf_data, payroll_month FROM hr_payslip_batch_pdfs WHERE id = $1', [id]);
+    if (!r.rows.length) return res.status(404).json({ message: 'Not found' });
+    const { pdf_data, payroll_month } = r.rows[0];
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="payslips-${payroll_month}.pdf"`);
+    res.send(pdf_data);
+  } catch (err) { next(err); }
+});

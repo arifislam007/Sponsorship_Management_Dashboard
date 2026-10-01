@@ -121,6 +121,30 @@ CREATE TABLE IF NOT EXISTS hr_payroll_items (
   amount NUMERIC(12,2) NOT NULL DEFAULT 0
 );
 
+-- Saved/generated PDFs (with letterhead) for the monthly salary report and
+-- bulk 2-up payslip printouts, so HR can re-download a previously generated
+-- document without regenerating it.
+CREATE TABLE IF NOT EXISTS hr_salary_report_pdfs (
+  id SERIAL PRIMARY KEY,
+  payroll_month VARCHAR(7) NOT NULL,
+  department_id INTEGER REFERENCES hr_departments(id) ON DELETE SET NULL,
+  employee_count INTEGER NOT NULL DEFAULT 0,
+  total_net_salary NUMERIC(14,2) NOT NULL DEFAULT 0,
+  pdf_data BYTEA NOT NULL,
+  generated_by_name VARCHAR(150),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS hr_payslip_batch_pdfs (
+  id SERIAL PRIMARY KEY,
+  payroll_month VARCHAR(7) NOT NULL,
+  payment_status_filter VARCHAR(20),
+  employee_count INTEGER NOT NULL DEFAULT 0,
+  pdf_data BYTEA NOT NULL,
+  generated_by_name VARCHAR(150),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ── Attendance ────────────────────────────────────────────────────────────────
 
 -- Drop old structure if it still has the session_number column (migration guard)
@@ -164,6 +188,8 @@ CREATE INDEX IF NOT EXISTS idx_hr_payroll_emp     ON hr_payrolls(employee_id);
 CREATE INDEX IF NOT EXISTS idx_hr_payroll_status  ON hr_payrolls(payment_status);
 CREATE INDEX IF NOT EXISTS idx_hr_att_date        ON hr_attendance(date);
 CREATE INDEX IF NOT EXISTS idx_hr_att_emp_date    ON hr_attendance(employee_id, date);
+CREATE INDEX IF NOT EXISTS idx_hr_salary_report_pdfs_month ON hr_salary_report_pdfs(payroll_month);
+CREATE INDEX IF NOT EXISTS idx_hr_payslip_batch_pdfs_month ON hr_payslip_batch_pdfs(payroll_month);
 
 -- Seed departments
 INSERT INTO hr_departments (name, code) VALUES

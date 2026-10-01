@@ -155,6 +155,10 @@ CREATE TABLE IF NOT EXISTS money_receipts (
 
 ALTER TABLE money_receipts ADD COLUMN IF NOT EXISTS month VARCHAR(20);
 ALTER TABLE money_receipts ADD COLUMN IF NOT EXISTS received_by_designation VARCHAR(150);
+-- Itemized {date, amount} rows for receipts covering multiple donation
+-- entries (e.g. several months, or a donor paying for multiple sponsored
+-- students at once) — `amount` above stays the authoritative total.
+ALTER TABLE money_receipts ADD COLUMN IF NOT EXISTS donations JSONB NOT NULL DEFAULT '[]';
 
 -- ============================================================
 -- Accounting & Finance Module

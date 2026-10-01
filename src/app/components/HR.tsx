@@ -3,14 +3,17 @@ import {
   Users, Plus, Search, X, Edit2, Trash2, Eye,
   Building2, UserCheck, AlertTriangle,
   CheckCircle2, Clock, TrendingUp, FileText, Printer, Download,
-  BarChart2, RefreshCw, Banknote, CalendarDays, Camera, Mail, Filter
+  BarChart2, RefreshCw, Banknote, CalendarDays, Camera, Mail, Filter, History
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { ShareEmailModal, buildEmailHtml } from './ShareEmailModal';
 import { Modal } from './Modal';
 import { LoadingState } from './Spinner';
 import { EmptyState } from './EmptyState';
 import { ErrorBanner } from './ErrorBanner';
 import { TabBar } from './TabBar';
+import logo from '../../../logo.png';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -122,6 +125,155 @@ function fmtMonth(m?: string) {
   return new Date(Number(y), Number(mo) - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 function currentMonth() { return new Date().toISOString().slice(0, 7); }
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// Renders a DOM node to a base64 PDF. `mode: 'flow'` auto-paginates one tall
+// capture across pages (good for a single continuous document, e.g. a table).
+// `mode: 'pages'` captures each ref in `pageRefs` as its own dedicated page
+// (good for a fixed layout where content must not split mid-item).
+async function waitForImages(root: HTMLElement) {
+  await Promise.all(
+    Array.from(root.querySelectorAll('img')).map((img) =>
+      img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+        img.addEventListener('load', () => resolve(), { once: true });
+        img.addEventListener('error', () => resolve(), { once: true });
+      })
+    )
+  );
+}
+
+// html2canvas 1.4.1 can't parse modern CSS color functions (oklch, oklab,
+// color-mix) — and it trips on them even when no *element* actually uses
+// them, because Tailwind v4's generated stylesheet declares its entire
+// color palette as `--color-*: oklch(...)` custom properties on `:root`,
+// and html2canvas parses stylesheet rules directly (not just resolved
+// per-element computed styles) while building its internal style model.
+// Every HR PDF capture target below is built with plain inline hex styles
+// specifically so it never NEEDS the app's stylesheet — so the simplest
+// fully robust fix is to strip all stylesheets from the document html2canvas
+// actually renders from (the `onclone` hook), which can't affect the live
+// page since it only touches the disposable clone.
+function neutralizeUnsupportedColorsInClone(clonedDoc: Document) {
+  clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => el.remove());
+  const style = clonedDoc.createElement('style');
+  style.textContent = '* { outline-color: transparent !important; }';
+  clonedDoc.head.appendChild(style);
+}
+
+async function generateFlowPdfBase64(target: HTMLElement): Promise<string | null> {
+  try {
+    await waitForImages(target);
+    const canvas = await html2canvas(target, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, onclone: neutralizeUnsupportedColorsInClone });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = pdf.internal.pageSize.getHeight();
+    const scaleRatio = pdfW / canvas.width;
+    const scaledH = canvas.height * scaleRatio;
+
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfW, scaledH);
+    let heightLeft = scaledH - pdfH;
+    let position = -pdfH;
+    while (heightLeft > 0) {
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, pdfW, scaledH);
+      position -= pdfH;
+      heightLeft -= pdfH;
+    }
+
+    const bytes = new Uint8Array(pdf.output('arraybuffer'));
+    let binary = '';
+    bytes.forEach((b) => (binary += String.fromCharCode(b)));
+    return btoa(binary);
+  } catch (e) {
+    console.error('[HR] Flow PDF generation failed:', e);
+    return null;
+  }
+}
+
+async function generatePagedPdfBase64(pageEls: HTMLElement[]): Promise<string | null> {
+  try {
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = pdf.internal.pageSize.getHeight();
+
+    for (let i = 0; i < pageEls.length; i++) {
+      const target = pageEls[i];
+      await waitForImages(target);
+      const canvas = await html2canvas(target, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, onclone: neutralizeUnsupportedColorsInClone });
+      const imgData = canvas.toDataURL('image/png');
+      const scaleRatio = pdfW / canvas.width;
+      const scaledH = canvas.height * scaleRatio;
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfW, Math.min(scaledH, pdfH));
+    }
+
+    const bytes = new Uint8Array(pdf.output('arraybuffer'));
+    let binary = '';
+    bytes.forEach((b) => (binary += String.fromCharCode(b)));
+    return btoa(binary);
+  } catch (e) {
+    console.error('[HR] Paged PDF generation failed:', e);
+    return null;
+  }
+}
+
+function downloadBlobAsFile(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadBase64Pdf(base64: string, filename: string) {
+  const bytes = atob(base64);
+  const buf = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+  downloadBlobAsFile(new Blob([buf], { type: 'application/pdf' }), filename);
+}
+
+// Saved-PDF history endpoints require the Bearer auth header (JWT lives in
+// localStorage, not a cookie), so a plain <a href> download fails with 401 —
+// fetch with the header and build a Blob instead, same pattern as
+// api.downloadReceiptPDF/downloadLetterPDF elsewhere in the app.
+async function downloadHrPdf(path: string, filename: string) {
+  const token = localStorage.getItem('authToken');
+  const res = await fetch(`${HR_API}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let message = text || 'Failed to download PDF';
+    try { message = JSON.parse(text)?.message || message; } catch { /* not JSON */ }
+    throw new Error(message);
+  }
+  downloadBlobAsFile(await res.blob(), filename);
+}
+
+// Letterhead block, mirrored from AcknowledgmentLetter.tsx / Accounting.tsx so
+// every printable HR document shares the same brand chrome. Uses plain inline
+// hex-color styles (not Tailwind classes) so it's safe inside any html2canvas
+// capture target — Tailwind v4's default palette emits oklch() colors, which
+// html2canvas 1.4.1 cannot parse and throws on (see the identical convention
+// in Accounting.tsx's `#money-receipt-print-root`).
+function Letterhead({ compact }: { compact?: boolean }) {
+  return (
+    <div style={{ textAlign: 'center', borderBottom: '2px solid #14856E', paddingBottom: compact ? '6px' : '12px', marginBottom: compact ? '10px' : '20px' }}>
+      <img src={logo} alt="Sombhabona logo" style={{ height: compact ? '28px' : '44px', width: 'auto', margin: '0 auto', display: 'block' }} />
+      <p style={{ fontSize: compact ? '9px' : '12px', color: '#4b5563', marginTop: '8px' }}>
+        756 West Sewrapara, Mirpur, Dhaka | Phone: 01737243447 | Email: info@sombhabona.org
+      </p>
+    </div>
+  );
+}
 
 // ── Dashboard Tab ──────────────────────────────────────────────────────────────
 
@@ -1133,6 +1285,195 @@ function SalarySlipModal({ payrollId, onClose }: { payrollId: number; onClose: (
   );
 }
 
+// Compact payslip block used only by the bulk 2-up PDF (BulkPayslipModal).
+// The existing single-slip "View Slip" modal (SalarySlipModal above) stays
+// as-is and does not use this component.
+//
+// Uses plain inline hex-color styles throughout (not Tailwind classes) —
+// this block is an html2canvas capture target, and Tailwind v4's default
+// palette emits oklch() colors that html2canvas 1.4.1 cannot parse (same
+// convention as Letterhead above and Accounting.tsx's money-receipt print root).
+function PayslipItemRow({ item }: { item: PayrollItem }) {
+  return (
+    <tr style={{ borderTop: '1px solid #f3f4f6' }}>
+      <td style={{ padding: '4px 8px', color: '#374151' }}>{item.component_name}</td>
+      <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 500 }}>{fmt(item.amount)}</td>
+    </tr>
+  );
+}
+
+function PayslipBlock({ slip }: { slip: any }) {
+  const infoRow = (label: string, value: string) => (
+    <div style={{ display: 'flex', fontSize: '11px' }}>
+      <span style={{ width: '96px', color: '#6b7280' }}>{label}</span>
+      <span style={{ fontWeight: 500 }}>: {value}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: '12px', fontSize: '11px', fontFamily: 'Arial, sans-serif', color: '#111' }}>
+      <Letterhead compact />
+      <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+        <h2 style={{ fontSize: '13px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>SALARY SLIP</h2>
+        <p style={{ color: '#4b5563', margin: 0 }}>{fmtMonth(slip.payroll_month)}</p>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+        <div style={{ display: 'grid', gap: '2px' }}>
+          {infoRow('Name', slip.employee_name)}
+          {infoRow('Code', slip.employee_code)}
+          {infoRow('Department', slip.department_name || '—')}
+        </div>
+        <div style={{ display: 'grid', gap: '2px' }}>
+          {infoRow('Designation', slip.designation_title || '—')}
+          {infoRow('Pay Month', fmtMonth(slip.payroll_month))}
+          {infoRow('Payment Mode', slip.payment_method || slip.emp_payment_method || '—')}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+        <div>
+          <div style={{ background: '#f0fdf4', padding: '4px 8px', fontWeight: 600, color: '#166534', borderRadius: '4px 4px 0 0' }}>Earnings</div>
+          <table style={{ width: '100%', border: '1px solid #dcfce7', borderTop: 'none', borderRadius: '0 0 4px 4px' }}>
+            <tbody>
+              {(slip.earnings ?? []).map((item: PayrollItem, i: number) => <PayslipItemRow key={i} item={item} />)}
+              {(slip.earnings ?? []).length === 0 && (
+                <tr><td colSpan={2} style={{ padding: '4px 8px', color: '#9ca3af', textAlign: 'center' }}>—</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div style={{ background: '#fef2f2', padding: '4px 8px', fontWeight: 600, color: '#991b1b', borderRadius: '4px 4px 0 0' }}>Deductions</div>
+          <table style={{ width: '100%', border: '1px solid #fee2e2', borderTop: 'none', borderRadius: '0 0 4px 4px' }}>
+            <tbody>
+              {(slip.deductions ?? []).map((item: PayrollItem, i: number) => <PayslipItemRow key={i} item={item} />)}
+              {(slip.deductions ?? []).length === 0 && (
+                <tr><td colSpan={2} style={{ padding: '4px 8px', color: '#9ca3af', textAlign: 'center' }}>—</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style={{ background: '#14856E', color: '#fff', borderRadius: '4px', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 'bold' }}>Net Salary</span>
+        <span style={{ fontWeight: 'bold' }}>{fmt(slip.net_salary)}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', textAlign: 'center', color: '#6b7280', marginTop: '12px' }}>
+        <div style={{ borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>Employee Signature</div>
+        <div style={{ borderTop: '1px solid #d1d5db', paddingTop: '4px' }}>Authorized Signature</div>
+      </div>
+    </div>
+  );
+}
+
+// Bulk "Print All Payslips" — fetches every payslip for a month in one call,
+// renders them two-per-page with the letterhead, and generates one PDF.
+function BulkPayslipModal({ payrollMonth, paymentStatus, onClose }: { payrollMonth: string; paymentStatus: string; onClose: () => void }) {
+  const [slips, setSlips] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const titleId = useId();
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = new URLSearchParams({ payroll_month: payrollMonth });
+    if (paymentStatus) qs.set('payment_status', paymentStatus);
+    hrFetch<{ data: any[] }>(`/payroll/reports/payslips?${qs}`)
+      .then(r => setSlips(r.data))
+      .catch((e: any) => alert(e.message))
+      .finally(() => setLoading(false));
+  }, [payrollMonth, paymentStatus]);
+
+  const pages = chunk(slips, 2);
+
+  const downloadAll = async () => {
+    const els = pageRefs.current.filter((el): el is HTMLDivElement => !!el);
+    if (!els.length) return;
+    setGenerating(true);
+    try {
+      const base64 = await generatePagedPdfBase64(els);
+      if (!base64) { alert('Failed to generate PDF.'); return; }
+
+      await hrFetch('/payroll/reports/payslip-batch-pdf', {
+        method: 'POST',
+        body: JSON.stringify({
+          payroll_month: payrollMonth,
+          payment_status_filter: paymentStatus || null,
+          employee_count: slips.length,
+          pdf_base64: base64,
+        }),
+      });
+
+      downloadBase64Pdf(base64, `payslips-${payrollMonth}.pdf`);
+      onClose();
+    } catch (e: any) { alert(e.message); }
+    finally { setGenerating(false); }
+  };
+
+  return (
+    <>
+      <Modal onClose={onClose} titleId={titleId} containerClassName="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h3 id={titleId} className="font-bold text-gray-900">
+            Payslips — {fmtMonth(payrollMonth)} ({slips.length} employee{slips.length === 1 ? '' : 's'})
+          </h3>
+          <div className="flex gap-2">
+            <button onClick={downloadAll} disabled={loading || generating || slips.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#14856E] text-white rounded-lg text-sm hover:bg-[#0f6b5a] disabled:opacity-50">
+              <Download size={14} />{generating ? 'Generating…' : 'Download PDF'}
+            </button>
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600"><X size={20} /></button>
+          </div>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto bg-gray-100 p-4 space-y-4">
+          {loading ? <LoadingState label="Loading payslips…" /> : slips.length === 0 ? (
+            <EmptyState icon={FileText} title="No payroll records" description="No payroll found for this month/status to print." />
+          ) : (
+            pages.map((pagePair, pageIdx) => (
+              <div key={pageIdx} className="mx-auto shadow-sm" style={{ width: '210mm', minHeight: '148mm', background: '#ffffff' }}>
+                <PayslipBlock slip={pagePair[0]} />
+                {pagePair[1] && (
+                  <>
+                    <div style={{ borderTop: '1px dashed #d1d5db', margin: '0 12px' }} />
+                    <PayslipBlock slip={pagePair[1]} />
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
+
+      {/* Hidden off-screen clone used only as the html2canvas capture target.
+          Rendered as a sibling OUTSIDE <Modal> on purpose — Modal's backdrop
+          uses `bg-black/50`, and Tailwind v4 implements color opacity
+          modifiers via color-mix(), which html2canvas 1.4.1 also can't parse
+          (same class of bug as the oklch palette colors; see Letterhead's
+          comment above). Capturing from inside the modal's ancestor chain
+          hits that backdrop and crashes, so the real capture pages live
+          completely outside it instead. The visible preview above is
+          unaffected — it's Tailwind-styled for on-screen polish only. */}
+      {pages.length > 0 && (
+        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+          {pages.map((pagePair, pageIdx) => (
+            <div key={pageIdx} ref={el => { pageRefs.current[pageIdx] = el; }}
+              style={{ width: '210mm', minHeight: '148mm', background: '#ffffff' }}>
+              <PayslipBlock slip={pagePair[0]} />
+              {pagePair[1] && (
+                <>
+                  <div style={{ borderTop: '1px dashed #d1d5db', margin: '0 12px' }} />
+                  <PayslipBlock slip={pagePair[1]} />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Payroll Tab ───────────────────────────────────────────────────────────────
 
 function PayrollTab() {
@@ -1146,6 +1487,10 @@ function PayrollTab() {
   const [slipId, setSlipId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showBulkPrint, setShowBulkPrint] = useState(false);
+  const [showBatchHistory, setShowBatchHistory] = useState(false);
+  const [batchHistory, setBatchHistory] = useState<any[]>([]);
+  const [batchHistoryLoading, setBatchHistoryLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1182,6 +1527,22 @@ function PayrollTab() {
 
   const totalNet = payrolls.reduce((s, p) => s + p.net_salary, 0);
 
+  const loadBatchHistory = async () => {
+    setBatchHistoryLoading(true);
+    try {
+      const qs = monthFilter ? `?payroll_month=${monthFilter}` : '';
+      const r = await hrFetch<{ data: any[] }>(`/payroll/reports/payslip-batch-pdf${qs}`);
+      setBatchHistory(r.data);
+    } catch (e: any) { alert(e.message); }
+    finally { setBatchHistoryLoading(false); }
+  };
+
+  const toggleBatchHistory = () => {
+    const next = !showBatchHistory;
+    setShowBatchHistory(next);
+    if (next) loadBatchHistory();
+  };
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -1193,7 +1554,15 @@ function PayrollTab() {
           <option value="">All Status</option>
           {(['Draft','Approved','Paid'] as PayStatus[]).map(s => <option key={s}>{s}</option>)}
         </select>
-        <div className="flex gap-2 ml-auto">
+        <div className="flex gap-2 ml-auto flex-wrap">
+          <button onClick={toggleBatchHistory}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+            <History size={14} />{showBatchHistory ? 'Hide' : 'Payslip History'}
+          </button>
+          <button onClick={() => setShowBulkPrint(true)} disabled={payrolls.length === 0}
+            className="flex items-center gap-2 px-4 py-2 border border-[#14856E] text-[#14856E] rounded-lg text-sm font-medium hover:bg-green-50 disabled:opacity-50">
+            <Printer size={14} />Print All Payslips (PDF)
+          </button>
           <button onClick={() => setShowBulkModal(true)}
             className="flex items-center gap-2 px-4 py-2 border border-[#14856E] text-[#14856E] rounded-lg text-sm font-medium hover:bg-green-50">
             <RefreshCw size={14} />Bulk Generate
@@ -1204,6 +1573,50 @@ function PayrollTab() {
           </button>
         </div>
       </div>
+
+      {/* Recent Payslip PDF Batches */}
+      {showBatchHistory && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-700">Recent Payslip PDF Batches</div>
+          {batchHistoryLoading ? <LoadingState label="Loading…" /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left">Month</th>
+                    <th className="px-4 py-2.5 text-left">Status Filter</th>
+                    <th className="px-4 py-2.5 text-right">Employees</th>
+                    <th className="px-4 py-2.5 text-left">Generated By</th>
+                    <th className="px-4 py-2.5 text-left">Date</th>
+                    <th className="px-4 py-2.5 text-center">Download</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {batchHistory.map((h: any) => (
+                    <tr key={h.id}>
+                      <td className="px-4 py-2.5 text-gray-700">{fmtMonth(h.payroll_month)}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{h.payment_status_filter || 'All'}</td>
+                      <td className="px-4 py-2.5 text-right">{h.employee_count}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{h.generated_by_name || '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-500 text-xs">{fmtDate(h.created_at)}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <button
+                          onClick={() => downloadHrPdf(`/payroll/reports/payslip-batch-pdf/${h.id}/pdf`, `payslips-${h.payroll_month}.pdf`).catch((e: any) => alert(e.message))}
+                          className="inline-flex items-center gap-1 text-[#14856E] hover:underline text-xs font-medium">
+                          <Download size={12} />PDF
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {batchHistory.length === 0 && (
+                    <tr><td colSpan={6} className="text-center py-8 text-gray-400">No saved payslip batches yet</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Summary cards */}
       {payrolls.length > 0 && (
@@ -1293,6 +1706,14 @@ function PayrollTab() {
       )}
 
       {slipId !== null && <SalarySlipModal payrollId={slipId} onClose={() => setSlipId(null)} />}
+
+      {showBulkPrint && (
+        <BulkPayslipModal
+          payrollMonth={monthFilter}
+          paymentStatus={statusFilter}
+          onClose={() => { setShowBulkPrint(false); if (showBatchHistory) loadBatchHistory(); }}
+        />
+      )}
 
       {showCreateModal && (
         <PayrollCreateModal
@@ -1697,6 +2118,11 @@ function ReportsTab() {
   const [payStatusFilter, setPayStatusFilter] = useState('');
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     hrFetch<{ data: Department[] }>('/departments/').then(r => setDepartments(r.data)).catch(console.error);
@@ -1724,13 +2150,54 @@ function ReportsTab() {
 
   const print = () => window.print();
 
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const qs = monthFilter ? `?payroll_month=${monthFilter}` : '';
+      const r = await hrFetch<{ data: any[] }>(`/payroll/reports/salary-report-pdf${qs}`);
+      setHistory(r.data);
+    } catch (e: any) { alert(e.message); }
+    finally { setHistoryLoading(false); }
+  };
+
+  const toggleHistory = () => {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next) loadHistory();
+  };
+
+  const downloadSalaryReportPdf = async () => {
+    if (!reportRef.current) return;
+    setGeneratingPdf(true);
+    try {
+      const base64 = await generateFlowPdfBase64(reportRef.current);
+      if (!base64) { alert('Failed to generate PDF.'); return; }
+
+      const totalNet = data.reduce((s: number, p: any) => s + Number(p.net_salary), 0);
+      await hrFetch('/payroll/reports/salary-report-pdf', {
+        method: 'POST',
+        body: JSON.stringify({
+          payroll_month: monthFilter,
+          department_id: deptFilter || null,
+          employee_count: data.length,
+          total_net_salary: totalNet,
+          pdf_base64: base64,
+        }),
+      });
+
+      downloadBase64Pdf(base64, `salary-report-${monthFilter}.pdf`);
+      if (showHistory) loadHistory();
+    } catch (e: any) { alert(e.message); }
+    finally { setGeneratingPdf(false); }
+  };
+
   return (
     <div className="space-y-4">
       {/* Report Selector */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex gap-3 mb-4">
           {(['employee-list', 'salary-register'] as const).map(r => (
-            <button key={r} onClick={() => { setActiveReport(r); setData([]); }}
+            <button key={r} onClick={() => { setActiveReport(r); setData([]); setShowHistory(false); }}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeReport === r ? 'bg-[#14856E] text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
               {r === 'employee-list' ? 'Employee List' : 'Salary Register'}
             </button>
@@ -1773,12 +2240,82 @@ function ReportsTab() {
               <Printer size={14} />Print
             </button>
           )}
+          {activeReport === 'salary-register' && data.length > 0 && (
+            <button onClick={downloadSalaryReportPdf} disabled={generatingPdf}
+              className="flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-50">
+              <Download size={14} />{generatingPdf ? 'Generating…' : 'Save & Download PDF'}
+            </button>
+          )}
+          {activeReport === 'salary-register' && (
+            <button onClick={toggleHistory}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
+              <History size={14} />{showHistory ? 'Hide' : 'Saved Reports'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Saved Reports history */}
+      {activeReport === 'salary-register' && showHistory && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-700">Saved Salary Reports</div>
+          {historyLoading ? <LoadingState label="Loading…" /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left">Month</th>
+                    <th className="px-4 py-2.5 text-left">Department</th>
+                    <th className="px-4 py-2.5 text-right">Employees</th>
+                    <th className="px-4 py-2.5 text-right">Total Net</th>
+                    <th className="px-4 py-2.5 text-left">Generated By</th>
+                    <th className="px-4 py-2.5 text-left">Date</th>
+                    <th className="px-4 py-2.5 text-center">Download</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {history.map((h: any) => (
+                    <tr key={h.id}>
+                      <td className="px-4 py-2.5 text-gray-700">{fmtMonth(h.payroll_month)}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{h.department_name || 'All'}</td>
+                      <td className="px-4 py-2.5 text-right">{h.employee_count}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">{fmt(h.total_net_salary)}</td>
+                      <td className="px-4 py-2.5 text-gray-600">{h.generated_by_name || '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-500 text-xs">{fmtDate(h.created_at)}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <button
+                          onClick={() => downloadHrPdf(`/payroll/reports/salary-report-pdf/${h.id}/pdf`, `salary-report-${h.payroll_month}.pdf`).catch((e: any) => alert(e.message))}
+                          className="inline-flex items-center gap-1 text-[#14856E] hover:underline text-xs font-medium">
+                          <Download size={12} />PDF
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {history.length === 0 && (
+                    <tr><td colSpan={7} className="text-center py-8 text-gray-400">No saved reports yet</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Report Output */}
       {data.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {activeReport === 'salary-register' && (
+            <div className="p-4 pb-0">
+              <Letterhead />
+              <div className="text-center mb-4">
+                <h2 className="text-base font-bold text-gray-800">Monthly Salary Report</h2>
+                <p className="text-sm text-gray-600">
+                  {fmtMonth(monthFilter)}{deptFilter ? ` — ${departments.find(d => String(d.id) === deptFilter)?.name || ''}` : ''}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Generated {fmtDate(new Date().toISOString())}</p>
+              </div>
+            </div>
+          )}
           <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-700">
             {activeReport === 'employee-list' ? 'Employee Directory' : 'Salary Register'} — {data.length} records
           </div>
@@ -1862,6 +2399,64 @@ function ReportsTab() {
         <div className="bg-white rounded-xl border border-gray-200 py-16 text-center text-gray-400">
           <BarChart2 size={40} className="mx-auto mb-3 opacity-30" />
           <p>Select filters and click "Run Report" to generate</p>
+        </div>
+      )}
+
+      {/* Hidden off-screen clone used only as the html2canvas capture target for
+          "Save & Download PDF" — plain inline hex styles throughout, since
+          Tailwind v4's oklch() colors crash html2canvas 1.4.1 (same convention
+          as Accounting.tsx's money-receipt print root). Not shown on screen;
+          the visible table above (Tailwind-styled) is what the user actually sees. */}
+      {activeReport === 'salary-register' && data.length > 0 && (
+        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+          <div ref={reportRef} style={{ fontFamily: 'Arial, sans-serif', color: '#111', padding: '24px', width: '700px', background: '#ffffff' }}>
+            <Letterhead />
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '15px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Monthly Salary Report</h2>
+              <p style={{ fontSize: '13px', color: '#4b5563', margin: '2px 0 0' }}>
+                {fmtMonth(monthFilter)}{deptFilter ? ` — ${departments.find(d => String(d.id) === deptFilter)?.name || ''}` : ''}
+              </p>
+              <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Generated {fmtDate(new Date().toISOString())}</p>
+            </div>
+            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f9fafb' }}>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Code</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Employee</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Department</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Basic</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Allowance</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Deduction</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Net</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((p: any, i: number) => (
+                  <tr key={i} style={{ borderTop: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '5px 8px', fontFamily: 'monospace', fontSize: '11px', color: '#6b7280' }}>{p.employee_code}</td>
+                    <td style={{ padding: '5px 8px', fontWeight: 500, color: '#111827' }}>{p.employee_name}</td>
+                    <td style={{ padding: '5px 8px', color: '#4b5563' }}>{p.department_name || '—'}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmt(p.basic_salary)}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', color: '#15803d' }}>{fmt(p.total_allowance)}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', color: '#dc2626' }}>{fmt(p.total_deduction)}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold' }}>{fmt(p.net_salary)}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'center', fontSize: '10px' }}>{p.payment_status}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 'bold', background: '#f9fafb' }}>
+                  <td colSpan={3} style={{ padding: '6px 8px' }}>Total ({data.length})</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.basic_salary), 0))}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: '#15803d' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.total_allowance), 0))}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: '#dc2626' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.total_deduction), 0))}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.net_salary), 0))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
     </div>
