@@ -3,7 +3,7 @@ import {
   Users, Plus, Search, X, Edit2, Trash2, Eye,
   Building2, UserCheck, AlertTriangle,
   CheckCircle2, Clock, TrendingUp, FileText, Printer, Download,
-  BarChart2, RefreshCw, Banknote, CalendarDays, Camera, Mail, Filter, History
+  BarChart2, RefreshCw, Banknote, CalendarDays, Camera, Mail, Filter, History, Upload
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -14,6 +14,7 @@ import { EmptyState } from './EmptyState';
 import { ErrorBanner } from './ErrorBanner';
 import { TabBar } from './TabBar';
 import logo from '../../../logo.png';
+import defaultSignature from '../../../default_signature.png';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -164,36 +165,6 @@ function neutralizeUnsupportedColorsInClone(clonedDoc: Document) {
   clonedDoc.head.appendChild(style);
 }
 
-async function generateFlowPdfBase64(target: HTMLElement): Promise<string | null> {
-  try {
-    await waitForImages(target);
-    const canvas = await html2canvas(target, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, onclone: neutralizeUnsupportedColorsInClone });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = pdf.internal.pageSize.getHeight();
-    const scaleRatio = pdfW / canvas.width;
-    const scaledH = canvas.height * scaleRatio;
-
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfW, scaledH);
-    let heightLeft = scaledH - pdfH;
-    let position = -pdfH;
-    while (heightLeft > 0) {
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, pdfW, scaledH);
-      position -= pdfH;
-      heightLeft -= pdfH;
-    }
-
-    const bytes = new Uint8Array(pdf.output('arraybuffer'));
-    let binary = '';
-    bytes.forEach((b) => (binary += String.fromCharCode(b)));
-    return btoa(binary);
-  } catch (e) {
-    console.error('[HR] Flow PDF generation failed:', e);
-    return null;
-  }
-}
 
 async function generatePagedPdfBase64(pageEls: HTMLElement[]): Promise<string | null> {
   try {
@@ -2122,7 +2093,18 @@ function ReportsTab() {
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const reportRef = useRef<HTMLDivElement>(null);
+  const [signatureUrl, setSignatureUrl] = useState<string>(defaultSignature as string);
+  const signatureInputRef = useRef<HTMLInputElement>(null);
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => setSignatureUrl(event.target?.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   useEffect(() => {
     hrFetch<{ data: Department[] }>('/departments/').then(r => setDepartments(r.data)).catch(console.error);
@@ -2167,10 +2149,11 @@ function ReportsTab() {
   };
 
   const downloadSalaryReportPdf = async () => {
-    if (!reportRef.current) return;
+    const pages = pageRefs.current.filter((el): el is HTMLDivElement => !!el);
+    if (!pages.length) return;
     setGeneratingPdf(true);
     try {
-      const base64 = await generateFlowPdfBase64(reportRef.current);
+      const base64 = await generatePagedPdfBase64(pages);
       if (!base64) { alert('Failed to generate PDF.'); return; }
 
       const totalNet = data.reduce((s: number, p: any) => s + Number(p.net_salary), 0);
@@ -2253,6 +2236,23 @@ function ReportsTab() {
             </button>
           )}
         </div>
+        {activeReport === 'salary-register' && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+            <span className="text-xs font-medium text-gray-600">Accountant Signature (shown at the end of the PDF)</span>
+            <img src={signatureUrl} alt="Signature preview" className="h-10 w-auto object-contain border border-gray-200 rounded-lg bg-white p-1" />
+            <button onClick={() => signatureInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <Upload size={13} />Upload Signature
+            </button>
+            {signatureUrl !== (defaultSignature as string) && (
+              <button onClick={() => setSignatureUrl(defaultSignature as string)}
+                className="text-xs text-gray-500 hover:text-gray-700 underline">
+                Reset to default
+              </button>
+            )}
+            <input ref={signatureInputRef} type="file" accept="image/*" className="hidden" onChange={handleSignatureUpload} />
+          </div>
+        )}
       </div>
 
       {/* Saved Reports history */}
@@ -2406,59 +2406,106 @@ function ReportsTab() {
           "Save & Download PDF" — plain inline hex styles throughout, since
           Tailwind v4's oklch() colors crash html2canvas 1.4.1 (same convention
           as Accounting.tsx's money-receipt print root). Not shown on screen;
-          the visible table above (Tailwind-styled) is what the user actually sees. */}
-      {activeReport === 'salary-register' && data.length > 0 && (
-        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <div ref={reportRef} style={{ fontFamily: 'Arial, sans-serif', color: '#111', padding: '24px', width: '700px', background: '#ffffff' }}>
-            <Letterhead />
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '15px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Monthly Salary Report</h2>
-              <p style={{ fontSize: '13px', color: '#4b5563', margin: '2px 0 0' }}>
-                {fmtMonth(monthFilter)}{deptFilter ? ` — ${departments.find(d => String(d.id) === deptFilter)?.name || ''}` : ''}
-              </p>
-              <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Generated {fmtDate(new Date().toISOString())}</p>
-            </div>
-            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f9fafb' }}>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Code</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Employee</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Department</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Basic</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Allowance</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Deduction</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Net</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((p: any, i: number) => (
-                  <tr key={i} style={{ borderTop: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '5px 8px', fontFamily: 'monospace', fontSize: '11px', color: '#6b7280' }}>{p.employee_code}</td>
-                    <td style={{ padding: '5px 8px', fontWeight: 500, color: '#111827' }}>{p.employee_name}</td>
-                    <td style={{ padding: '5px 8px', color: '#4b5563' }}>{p.department_name || '—'}</td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmt(p.basic_salary)}</td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right', color: '#15803d' }}>{fmt(p.total_allowance)}</td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right', color: '#dc2626' }}>{fmt(p.total_deduction)}</td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold' }}>{fmt(p.net_salary)}</td>
-                    <td style={{ padding: '5px 8px', textAlign: 'center', fontSize: '10px' }}>{p.payment_status}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 'bold', background: '#f9fafb' }}>
-                  <td colSpan={3} style={{ padding: '6px 8px' }}>Total ({data.length})</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.basic_salary), 0))}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', color: '#15803d' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.total_allowance), 0))}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', color: '#dc2626' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.total_deduction), 0))}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.net_salary), 0))}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+          the visible table above (Tailwind-styled) is what the user actually sees.
+          Rows are chunked into proper A4 pages (with margins, a repeated table
+          header, and no mid-row page breaks) instead of one continuous image
+          auto-sliced at arbitrary pixel boundaries — each chunk is captured as
+          its own canvas/PDF page via generatePagedPdfBase64, same approach as
+          the bulk payslip PDF. Totals and the Accountant signature only appear
+          on the last page. */}
+      {activeReport === 'salary-register' && data.length > 0 && (() => {
+        const ROWS_PER_PAGE = 18;
+        const reportPages: any[][] = [];
+        for (let i = 0; i < data.length; i += ROWS_PER_PAGE) reportPages.push(data.slice(i, i + ROWS_PER_PAGE));
+
+        const thCell = (align: 'left' | 'right' | 'center', text: string) => (
+          <th style={{ padding: '6px 8px', textAlign: align, fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}>{text}</th>
+        );
+
+        return (
+          <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+            {reportPages.map((pageRows, pageIdx) => {
+              const isFirst = pageIdx === 0;
+              const isLast = pageIdx === reportPages.length - 1;
+              return (
+                <div key={pageIdx} ref={el => { pageRefs.current[pageIdx] = el; }}
+                  style={{
+                    position: 'relative', boxSizing: 'border-box', width: '210mm', minHeight: '297mm',
+                    padding: '15mm 12mm', fontFamily: 'Arial, sans-serif', color: '#111', background: '#ffffff',
+                  }}>
+                  {isFirst && (
+                    <>
+                      <Letterhead />
+                      <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                        <h2 style={{ fontSize: '15px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Monthly Salary Report</h2>
+                        <p style={{ fontSize: '13px', color: '#4b5563', margin: '2px 0 0' }}>
+                          {fmtMonth(monthFilter)}{deptFilter ? ` — ${departments.find(d => String(d.id) === deptFilter)?.name || ''}` : ''}
+                        </p>
+                        <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Generated {fmtDate(new Date().toISOString())}</p>
+                      </div>
+                    </>
+                  )}
+                  <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#f9fafb' }}>
+                        {thCell('left', 'Code')}
+                        {thCell('left', 'Employee')}
+                        {thCell('left', 'Department')}
+                        {thCell('right', 'Basic')}
+                        {thCell('right', 'Allowance')}
+                        {thCell('right', 'Deduction')}
+                        {thCell('right', 'Net')}
+                        {thCell('center', 'Status')}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageRows.map((p: any, i: number) => (
+                        <tr key={i} style={{ borderTop: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '5px 8px', fontFamily: 'monospace', fontSize: '11px', color: '#6b7280' }}>{p.employee_code}</td>
+                          <td style={{ padding: '5px 8px', fontWeight: 500, color: '#111827' }}>{p.employee_name}</td>
+                          <td style={{ padding: '5px 8px', color: '#4b5563' }}>{p.department_name || '—'}</td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmt(p.basic_salary)}</td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: '#15803d' }}>{fmt(p.total_allowance)}</td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', color: '#dc2626' }}>{fmt(p.total_deduction)}</td>
+                          <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold' }}>{fmt(p.net_salary)}</td>
+                          <td style={{ padding: '5px 8px', textAlign: 'center', fontSize: '10px' }}>{p.payment_status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {isLast && (
+                      <tfoot>
+                        <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 'bold', background: '#f9fafb' }}>
+                          <td colSpan={3} style={{ padding: '6px 8px' }}>Total ({data.length})</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.basic_salary), 0))}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', color: '#15803d' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.total_allowance), 0))}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', color: '#dc2626' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.total_deduction), 0))}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(data.reduce((s: number, p: any) => s + Number(p.net_salary), 0))}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                  {isLast && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '32px' }}>
+                      <div style={{ width: '180px', textAlign: 'center' }}>
+                        <img src={signatureUrl} alt="Accountant signature" style={{ display: 'block', height: '50px', margin: '0 auto 8px' }} />
+                        <div style={{ borderTop: '1px solid #999', paddingTop: '4px' }}>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }}>Accountant</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {reportPages.length > 1 && (
+                    <div style={{ position: 'absolute', bottom: '10mm', right: '12mm', fontSize: '9px', color: '#9ca3af' }}>
+                      Page {pageIdx + 1} of {reportPages.length}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
