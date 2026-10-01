@@ -1,31 +1,53 @@
+import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router";
+import { Loader } from "lucide-react";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { Login } from "./components/Login";
 import { RootLayout } from "./components/RootLayout";
 import { Home } from "./components/Home";
-import { StudentProfile } from "./components/StudentProfile";
-import { Dashboard } from "./components/Dashboard";
-import { Students } from "./components/Students";
-import { Donors } from "./components/Donors";
-import { Sponsorships } from "./components/Sponsorships";
-import { AcknowledgmentLetter } from "./components/AcknowledgmentLetter";
-import { Admin } from "./components/Admin";
-import { LeaveManagement } from "./components/LeaveManagement";
-import { ICT } from "./components/ICT";
-import { Accounting } from "./components/Accounting";
-import { Projects } from "./components/Projects";
-import { HR } from "./components/HR";
-import { School } from "./components/School";
-import { LeadManagement } from "./components/LeadManagement";
-import { PublicICTAdmission } from "./components/PublicICTAdmission";
 import { useAuth } from "./contexts/AuthContext";
 import { AttendancePanel } from "./components/AttendancePanel";
+
+// `Home` (the "/" first-load page) and the small structural pieces above
+// (RootLayout, ProtectedRoute, AttendancePanel) stay as regular eager
+// imports — they're needed immediately and are not heavy. Every other page
+// is lazy-loaded so visiting "/" no longer pulls in recharts, html2canvas,
+// jspdf, xlsx, or any other route's code until that route is actually
+// visited. Each lazily-loaded module re-exports a named export, so the
+// dynamic import is mapped to the `default` shape React.lazy expects.
+const Login = lazy(() => import("./components/Login").then(m => ({ default: m.Login })));
+const StudentProfile = lazy(() => import("./components/StudentProfile").then(m => ({ default: m.StudentProfile })));
+const Dashboard = lazy(() => import("./components/Dashboard").then(m => ({ default: m.Dashboard })));
+const Students = lazy(() => import("./components/Students").then(m => ({ default: m.Students })));
+const Donors = lazy(() => import("./components/Donors").then(m => ({ default: m.Donors })));
+const Sponsorships = lazy(() => import("./components/Sponsorships").then(m => ({ default: m.Sponsorships })));
+const AcknowledgmentLetter = lazy(() => import("./components/AcknowledgmentLetter").then(m => ({ default: m.AcknowledgmentLetter })));
+const Admin = lazy(() => import("./components/Admin").then(m => ({ default: m.Admin })));
+const LeaveManagement = lazy(() => import("./components/LeaveManagement").then(m => ({ default: m.LeaveManagement })));
+const ICT = lazy(() => import("./components/ICT").then(m => ({ default: m.ICT })));
+const Accounting = lazy(() => import("./components/Accounting").then(m => ({ default: m.Accounting })));
+const Projects = lazy(() => import("./components/Projects").then(m => ({ default: m.Projects })));
+const HR = lazy(() => import("./components/HR").then(m => ({ default: m.HR })));
+const School = lazy(() => import("./components/School").then(m => ({ default: m.School })));
+const LeadManagement = lazy(() => import("./components/LeadManagement").then(m => ({ default: m.LeadManagement })));
+const PublicICTAdmission = lazy(() => import("./components/PublicICTAdmission").then(m => ({ default: m.PublicICTAdmission })));
+
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Loader className="animate-spin text-[#14856E]" size={32} />
+    </div>
+  );
+}
 
 function DashboardLanding() {
   const { hasRole, user } = useAuth();
 
   if (hasRole('admin')) {
-    return <Dashboard />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <Dashboard />
+      </Suspense>
+    );
   }
 
   return (
@@ -48,15 +70,27 @@ export const router = createBrowserRouter([
   },
   {
     path: "/student/:id",
-    Component: StudentProfile,
+    Component: () => (
+      <Suspense fallback={<RouteFallback />}>
+        <StudentProfile />
+      </Suspense>
+    ),
   },
   {
     path: "/login",
-    Component: Login,
+    Component: () => (
+      <Suspense fallback={<RouteFallback />}>
+        <Login />
+      </Suspense>
+    ),
   },
   {
     path: "/ict-admission",
-    Component: PublicICTAdmission,
+    Component: () => (
+      <Suspense fallback={<RouteFallback />}>
+        <PublicICTAdmission />
+      </Suspense>
+    ),
   },
   {
     path: "/dashboard",
@@ -65,62 +99,62 @@ export const router = createBrowserRouter([
       { index: true, Component: DashboardLanding },
       { path: "students", Component: () => (
         <ProtectedRoute requiredModule="Students">
-          <Students />
+          <Suspense fallback={<RouteFallback />}><Students /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "donors", Component: () => (
         <ProtectedRoute requiredModule="Donors">
-          <Donors />
+          <Suspense fallback={<RouteFallback />}><Donors /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "sponsorships", Component: () => (
         <ProtectedRoute requiredModule="Sponsorships">
-          <Sponsorships />
+          <Suspense fallback={<RouteFallback />}><Sponsorships /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "acknowledgment-letter", Component: () => (
         <ProtectedRoute requiredModule="Export">
-          <AcknowledgmentLetter />
+          <Suspense fallback={<RouteFallback />}><AcknowledgmentLetter /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "leaves", Component: () => (
         <ProtectedRoute requiredModule="Leave Management">
-          <LeaveManagement />
+          <Suspense fallback={<RouteFallback />}><LeaveManagement /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "ict", Component: () => (
         <ProtectedRoute requiredModule="ICT">
-          <ICT />
+          <Suspense fallback={<RouteFallback />}><ICT /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "accounting", Component: () => (
         <ProtectedRoute requiredModule="Accounting">
-          <Accounting />
+          <Suspense fallback={<RouteFallback />}><Accounting /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "projects", Component: () => (
         <ProtectedRoute requiredModule="Projects">
-          <Projects />
+          <Suspense fallback={<RouteFallback />}><Projects /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "hr", Component: () => (
         <ProtectedRoute requiredModule="HR">
-          <HR />
+          <Suspense fallback={<RouteFallback />}><HR /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "school", Component: () => (
         <ProtectedRoute requiredModule="School">
-          <School />
+          <Suspense fallback={<RouteFallback />}><School /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "lead-management", Component: () => (
         <ProtectedRoute requiredModule="Lead Management">
-          <LeadManagement />
+          <Suspense fallback={<RouteFallback />}><LeadManagement /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (
         <ProtectedRoute requiredRole="admin">
-          <Admin />
+          <Suspense fallback={<RouteFallback />}><Admin /></Suspense>
         </ProtectedRoute>
       ) },
     ],
