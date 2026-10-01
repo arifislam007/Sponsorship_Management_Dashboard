@@ -2414,7 +2414,7 @@ function MoneyReceiptTab() {
               </p>
             </div>
 
-            <p className="text-center text-lg font-bold text-gray-900 tracking-wide mb-6">MONEY RECEIPT</p>
+            <p className="text-center text-lg font-bold text-gray-900 tracking-wide mb-6">DONATION RECEIPT</p>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm mb-6">
               <div><span className={lbl}>Received From</span><p className="text-gray-900 font-medium">{form.receivedFrom || '—'}</p></div>
@@ -2480,7 +2480,7 @@ function MoneyReceiptTab() {
               756 West Sewrapara, Mirpur, Dhaka | Phone: 01737243447 | Email: info@sombhabona.org
             </p>
           </div>
-          <p style={{ textAlign: 'center', fontSize: '18px', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '24px' }}>MONEY RECEIPT</p>
+          <p style={{ textAlign: 'center', fontSize: '18px', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '24px' }}>DONATION RECEIPT</p>
           <table style={{ width: '100%', fontSize: '13px', marginBottom: '20px' }}>
             <tbody>
               <tr>
