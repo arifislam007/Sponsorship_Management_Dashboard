@@ -117,7 +117,8 @@ INSERT INTO modules (name, description, route_name) VALUES
     ('School', 'Puspokoli School attendance and classroom monitoring', 'school'),
     ('Lead Management', 'ICT student lead pipeline, follow-ups and admissions', 'lead-management'),
     ('Export', 'Data export functionality', 'export'),
-    ('Admin', 'Admin panel and user management', 'admin')
+    ('Admin', 'Admin panel and user management', 'admin'),
+    ('NPO', 'Non-profit governance: organogram, membership, boards, meetings', 'npo')
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert default permissions for admin (full access to all modules)
@@ -257,4 +258,15 @@ INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can
 SELECT r.id, m.id, true, true, true, false
 FROM roles r, modules m
 WHERE r.name = 'leave' AND m.name = 'Leave Management'
+ON CONFLICT (role_id, module_id) DO NOTHING;
+
+-- New role: npo (full NPO governance module access)
+INSERT INTO roles (name, description) VALUES
+  ('npo', 'Staff with access to the NPO governance module')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO permissions (role_id, module_id, can_view, can_create, can_edit, can_delete)
+SELECT r.id, m.id, true, true, true, true
+FROM roles r, modules m
+WHERE r.name = 'npo' AND m.name IN ('NPO', 'Dashboard')
 ON CONFLICT (role_id, module_id) DO NOTHING;

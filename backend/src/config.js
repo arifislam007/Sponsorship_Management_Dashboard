@@ -15,7 +15,11 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret) {
+  throw new Error('JWT_SECRET is required.');
+}
 
 export const config = {
   apiPrefix,

@@ -1,9 +1,13 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is required.');
+}
+
 export const config = {
   port: Number(process.env.PORT || 5004),
-  jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+  jwtSecret: process.env.JWT_SECRET,
   db: {
     host:     process.env.DB_HOST     || 'localhost',
     port:     Number(process.env.DB_PORT || 5432),

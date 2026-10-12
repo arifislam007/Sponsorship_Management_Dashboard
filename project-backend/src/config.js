@@ -2,7 +2,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const port = Number(process.env.PORT || 5003);
-const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret) {
+  throw new Error('JWT_SECRET is required.');
+}
 
 export const config = {
   port,

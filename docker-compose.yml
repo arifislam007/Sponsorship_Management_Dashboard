@@ -30,8 +30,8 @@ services:
       API_PREFIX: /api/v1
       PORT: 8000
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost
-      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
-      INTERNAL_SECRET: ${INTERNAL_SECRET:-sombhabona_internal_secret_2026}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:?INTERNAL_SECRET must be set in .env}
     depends_on:
       db:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       PORT: 5002
       NODE_ENV: ${NODE_ENV:-development}
     depends_on:
@@ -73,8 +73,8 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here}
-      INTERNAL_SECRET: ${INTERNAL_SECRET:-sombhabona_internal_secret_2026}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:?INTERNAL_SECRET must be set in .env}
       PORT: 5003
       NODE_ENV: ${NODE_ENV:-development}
     depends_on:
@@ -100,7 +100,7 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       PORT: 5004
       NODE_ENV: ${NODE_ENV:-development}
     depends_on:
@@ -126,7 +126,7 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       PORT: 5005
       NODE_ENV: ${NODE_ENV:-development}
     depends_on:
@@ -150,8 +150,8 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
-      INTERNAL_SECRET: ${INTERNAL_SECRET:-sombhabona_internal_secret_2026}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:?INTERNAL_SECRET must be set in .env}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
       OPENWA_API_URL: ${OPENWA_API_URL:-}
       OPENWA_API_KEY: ${OPENWA_API_KEY:-}
@@ -164,6 +164,30 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5006/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  npo-backend:
+    build:
+      context: ./npo-backend
+      dockerfile: Dockerfile
+    container_name: sombhabona-npo
+    restart: unless-stopped
+    environment:
+      DB_HOST: sombhabona-db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      PORT: 5007
+      NODE_ENV: ${NODE_ENV:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5007/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

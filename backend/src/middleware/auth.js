@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { pool } from '../db.js';
 
-const JWT_SECRET = config.jwtSecret || 'your-secret-key-change-in-production';
+const JWT_SECRET = config.jwtSecret;
 
 export function generateToken(userId, username) {
   return jwt.sign(

@@ -1,9 +1,13 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is required.');
+}
+
 export const config = {
   port: Number(process.env.PORT || 5006),
-  jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+  jwtSecret: process.env.JWT_SECRET,
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '',
   openwa: {
     apiUrl:        process.env.OPENWA_API_URL        || '',

@@ -30,6 +30,9 @@ const HR = lazy(() => import("./components/HR").then(m => ({ default: m.HR })));
 const School = lazy(() => import("./components/School").then(m => ({ default: m.School })));
 const LeadManagement = lazy(() => import("./components/LeadManagement").then(m => ({ default: m.LeadManagement })));
 const PublicICTAdmission = lazy(() => import("./components/PublicICTAdmission").then(m => ({ default: m.PublicICTAdmission })));
+const NPO = lazy(() => import("./components/NPO").then(m => ({ default: m.NPO })));
+const NpoPortalLogin = lazy(() => import("./components/npo-portal/NpoPortalLogin").then(m => ({ default: m.NpoPortalLogin })));
+const NpoPortalDashboard = lazy(() => import("./components/npo-portal/NpoPortalDashboard").then(m => ({ default: m.NpoPortalDashboard })));
 
 function RouteFallback() {
   return (
@@ -93,6 +96,22 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/npo-portal",
+    Component: () => (
+      <Suspense fallback={<RouteFallback />}>
+        <NpoPortalLogin />
+      </Suspense>
+    ),
+  },
+  {
+    path: "/npo-portal/dashboard",
+    Component: () => (
+      <Suspense fallback={<RouteFallback />}>
+        <NpoPortalDashboard />
+      </Suspense>
+    ),
+  },
+  {
     path: "/dashboard",
     Component: RootLayout,
     children: [
@@ -150,6 +169,11 @@ export const router = createBrowserRouter([
       { path: "lead-management", Component: () => (
         <ProtectedRoute requiredModule="Lead Management">
           <Suspense fallback={<RouteFallback />}><LeadManagement /></Suspense>
+        </ProtectedRoute>
+      ) },
+      { path: "npo", Component: () => (
+        <ProtectedRoute requiredModule="NPO">
+          <Suspense fallback={<RouteFallback />}><NPO /></Suspense>
         </ProtectedRoute>
       ) },
       { path: "settings", Component: () => (
