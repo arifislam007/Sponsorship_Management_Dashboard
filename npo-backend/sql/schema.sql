@@ -145,6 +145,19 @@ ALTER TABLE npo_members ADD COLUMN IF NOT EXISTS signature TEXT;
 -- doesn't retroactively change if the person's signature is later updated.
 ALTER TABLE npo_meeting_attendees ADD COLUMN IF NOT EXISTS signature_snapshot TEXT;
 
+-- Link Organogram positions and board seats back to the Membership roll so
+-- name/photo/contact details are fetched live from npo_members instead of
+-- being re-typed and drifting out of sync. Optional on both tables (an
+-- Advisor or a position-holder may not be a general member), but the route
+-- layer requires it for board_type='executive' — an executive must already
+-- be a General Member. The existing full_name/photo/phone/email/person_name
+-- columns stay as the free-text fallback path and as a write-time snapshot
+-- for linked records, so nothing already saved is affected.
+ALTER TABLE npo_board_members ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES npo_members(id) ON DELETE SET NULL;
+ALTER TABLE npo_positions ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES npo_members(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_npo_positions_parent ON npo_positions(parent_position_id);
 CREATE INDEX IF NOT EXISTS idx_npo_board_members_type ON npo_board_members(board_type);
 CREATE INDEX IF NOT EXISTS idx_npo_meeting_attendees_meeting ON npo_meeting_attendees(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_npo_board_members_member ON npo_board_members(member_id);
+CREATE INDEX IF NOT EXISTS idx_npo_positions_member ON npo_positions(member_id);

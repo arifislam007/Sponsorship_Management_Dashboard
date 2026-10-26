@@ -22,12 +22,13 @@ type MeetingType = 'agm' | 'regular';
 
 interface Position {
   id: number; title: string; person_name?: string; photo?: string;
-  parent_position_id?: number | null; sort_order?: number;
+  parent_position_id?: number | null; sort_order?: number; member_id?: number | null;
 }
 interface BoardMember {
   id: number; board_type: BoardType; full_name: string; position_title?: string;
   photo?: string; signature?: string; phone?: string; email?: string;
   term_start_date?: string; term_end_date?: string; bio_notes?: string; portal_username?: string;
+  member_id?: number | null;
 }
 interface Member {
   id: number; full_name: string; father_name?: string; mother_name?: string;
@@ -295,9 +296,9 @@ function fmtDate(d?: string) {
 // ── Organogram Tab ─────────────────────────────────────────────────────────────
 
 interface PositionFormState {
-  title: string; person_name: string; photo: string; parent_position_id: string;
+  title: string; person_name: string; photo: string; parent_position_id: string; member_id: string;
 }
-const EMPTY_POSITION_FORM: PositionFormState = { title: '', person_name: '', photo: '', parent_position_id: '' };
+const EMPTY_POSITION_FORM: PositionFormState = { title: '', person_name: '', photo: '', parent_position_id: '', member_id: '' };
 
 function descendantIds(positions: Position[], rootId: number): Set<number> {
   const ids = new Set<number>();
@@ -313,6 +314,7 @@ function descendantIds(positions: Position[], rootId: number): Set<number> {
 
 function OrganogramTab() {
   const [positions, setPositions] = useState<Position[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -322,7 +324,11 @@ function OrganogramTab() {
 
   const load = () => {
     setLoading(true);
-    npoFetch<Position[]>('/positions').then(setPositions).catch(e => setError(e.message)).finally(() => setLoading(false));
+    Promise.all([
+      npoFetch<Position[]>('/positions'),
+      npoFetch<Member[]>('/members?status=active&limit=500'),
+    ]).then(([p, m]) => { setPositions(p); setMembers(m); })
+      .catch(e => setError(e.message)).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
 
@@ -362,7 +368,11 @@ function OrganogramTab() {
   const openAdd = () => { setEditing(null); setForm(EMPTY_POSITION_FORM); setShowForm(true); };
   const openEdit = (p: Position) => {
     setEditing(p);
-    setForm({ title: p.title, person_name: p.person_name || '', photo: p.photo || '', parent_position_id: p.parent_position_id ? String(p.parent_position_id) : '' });
+    setForm({
+      title: p.title, person_name: p.person_name || '', photo: p.photo || '',
+      parent_position_id: p.parent_position_id ? String(p.parent_position_id) : '',
+      member_id: p.member_id ? String(p.member_id) : '',
+    });
     setShowForm(true);
   };
 
@@ -371,8 +381,10 @@ function OrganogramTab() {
     setSaving(true); setError('');
     try {
       const payload = {
-        title: form.title.trim(), person_name: form.person_name || null,
-        photo: form.photo || null, parent_position_id: form.parent_position_id ? Number(form.parent_position_id) : null,
+        title: form.title.trim(), person_name: form.member_id ? null : (form.person_name || null),
+        photo: form.member_id ? null : (form.photo || null),
+        parent_position_id: form.parent_position_id ? Number(form.parent_position_id) : null,
+        member_id: form.member_id ? Number(form.member_id) : null,
       };
       if (editing) await npoFetch(`/positions/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       else await npoFetch('/positions', { method: 'POST', body: JSON.stringify(payload) });
@@ -437,12 +449,22 @@ function OrganogramTab() {
               <button onClick={() => setShowForm(false)}><X size={18} /></button>
             </div>
             <ErrorBanner message={error} className="mb-3" />
-            <PhotoPicker photo={form.photo} onChange={(v) => setForm(f => ({ ...f, photo: v }))} />
+            {!form.member_id && <PhotoPicker photo={form.photo} onChange={(v) => setForm(f => ({ ...f, photo: v }))} />}
             <div className="space-y-3">
               <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="Position title (e.g. Executive Director)" className="w-full border rounded-lg px-3 py-2 text-sm" />
-              <input value={form.person_name} onChange={e => setForm(f => ({ ...f, person_name: e.target.value }))}
-                placeholder="Person's name" className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Select from Members (optional)</label>
+                <select value={form.member_id} onChange={e => setForm(f => ({ ...f, member_id: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="">— Enter name manually —</option>
+                  {members.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.phone ? ` — ${m.phone}` : ''}</option>)}
+                </select>
+              </div>
+              {!form.member_id && (
+                <input value={form.person_name} onChange={e => setForm(f => ({ ...f, person_name: e.target.value }))}
+                  placeholder="Person's name" className="w-full border rounded-lg px-3 py-2 text-sm" />
+              )}
               <select value={form.parent_position_id} onChange={e => setForm(f => ({ ...f, parent_position_id: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-2 text-sm">
                 <option value="">— Top level (no manager) —</option>
@@ -752,14 +774,16 @@ function MembershipTab() {
 interface BoardFormState {
   full_name: string; position_title: string; photo: string; signature: string; phone: string; email: string;
   term_start_date: string; term_end_date: string; bio_notes: string; portal_username: string; portal_password: string;
+  member_id: string;
 }
 const EMPTY_BOARD_FORM: BoardFormState = {
   full_name: '', position_title: BOARD_POSITIONS[0], photo: '', signature: '', phone: '', email: '',
-  term_start_date: '', term_end_date: '', bio_notes: '', portal_username: '', portal_password: '',
+  term_start_date: '', term_end_date: '', bio_notes: '', portal_username: '', portal_password: '', member_id: '',
 };
 
 function BoardList({ boardType }: { boardType: BoardType }) {
   const [list, setList] = useState<BoardMember[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -769,7 +793,11 @@ function BoardList({ boardType }: { boardType: BoardType }) {
 
   const load = () => {
     setLoading(true);
-    npoFetch<BoardMember[]>(`/board-members?type=${boardType}`).then(setList).catch(e => setError(e.message)).finally(() => setLoading(false));
+    Promise.all([
+      npoFetch<BoardMember[]>(`/board-members?type=${boardType}`),
+      npoFetch<Member[]>('/members?status=active&limit=500'),
+    ]).then(([l, m]) => { setList(l); setMembers(m); })
+      .catch(e => setError(e.message)).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, [boardType]);
 
@@ -782,15 +810,20 @@ function BoardList({ boardType }: { boardType: BoardType }) {
       term_start_date: b.term_start_date ? b.term_start_date.slice(0, 10) : '',
       term_end_date: b.term_end_date ? b.term_end_date.slice(0, 10) : '',
       bio_notes: b.bio_notes || '', portal_username: b.portal_username || '', portal_password: '',
+      member_id: b.member_id ? String(b.member_id) : '',
     });
     setShowForm(true);
   };
 
   const save = async () => {
-    if (!form.full_name.trim()) { setError('Full name is required'); return; }
+    if (boardType === 'executive' && !form.member_id) { setError('Executive Board members must be linked to an existing General Member'); return; }
+    if (!form.member_id && !form.full_name.trim()) { setError('Full name is required, or link a General Member'); return; }
     setSaving(true); setError('');
     try {
-      const payload = { ...form, board_type: boardType, term_start_date: form.term_start_date || null, term_end_date: form.term_end_date || null };
+      const payload = {
+        ...form, board_type: boardType, term_start_date: form.term_start_date || null, term_end_date: form.term_end_date || null,
+        member_id: form.member_id ? Number(form.member_id) : null,
+      };
       if (editing) await npoFetch(`/board-members/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       else await npoFetch('/board-members', { method: 'POST', body: JSON.stringify(payload) });
       setShowForm(false);
@@ -855,19 +888,37 @@ function BoardList({ boardType }: { boardType: BoardType }) {
               <button onClick={() => setShowForm(false)}><X size={18} /></button>
             </div>
             <ErrorBanner message={error} className="mb-3" />
-            <PhotoPicker photo={form.photo} onChange={(v) => setForm(f => ({ ...f, photo: v }))} />
+            {!form.member_id && <PhotoPicker photo={form.photo} onChange={(v) => setForm(f => ({ ...f, photo: v }))} />}
             {boardType === 'executive' && (
               <div className="flex justify-center mb-3">
                 <SignaturePicker signature={form.signature} onChange={(v) => setForm(f => ({ ...f, signature: v }))} />
               </div>
             )}
             <div className="space-y-3">
-              <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Full name *" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Select from Members {boardType === 'executive' ? <span className="text-red-500">*</span> : '(optional)'}
+                </label>
+                <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.member_id} onChange={e => setForm(f => ({ ...f, member_id: e.target.value }))}>
+                  <option value="">{boardType === 'executive' ? '— Select a member —' : '— Enter name manually —'}</option>
+                  {members.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.phone ? ` — ${m.phone}` : ''}</option>)}
+                </select>
+                {boardType === 'executive' && (
+                  <p className="text-xs text-gray-400 mt-1">Executive Board members must already be a General Member.</p>
+                )}
+              </div>
+              {!form.member_id && boardType === 'advisor' && (
+                <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Full name *" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
+              )}
               <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.position_title} onChange={e => setForm(f => ({ ...f, position_title: e.target.value }))}>
                 {BOARD_POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
-              <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-              <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+              {!form.member_id && (
+                <>
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                </>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs text-gray-500">Term start</label><input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.term_start_date} onChange={e => setForm(f => ({ ...f, term_start_date: e.target.value }))} /></div>
                 <div><label className="text-xs text-gray-500">Term end</label><input type="date" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.term_end_date} onChange={e => setForm(f => ({ ...f, term_end_date: e.target.value }))} /></div>
