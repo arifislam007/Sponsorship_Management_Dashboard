@@ -13,6 +13,8 @@ const SELECT_SQL = `
   SELECT p.id, p.title,
          COALESCE(m.full_name, b.full_name, p.person_name) AS person_name,
          COALESCE(m.photo, b.photo, p.photo) AS photo,
+         COALESCE(m.phone, b.phone) AS phone,
+         b.position_title AS board_position_title,
          p.parent_position_id, p.sort_order, p.is_active, p.board_member_id,
          p.created_at, p.updated_at
   FROM npo_positions p

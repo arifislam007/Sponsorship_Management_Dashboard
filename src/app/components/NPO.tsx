@@ -21,7 +21,7 @@ type MemberStatus = 'active' | 'inactive' | 'suspended';
 type MeetingType = 'agm' | 'regular';
 
 interface Position {
-  id: number; title: string; person_name?: string; photo?: string;
+  id: number; title: string; person_name?: string; photo?: string; phone?: string; board_position_title?: string;
   parent_position_id?: number | null; sort_order?: number; board_member_id?: number | null;
 }
 interface BoardMember {
@@ -91,6 +91,13 @@ async function npoFetch<T>(path: string, init?: RequestInit): Promise<T> {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BOARD_POSITIONS = ['Chairperson', 'Secretary', 'Finance Secretary', 'Vice Finance Secretary', 'Youth Secretary', 'Members'];
+const EXECUTIVE_POSITIONS = [
+  'Chairman', 'Vice Chairman', 'President', 'Vice President', 'General Secretary',
+  'Finance Secretary', 'Vice Finance Secretary', 'Youth Secretary', 'Vice Youth Secretary',
+  'Education Secretary', 'Cultural Secretary', 'Office Secretary', 'Member',
+  "Women's Rights Secretary", "Children's Rights Secretary",
+];
+const ADD_NEW_POSITION = '__add_new__';
 const MEMBER_STATUSES: MemberStatus[] = ['active', 'inactive', 'suspended'];
 const STATUS_COLORS: Record<MemberStatus, string> = {
   active: 'bg-green-100 text-green-700',
@@ -354,6 +361,8 @@ function OrganogramTab() {
           </div>
           <p className="text-sm font-semibold text-gray-900 text-center leading-tight">{pos.title}</p>
           {pos.person_name && <p className="text-xs text-gray-500 mt-0.5 text-center">{pos.person_name}</p>}
+          {pos.board_position_title && <p className="text-[10px] text-gray-400 text-center">{pos.board_position_title}</p>}
+          {pos.phone && <p className="text-[10px] text-gray-400 text-center">{pos.phone}</p>}
         </div>
         {kids.length > 0 && (
           <>
@@ -423,13 +432,15 @@ function OrganogramTab() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
-            <tr><th className="px-4 py-2">Title</th><th className="px-4 py-2">Person</th><th className="px-4 py-2">Reports To</th><th className="px-4 py-2"></th></tr>
+            <tr><th className="px-4 py-2">Title</th><th className="px-4 py-2">Person</th><th className="px-4 py-2">Position</th><th className="px-4 py-2">Phone</th><th className="px-4 py-2">Reports To</th><th className="px-4 py-2"></th></tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {positions.map(p => (
               <tr key={p.id}>
                 <td className="px-4 py-2 font-medium text-gray-900">{p.title}</td>
                 <td className="px-4 py-2 text-gray-600">{p.person_name || '—'}</td>
+                <td className="px-4 py-2 text-gray-600">{p.board_position_title || '—'}</td>
+                <td className="px-4 py-2 text-gray-600">{p.phone || '—'}</td>
                 <td className="px-4 py-2 text-gray-600">{positions.find(x => x.id === p.parent_position_id)?.title || '—'}</td>
                 <td className="px-4 py-2 text-right">
                   <button onClick={() => openEdit(p)} className="text-gray-400 hover:text-[#14856E] mr-2"><Edit2 size={15} /></button>
@@ -455,7 +466,11 @@ function OrganogramTab() {
                 placeholder="Position title (e.g. Executive Director)" className="w-full border rounded-lg px-3 py-2 text-sm" />
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Select from Executive Board (optional)</label>
-                <select value={form.board_member_id} onChange={e => setForm(f => ({ ...f, board_member_id: e.target.value }))}
+                <select value={form.board_member_id} onChange={e => {
+                  const boardMemberId = e.target.value;
+                  const selected = executives.find(b => String(b.id) === boardMemberId);
+                  setForm(f => ({ ...f, board_member_id: boardMemberId, title: (!f.title.trim() && selected?.position_title) ? selected.position_title : f.title }));
+                }}
                   className="w-full border rounded-lg px-3 py-2 text-sm">
                   <option value="">— Enter name manually —</option>
                   {executives.map(b => <option key={b.id} value={b.id}>{b.full_name}{b.phone ? ` — ${b.phone}` : ''}{b.position_title ? ` — ${b.position_title}` : ''}</option>)}
@@ -790,6 +805,9 @@ function BoardList({ boardType }: { boardType: BoardType }) {
   const [editing, setEditing] = useState<BoardMember | null>(null);
   const [form, setForm] = useState<BoardFormState>(EMPTY_BOARD_FORM);
   const [saving, setSaving] = useState(false);
+  const [customPosition, setCustomPosition] = useState(false);
+
+  const positionOptions = boardType === 'executive' ? EXECUTIVE_POSITIONS : BOARD_POSITIONS;
 
   const load = () => {
     setLoading(true);
@@ -801,17 +819,24 @@ function BoardList({ boardType }: { boardType: BoardType }) {
   };
   useEffect(() => { load(); }, [boardType]);
 
-  const openAdd = () => { setEditing(null); setForm(EMPTY_BOARD_FORM); setShowForm(true); };
+  const openAdd = () => {
+    setEditing(null);
+    setForm({ ...EMPTY_BOARD_FORM, position_title: positionOptions[0] });
+    setCustomPosition(false);
+    setShowForm(true);
+  };
   const openEdit = (b: BoardMember) => {
     setEditing(b);
+    const positionTitle = b.position_title || positionOptions[0];
     setForm({
-      full_name: b.full_name, position_title: b.position_title || BOARD_POSITIONS[0], photo: b.photo || '', signature: b.signature || '',
+      full_name: b.full_name, position_title: positionTitle, photo: b.photo || '', signature: b.signature || '',
       phone: b.phone || '', email: b.email || '',
       term_start_date: b.term_start_date ? b.term_start_date.slice(0, 10) : '',
       term_end_date: b.term_end_date ? b.term_end_date.slice(0, 10) : '',
       bio_notes: b.bio_notes || '', portal_username: b.portal_username || '', portal_password: '',
       member_id: b.member_id ? String(b.member_id) : '',
     });
+    setCustomPosition(!positionOptions.includes(positionTitle));
     setShowForm(true);
   };
 
@@ -910,9 +935,23 @@ function BoardList({ boardType }: { boardType: BoardType }) {
               {!form.member_id && boardType === 'advisor' && (
                 <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Full name *" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
               )}
-              <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.position_title} onChange={e => setForm(f => ({ ...f, position_title: e.target.value }))}>
-                {BOARD_POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              {customPosition ? (
+                <div className="flex gap-2">
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="New position title"
+                    value={form.position_title} onChange={e => setForm(f => ({ ...f, position_title: e.target.value }))} autoFocus />
+                  <button type="button" onClick={() => { setCustomPosition(false); setForm(f => ({ ...f, position_title: positionOptions[0] })); }}
+                    className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 whitespace-nowrap">Choose from list</button>
+                </div>
+              ) : (
+                <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.position_title}
+                  onChange={e => {
+                    if (e.target.value === ADD_NEW_POSITION) { setCustomPosition(true); setForm(f => ({ ...f, position_title: '' })); }
+                    else setForm(f => ({ ...f, position_title: e.target.value }));
+                  }}>
+                  {positionOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                  <option value={ADD_NEW_POSITION}>+ Add new position…</option>
+                </select>
+              )}
               {!form.member_id && (
                 <>
                   <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
