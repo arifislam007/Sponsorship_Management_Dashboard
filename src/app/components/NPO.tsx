@@ -458,7 +458,7 @@ function OrganogramTab() {
                 <select value={form.board_member_id} onChange={e => setForm(f => ({ ...f, board_member_id: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm">
                   <option value="">— Enter name manually —</option>
-                  {executives.map(b => <option key={b.id} value={b.id}>{b.full_name}{b.phone ? ` — ${b.phone}` : ''}</option>)}
+                  {executives.map(b => <option key={b.id} value={b.id}>{b.full_name}{b.phone ? ` — ${b.phone}` : ''}{b.position_title ? ` — ${b.position_title}` : ''}</option>)}
                 </select>
               </div>
               {!form.board_member_id && (
