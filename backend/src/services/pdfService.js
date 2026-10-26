@@ -34,7 +34,7 @@ export async function generateLetterPDF(htmlContent, letterMetadata) {
       doc.moveDown(1);
 
       const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-      doc.fontSize(10).text(`Date: ${today}`, { align: 'right' });
+      doc.fontSize(10).text(`Date: ${today}`, { align: 'left' });
       doc.moveDown(1);
 
       doc.fontSize(10).text('To,');

@@ -61,6 +61,7 @@ docker-compose.*.local.yml
 
 # Database files
 postgres_data/
+db-backups/
 *.sqlite
 *.db
 

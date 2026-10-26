@@ -1068,7 +1068,7 @@ export function AcknowledgmentLetter() {
                   </p>
                 </div>
 
-                <div className="text-right text-sm text-gray-700 mb-6">
+                <div className="text-left text-sm text-gray-700 mb-6">
                   Date: <strong>{todayDate}</strong>
                 </div>
 
@@ -1187,7 +1187,7 @@ export function AcknowledgmentLetter() {
               </p>
             </div>
 
-            <div style={{ textAlign: 'right', fontSize: '14px', color: '#374151', marginBottom: '24px' }}>
+            <div style={{ textAlign: 'left', fontSize: '14px', color: '#374151', marginBottom: '24px' }}>
               Date: <strong>{todayDate}</strong>
             </div>
 

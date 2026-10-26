@@ -192,6 +192,26 @@ services:
       timeout: 5s
       retries: 3
 
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    container_name: sombhabona-db-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: sombhabona-db
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: "0 1 * * *" # once daily at 01:00
+      BACKUP_KEEP_DAYS: 14
+      BACKUP_KEEP_WEEKS: 8
+      BACKUP_KEEP_MONTHS: 6
+      HEALTHCHECK_PORT: 8080
+    volumes:
+      - ./db-backups:/backups
+
   frontend:
     build:
       context: .
