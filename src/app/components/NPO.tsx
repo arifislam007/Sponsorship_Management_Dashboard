@@ -22,7 +22,7 @@ type MeetingType = 'agm' | 'regular';
 
 interface Position {
   id: number; title: string; person_name?: string; photo?: string;
-  parent_position_id?: number | null; sort_order?: number; member_id?: number | null;
+  parent_position_id?: number | null; sort_order?: number; board_member_id?: number | null;
 }
 interface BoardMember {
   id: number; board_type: BoardType; full_name: string; position_title?: string;
@@ -296,9 +296,9 @@ function fmtDate(d?: string) {
 // ── Organogram Tab ─────────────────────────────────────────────────────────────
 
 interface PositionFormState {
-  title: string; person_name: string; photo: string; parent_position_id: string; member_id: string;
+  title: string; person_name: string; photo: string; parent_position_id: string; board_member_id: string;
 }
-const EMPTY_POSITION_FORM: PositionFormState = { title: '', person_name: '', photo: '', parent_position_id: '', member_id: '' };
+const EMPTY_POSITION_FORM: PositionFormState = { title: '', person_name: '', photo: '', parent_position_id: '', board_member_id: '' };
 
 function descendantIds(positions: Position[], rootId: number): Set<number> {
   const ids = new Set<number>();
@@ -314,7 +314,7 @@ function descendantIds(positions: Position[], rootId: number): Set<number> {
 
 function OrganogramTab() {
   const [positions, setPositions] = useState<Position[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
+  const [executives, setExecutives] = useState<BoardMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -326,8 +326,8 @@ function OrganogramTab() {
     setLoading(true);
     Promise.all([
       npoFetch<Position[]>('/positions'),
-      npoFetch<Member[]>('/members?status=active&limit=500'),
-    ]).then(([p, m]) => { setPositions(p); setMembers(m); })
+      npoFetch<BoardMember[]>('/board-members?type=executive'),
+    ]).then(([p, b]) => { setPositions(p); setExecutives(b); })
       .catch(e => setError(e.message)).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
@@ -371,7 +371,7 @@ function OrganogramTab() {
     setForm({
       title: p.title, person_name: p.person_name || '', photo: p.photo || '',
       parent_position_id: p.parent_position_id ? String(p.parent_position_id) : '',
-      member_id: p.member_id ? String(p.member_id) : '',
+      board_member_id: p.board_member_id ? String(p.board_member_id) : '',
     });
     setShowForm(true);
   };
@@ -381,10 +381,10 @@ function OrganogramTab() {
     setSaving(true); setError('');
     try {
       const payload = {
-        title: form.title.trim(), person_name: form.member_id ? null : (form.person_name || null),
-        photo: form.member_id ? null : (form.photo || null),
+        title: form.title.trim(), person_name: form.board_member_id ? null : (form.person_name || null),
+        photo: form.board_member_id ? null : (form.photo || null),
         parent_position_id: form.parent_position_id ? Number(form.parent_position_id) : null,
-        member_id: form.member_id ? Number(form.member_id) : null,
+        board_member_id: form.board_member_id ? Number(form.board_member_id) : null,
       };
       if (editing) await npoFetch(`/positions/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       else await npoFetch('/positions', { method: 'POST', body: JSON.stringify(payload) });
@@ -449,19 +449,19 @@ function OrganogramTab() {
               <button onClick={() => setShowForm(false)}><X size={18} /></button>
             </div>
             <ErrorBanner message={error} className="mb-3" />
-            {!form.member_id && <PhotoPicker photo={form.photo} onChange={(v) => setForm(f => ({ ...f, photo: v }))} />}
+            {!form.board_member_id && <PhotoPicker photo={form.photo} onChange={(v) => setForm(f => ({ ...f, photo: v }))} />}
             <div className="space-y-3">
               <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="Position title (e.g. Executive Director)" className="w-full border rounded-lg px-3 py-2 text-sm" />
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Select from Members (optional)</label>
-                <select value={form.member_id} onChange={e => setForm(f => ({ ...f, member_id: e.target.value }))}
+                <label className="block text-xs text-gray-500 mb-1">Select from Executive Board (optional)</label>
+                <select value={form.board_member_id} onChange={e => setForm(f => ({ ...f, board_member_id: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm">
                   <option value="">— Enter name manually —</option>
-                  {members.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.phone ? ` — ${m.phone}` : ''}</option>)}
+                  {executives.map(b => <option key={b.id} value={b.id}>{b.full_name}{b.phone ? ` — ${b.phone}` : ''}</option>)}
                 </select>
               </div>
-              {!form.member_id && (
+              {!form.board_member_id && (
                 <input value={form.person_name} onChange={e => setForm(f => ({ ...f, person_name: e.target.value }))}
                   placeholder="Person's name" className="w-full border rounded-lg px-3 py-2 text-sm" />
               )}

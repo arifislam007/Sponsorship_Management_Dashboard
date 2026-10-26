@@ -145,19 +145,30 @@ ALTER TABLE npo_members ADD COLUMN IF NOT EXISTS signature TEXT;
 -- doesn't retroactively change if the person's signature is later updated.
 ALTER TABLE npo_meeting_attendees ADD COLUMN IF NOT EXISTS signature_snapshot TEXT;
 
--- Link Organogram positions and board seats back to the Membership roll so
--- name/photo/contact details are fetched live from npo_members instead of
--- being re-typed and drifting out of sync. Optional on both tables (an
--- Advisor or a position-holder may not be a general member), but the route
--- layer requires it for board_type='executive' — an executive must already
--- be a General Member. The existing full_name/photo/phone/email/person_name
--- columns stay as the free-text fallback path and as a write-time snapshot
--- for linked records, so nothing already saved is affected.
+-- Link board seats back to the Membership roll so name/photo/contact
+-- details are fetched live from npo_members instead of being re-typed and
+-- drifting out of sync. The route layer requires this for
+-- board_type='executive' — an executive must already be a General Member.
+-- The existing full_name/photo/phone/email columns stay as the free-text
+-- fallback path and as a write-time snapshot for linked records, so
+-- nothing already saved is affected.
 ALTER TABLE npo_board_members ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES npo_members(id) ON DELETE SET NULL;
+
+-- NOTE: npo_positions.member_id (linking Organogram directly to Membership)
+-- was an earlier revision, superseded immediately below by board_member_id
+-- (Organogram links from the Executive Board instead, not raw Membership).
+-- Left undropped on already-deployed databases (harmless); no longer read
+-- or written by any route.
 ALTER TABLE npo_positions ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES npo_members(id) ON DELETE SET NULL;
+
+-- Organogram positions link to an Executive Board seat (which itself
+-- resolves live from Membership via npo_board_members.member_id above), so
+-- a position is only fillable by someone already serving on the Executive
+-- Board. Optional — a position may have no seat assigned yet.
+ALTER TABLE npo_positions ADD COLUMN IF NOT EXISTS board_member_id INTEGER REFERENCES npo_board_members(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_npo_positions_parent ON npo_positions(parent_position_id);
 CREATE INDEX IF NOT EXISTS idx_npo_board_members_type ON npo_board_members(board_type);
 CREATE INDEX IF NOT EXISTS idx_npo_meeting_attendees_meeting ON npo_meeting_attendees(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_npo_board_members_member ON npo_board_members(member_id);
-CREATE INDEX IF NOT EXISTS idx_npo_positions_member ON npo_positions(member_id);
+CREATE INDEX IF NOT EXISTS idx_npo_positions_board_member ON npo_positions(board_member_id);
