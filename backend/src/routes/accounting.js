@@ -51,6 +51,27 @@ accountingRouter.get('/employees', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Signatory for letters/receipts (Acknowledgment Letter, Money Receipt, etc.):
+// the active employee in the Finance & Accounts department, with designation
+// title, so the printed "name" is always the current account-department
+// staff member rather than a hardcoded value in the frontend.
+accountingRouter.get('/employees/signatory', async (req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT e.id, e.full_name, d.title AS designation, dept.name AS department
+       FROM hr_employees e
+       LEFT JOIN hr_designations d ON d.id = e.designation_id
+       LEFT JOIN hr_departments dept ON dept.id = e.department_id
+       WHERE NOT e.is_deleted
+         AND dept.name = 'Finance & Accounts'
+         AND e.employment_status <> 'Terminated'
+       ORDER BY e.joining_date ASC NULLS LAST, e.id ASC
+       LIMIT 1`
+    );
+    res.json(result.rows[0] || null);
+  } catch (err) { next(err); }
+});
+
 // ── Chart of Accounts ───────────────────────────────────────────────────────
 
 accountingRouter.get('/accounts', async (req, res, next) => {

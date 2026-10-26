@@ -17,7 +17,23 @@ acknowledgmentsRouter.post('/', async (req, res, next) => {
       pdfBuffer = Buffer.from(pdf_base64, 'base64');
     } else {
       try {
-        pdfBuffer = await generateLetterPDF(content, { donorName: donor_name || 'Unknown' });
+        let signatoryName, signatoryTitle;
+        try {
+          const sig = await pool.query(
+            `SELECT e.full_name, d.title AS designation
+             FROM hr_employees e
+             LEFT JOIN hr_designations d ON d.id = e.designation_id
+             LEFT JOIN hr_departments dept ON dept.id = e.department_id
+             WHERE NOT e.is_deleted AND dept.name = 'Finance & Accounts' AND e.employment_status <> 'Terminated'
+             ORDER BY e.joining_date ASC NULLS LAST, e.id ASC
+             LIMIT 1`
+          );
+          signatoryName = sig.rows[0]?.full_name;
+          signatoryTitle = sig.rows[0]?.designation;
+        } catch (sigError) {
+          console.error('Signatory lookup failed, falling back to default:', sigError);
+        }
+        pdfBuffer = await generateLetterPDF(content, { donorName: donor_name || 'Unknown', signatoryName, signatoryTitle });
       } catch (pdfError) {
         console.error('PDF generation warning (continuing):', pdfError);
       }

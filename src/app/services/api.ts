@@ -317,6 +317,13 @@ export interface AccEmployee {
   full_name: string;
 }
 
+export interface AccSignatory {
+  id: number;
+  full_name: string;
+  designation: string | null;
+  department: string | null;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -593,6 +600,8 @@ export const api = {
     request<AccPaymentMethodMapping>('/accounting/payment-method-mappings', { method: 'POST', body: JSON.stringify(p) }),
 
   accGetEmployees: () => request<AccEmployee[]>('/accounting/employees'),
+
+  accGetSignatory: () => request<AccSignatory | null>('/accounting/employees/signatory'),
 
   async exportDonorStatement(payload: DonorStatementPayload): Promise<Blob> {
     const response = await fetch(`${API_BASE}/exports/donor-statement`, {

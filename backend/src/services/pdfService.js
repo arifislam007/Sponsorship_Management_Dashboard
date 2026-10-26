@@ -41,7 +41,7 @@ export async function generateLetterPDF(htmlContent, letterMetadata) {
       doc.fontSize(12).font('Helvetica-Bold').text(letterMetadata.donorName || 'Dear Donor');
       doc.moveDown(0.5);
 
-      doc.fontSize(11).font('Helvetica-Bold').text('Subject: Acknowledgment of Donation', { align: 'center' });
+      doc.fontSize(11).font('Helvetica-Bold').text('Subject: Acknowledgment of Donation', { align: 'left' });
       doc.moveDown(1);
 
       doc.fontSize(10).font('Helvetica');
@@ -50,8 +50,10 @@ export async function generateLetterPDF(htmlContent, letterMetadata) {
       doc.moveDown(2);
       doc.fontSize(10).text('Yours sincerely,', { align: 'left' });
       doc.moveDown(3);
-      doc.fontSize(11).font('Helvetica-Bold').text('(Saad Ibn Maruf)', { align: 'left' });
-      doc.fontSize(10).font('Helvetica').text('Account and Admin', { align: 'left' });
+      const signatoryName = letterMetadata.signatoryName || 'Md Al Amin';
+      const signatoryTitle = letterMetadata.signatoryTitle || 'Account and Admin';
+      doc.fontSize(11).font('Helvetica-Bold').text(`(${signatoryName})`, { align: 'left' });
+      doc.fontSize(10).font('Helvetica').text(signatoryTitle, { align: 'left' });
       doc.text('Sombhabona', { align: 'left' });
 
       doc.moveDown(2);

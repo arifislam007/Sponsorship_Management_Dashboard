@@ -154,7 +154,7 @@ export function AcknowledgmentLetter() {
   const [viewingLetter, setViewingLetter] = useState<SavedLetterRecord | null>(null);
   const [showSignatureEditor, setShowSignatureEditor] = useState(false);
   const [signatureData, setSignatureData] = useState({
-    name: 'Saad Ibn Maruf',
+    name: 'Md Al Amin',
     title: 'Account and Admin',
     organization: 'Sombhabona',
     imageUrl: udaySignature as string,
@@ -169,6 +169,21 @@ export function AcknowledgmentLetter() {
   const todayDate = useMemo(() => format(new Date(), 'MMMM dd, yyyy'), []);
 
   useEffect(() => {
+    const loadSignatory = async () => {
+      try {
+        const signatory = await api.accGetSignatory();
+        if (signatory?.full_name) {
+          setSignatureData((prev) => ({
+            ...prev,
+            name: signatory.full_name,
+            title: signatory.designation || prev.title,
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to load account department signatory, keeping default:', error);
+      }
+    };
+
     const loadSavedLetters = async () => {
       try {
         const response = await api.getLetters({ template_name: 'Acknowledgment of Donation' });
@@ -218,6 +233,7 @@ export function AcknowledgmentLetter() {
 
     loadSavedLetters();
     loadDonors();
+    loadSignatory();
   }, []);
 
   // Not memoized on purpose: react-hook-form's watch() can update a nested
@@ -1061,7 +1077,7 @@ export function AcknowledgmentLetter() {
                   <p className="text-base font-semibold text-gray-900 mt-1">{formData.donorName || '[Donor Name]'}</p>
                 </div>
 
-                <p className="text-center font-semibold text-gray-900 mb-6">Subject: Acknowledgment of Donation</p>
+                <p className="text-left font-semibold text-gray-900 mb-6">Subject: Acknowledgment of Donation</p>
 
                 <div className="space-y-4 text-sm leading-relaxed text-gray-800">
                   <p>Dear {formData.donorName || '[Donor Name]'},</p>
@@ -1135,7 +1151,7 @@ export function AcknowledgmentLetter() {
 
                   <p className="pt-4">Yours sincerely,</p>
 
-                  <div className="mt-8 flex flex-col items-center text-center">
+                  <div className="mt-8 flex flex-col items-start text-left">
                     {signatureData.imageUrl && (
                       <img src={signatureData.imageUrl} alt={`${signatureData.name} signature`} className="h-16 w-auto object-contain mb-3" />
                     )}
@@ -1180,7 +1196,7 @@ export function AcknowledgmentLetter() {
               <p style={{ fontSize: '16px', fontWeight: 600, color: '#111827', marginTop: '4px' }}>{formData.donorName || '[Donor Name]'}</p>
             </div>
 
-            <p style={{ textAlign: 'center', fontWeight: 600, color: '#111827', marginBottom: '24px' }}>Subject: Acknowledgment of Donation</p>
+            <p style={{ textAlign: 'left', fontWeight: 600, color: '#111827', marginBottom: '24px' }}>Subject: Acknowledgment of Donation</p>
 
             <div style={{ fontSize: '14px', lineHeight: 1.7, color: '#1f2937' }}>
               <p style={{ marginBottom: '16px' }}>Dear {formData.donorName || '[Donor Name]'},</p>
@@ -1252,7 +1268,7 @@ export function AcknowledgmentLetter() {
 
               <p style={{ paddingTop: '16px' }}>Yours sincerely,</p>
 
-              <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
                 {signatureData.imageUrl && (
                   <img src={signatureData.imageUrl} alt={`${signatureData.name} signature`} style={{ height: '64px', width: 'auto', objectFit: 'contain', marginBottom: '12px', display: 'block' }} />
                 )}
