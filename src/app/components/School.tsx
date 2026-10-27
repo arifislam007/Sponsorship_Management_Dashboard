@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   LayoutDashboard, Users, CalendarDays, ClipboardList, BarChart2,
   Plus, Search, X, Edit2, CheckCircle2, XCircle, Clock, Printer,
-  Save, Send, Trash2, BookOpen, TrendingUp, AlertCircle,
+  Save, Send, Trash2, BookOpen, TrendingUp, AlertCircle, CalendarClock,
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { Modal } from './Modal';
 import { LoadingState } from './Spinner';
 import { EmptyState } from './EmptyState';
@@ -12,7 +14,13 @@ import { TabBar } from './TabBar';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface ScClass { id: number; name: string; branch?: string; class_teacher?: string; student_count?: number; total_students?: number; is_active: boolean; }
+interface ScClass {
+  id: number; name: string; branch?: string; class_teacher?: string; student_count?: number; total_students?: number; is_active: boolean;
+  tiffin_after_period?: number | null; tiffin_start_time?: string | null; tiffin_end_time?: string | null;
+  period_count?: number;
+  shift?: 'Morning' | 'Day';
+  classroom_name?: string | null; classroom_capacity?: number | null;
+}
 interface Student { id: number; student_code: string; full_name: string; class_id?: number; class_name?: string; gender?: string; guardian_name?: string; guardian_mobile?: string; is_active: boolean; }
 interface AttendanceRecord { student_id: number; full_name: string; student_code: string; status: 'Present' | 'Absent' | 'Late'; notes?: string; attendance_id?: number; }
 interface AttendanceSummary { attendance_date: string; class_id: number; class_name: string; total: number; present: number; absent: number; late: number; pct: number; }
@@ -25,7 +33,21 @@ interface MonitoringForm {
   yes_count: number; score_percent: number; items?: MonitoringItem[];
   created_at: string;
 }
-interface HrEmployee { id: number; full_name: string; designation_title?: string; department_name?: string; }
+interface HrEmployee { id: number; full_name: string; designation_title?: string; department_name?: string; mobile?: string; }
+interface ScSubject { id: number; name: string; }
+interface ScClassroomT { id: number; name: string; capacity?: number; }
+interface RoutineSlot {
+  id: number; class_id: number; day_of_week: number; period_number: number; period_span?: number;
+  start_time?: string | null; end_time?: string | null;
+  subject_ids?: number[] | null; subject_names?: string[] | null;
+  teacher_employee_id?: number | null; teacher_name?: string | null; teacher_phone?: string | null; teacher_designation?: string | null;
+  classroom_id?: number | null; classroom_name?: string | null; classroom_capacity?: number | null;
+}
+interface RoutineApproval {
+  id: number; class_id: number | null; class_name?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  approved_by_name?: string | null; approved_by_title?: string | null; approved_at?: string | null; rejected_reason?: string | null;
+}
 interface DashboardData {
   total_students: number; active_students: number; total_classes: number;
   today_attendance: { total_records: number; present: number; absent: number; late: number; percentage: number };
@@ -56,7 +78,9 @@ async function schoolFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
   }
-  return res.json();
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return text ? JSON.parse(text) : (undefined as T);
 }
 
 const HR_API = '/api/hr';
@@ -89,13 +113,22 @@ const MONITORING_ITEMS_DEF: { key: string; label: string }[] = [
   { key: 'classroom_environment',      label: 'শ্রেণিকক্ষের পরিবেশ সুন্দর' },
 ];
 
-type SchoolTab = 'dashboard' | 'attendance' | 'monitoring' | 'students' | 'reports';
+type SchoolTab = 'dashboard' | 'attendance' | 'monitoring' | 'students' | 'reports' | 'routine';
 
 const TABS: { id: SchoolTab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'attendance', label: 'Attendance', icon: CalendarDays },
   { id: 'monitoring', label: 'Evaluation', icon: ClipboardList },
+  { id: 'routine', label: 'Routine', icon: CalendarClock },
   { id: 'reports', label: 'Reports', icon: BarChart2 },
+];
+
+const ROUTINE_DAYS: { value: number; label: string }[] = [
+  { value: 1, label: 'Sunday' },
+  { value: 2, label: 'Monday' },
+  { value: 3, label: 'Tuesday' },
+  { value: 4, label: 'Wednesday' },
+  { value: 5, label: 'Thursday' },
 ];
 
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -1491,6 +1524,1016 @@ function ReportsTab({ classes }: { classes: ScClass[] }) {
   );
 }
 
+// ── Routine Planner Tab ────────────────────────────────────────────────────────
+
+function RoutineTab({ classes }: { classes: ScClass[] }) {
+  const [subjects, setSubjects] = useState<ScSubject[]>([]);
+  const [classrooms, setClassrooms] = useState<ScClassroomT[]>([]);
+  const [teachers, setTeachers] = useState<HrEmployee[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<number | ''>('');
+  const [classGrid, setClassGrid] = useState<RoutineSlot[]>([]);
+  const [schoolGrid, setSchoolGrid] = useState<RoutineSlot[]>([]);
+  const [allApprovals, setAllApprovals] = useState<RoutineApproval[]>([]);
+  const [approval, setApproval] = useState<RoutineApproval | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [editingSlot, setEditingSlot] = useState<{ day: number; period: number } | null>(null);
+  const [slotForm, setSlotForm] = useState<{ start_time: string; end_time: string; subject_ids: string[]; teacher_employee_id: string; classroom_id: string; period_span: string }>({
+    start_time: '', end_time: '', subject_ids: [], teacher_employee_id: '', classroom_id: '', period_span: '1',
+  });
+  const [saving, setSaving] = useState(false);
+  const [showSubjectForm, setShowSubjectForm] = useState(false);
+  const [newSubject, setNewSubject] = useState('');
+  const [showClassroomForm, setShowClassroomForm] = useState(false);
+  const [newClassroom, setNewClassroom] = useState({ name: '', capacity: '' });
+  const [editingClassroomId, setEditingClassroomId] = useState<number | null>(null);
+  const [editClassroomForm, setEditClassroomForm] = useState({ name: '', capacity: '' });
+  const [showRejectBox, setShowRejectBox] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [printing, setPrinting] = useState<'class' | 'school' | null>(null);
+  const classPrintRef = useRef<HTMLDivElement>(null);
+  const schoolClassRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [tiffinByClass, setTiffinByClass] = useState<Record<number, { after: number | null; start: string; end: string }>>({});
+  const [periodCountByClass, setPeriodCountByClass] = useState<Record<number, number>>({});
+  const [shiftByClass, setShiftByClass] = useState<Record<number, 'Morning' | 'Day'>>({});
+  const [savingTiffin, setSavingTiffin] = useState(false);
+  const [savingPeriodCount, setSavingPeriodCount] = useState(false);
+  const [savingShift, setSavingShift] = useState(false);
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+  const [dragOverCell, setDragOverCell] = useState<string | null>(null);
+  const [copyingDay, setCopyingDay] = useState<number | null>(null);
+
+  useEffect(() => {
+    const map: typeof tiffinByClass = {};
+    const countMap: typeof periodCountByClass = {};
+    const shiftMap: typeof shiftByClass = {};
+    classes.forEach(c => {
+      map[c.id] = {
+        after: c.tiffin_after_period ?? null,
+        start: c.tiffin_start_time?.slice(0, 5) || '',
+        end: c.tiffin_end_time?.slice(0, 5) || '',
+      };
+      countMap[c.id] = c.period_count || 7;
+      shiftMap[c.id] = c.shift || 'Morning';
+    });
+    setTiffinByClass(map);
+    setPeriodCountByClass(countMap);
+    setShiftByClass(shiftMap);
+  }, [classes]);
+
+  const loadMasters = () => {
+    schoolFetch<{ data: ScSubject[] }>('/subjects/').then(r => setSubjects(r.data)).catch(console.error);
+    schoolFetch<{ data: ScClassroomT[] }>('/classrooms/').then(r => setClassrooms(r.data)).catch(console.error);
+    hrFetch<{ data: HrEmployee[] }>('/employees/?status=Active&limit=500')
+      .then(r => setTeachers(r.data.filter(e => e.department_name === 'Education')))
+      .catch(console.error);
+  };
+  const loadSchoolGrid = () => {
+    schoolFetch<{ data: RoutineSlot[] }>('/routine/school').then(r => setSchoolGrid(r.data)).catch(console.error);
+  };
+  const loadAllApprovals = () => {
+    schoolFetch<{ data: RoutineApproval[] }>('/routine-approvals/').then(r => setAllApprovals(r.data)).catch(console.error);
+  };
+  useEffect(() => { loadMasters(); loadSchoolGrid(); loadAllApprovals(); }, []);
+
+  const loadApproval = (classId: number | '') => {
+    const qs = classId === '' ? '' : `?classId=${classId}`;
+    schoolFetch<RoutineApproval | null>(`/routine-approvals/status${qs}`).then(setApproval).catch(console.error);
+  };
+
+  const loadClassGrid = (classId: number) => {
+    setLoading(true);
+    schoolFetch<{ data: RoutineSlot[] }>(`/routine/?classId=${classId}`)
+      .then(r => setClassGrid(r.data))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    setError('');
+    if (selectedClassId === '') loadApproval('');
+    else { loadClassGrid(selectedClassId); loadApproval(selectedClassId); }
+  }, [selectedClassId]);
+
+  const gridSlots = selectedClassId === '' ? schoolGrid : classGrid;
+  const slotMap = useMemo(() => {
+    const map = new Map<string, RoutineSlot>();
+    gridSlots.forEach(s => map.set(`${s.class_id}-${s.day_of_week}-${s.period_number}`, s));
+    return map;
+  }, [gridSlots]);
+
+  const openCellEditor = (day: number, period: number) => {
+    if (selectedClassId === '') return;
+    const existing = slotMap.get(`${selectedClassId}-${day}-${period}`);
+    setSlotForm({
+      start_time: existing?.start_time?.slice(0, 5) || '',
+      end_time: existing?.end_time?.slice(0, 5) || '',
+      subject_ids: (existing?.subject_ids || []).map(String),
+      teacher_employee_id: existing?.teacher_employee_id ? String(existing.teacher_employee_id) : '',
+      classroom_id: existing?.classroom_id ? String(existing.classroom_id) : '',
+      period_span: existing?.period_span ? String(existing.period_span) : '1',
+    });
+    setEditingSlot({ day, period });
+    setError('');
+  };
+
+  const refreshAfterEdit = () => {
+    if (selectedClassId !== '') loadClassGrid(selectedClassId);
+    loadSchoolGrid();
+  };
+
+  // Drag a day's column header onto another day's header to copy that whole
+  // day's routine across (mirrors source exactly — periods with nothing on
+  // the source day are cleared on the target day too).
+  const copyDayRoutine = async (fromDay: number, toDay: number) => {
+    if (selectedClassId === '' || fromDay === toDay) return;
+    const fromLabel = ROUTINE_DAYS.find(d => d.value === fromDay)?.label || '';
+    const toLabel = ROUTINE_DAYS.find(d => d.value === toDay)?.label || '';
+    if (!confirm(`Copy ${fromLabel}'s routine to ${toLabel}? This will overwrite ${toLabel}'s existing periods.`)) return;
+    setCopyingDay(toDay); setError('');
+    try {
+      const periods = Math.max(periodCountByClass[selectedClassId] ?? 7, classGrid.reduce((m, s) => Math.max(m, s.period_number), 0));
+      for (let period = 1; period <= periods; period++) {
+        const sourceSlot = classGrid.find(s => s.day_of_week === fromDay && s.period_number === period);
+        const targetSlot = classGrid.find(s => s.day_of_week === toDay && s.period_number === period);
+        if (sourceSlot) {
+          await schoolFetch('/routine/slot', {
+            method: 'PUT',
+            body: JSON.stringify({
+              class_id: selectedClassId, day_of_week: toDay, period_number: period,
+              period_span: sourceSlot.period_span || 1,
+              start_time: sourceSlot.start_time || null, end_time: sourceSlot.end_time || null,
+              subject_ids: sourceSlot.subject_ids || [], teacher_employee_id: sourceSlot.teacher_employee_id || null,
+              classroom_id: sourceSlot.classroom_id || null,
+            }),
+          });
+        } else if (targetSlot) {
+          await schoolFetch(`/routine/slot/${targetSlot.id}`, { method: 'DELETE' });
+        }
+      }
+      refreshAfterEdit();
+    } catch (e: any) { setError(e.message); } finally { setCopyingDay(null); }
+  };
+
+  // Drop a teacher/subject/classroom chip from the side panels onto a cell,
+  // merging it into whatever's already in that slot. The backend's existing
+  // conflict check (same teacher, same day+period, different class) applies
+  // here exactly as it does for the modal editor, so a double-booking still
+  // surfaces as an error instead of silently overwriting.
+  const assignToSlot = async (
+    day: number, period: number,
+    patch: { add_subject_id?: number; teacher_employee_id?: number | null; classroom_id?: number | null }
+  ) => {
+    if (selectedClassId === '') return;
+    const existing = classGrid.find(s => s.day_of_week === day && s.period_number === period);
+    setError('');
+    try {
+      const subjectIds = patch.add_subject_id
+        ? Array.from(new Set([...(existing?.subject_ids || []), patch.add_subject_id]))
+        : (existing?.subject_ids || []);
+      await schoolFetch('/routine/slot', {
+        method: 'PUT',
+        body: JSON.stringify({
+          class_id: selectedClassId, day_of_week: day, period_number: period,
+          period_span: existing?.period_span || 1,
+          start_time: existing?.start_time || null, end_time: existing?.end_time || null,
+          subject_ids: subjectIds,
+          teacher_employee_id: 'teacher_employee_id' in patch ? patch.teacher_employee_id : (existing?.teacher_employee_id ?? null),
+          classroom_id: 'classroom_id' in patch ? patch.classroom_id : (existing?.classroom_id ?? null),
+        }),
+      });
+      refreshAfterEdit();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  // Drag an existing period cell onto another cell to move it (same conflict
+  // validation applies to the new day/period before the old one is cleared).
+  const moveSlot = async (fromDay: number, fromPeriod: number, toDay: number, toPeriod: number) => {
+    if (selectedClassId === '' || (fromDay === toDay && fromPeriod === toPeriod)) return;
+    const source = classGrid.find(s => s.day_of_week === fromDay && s.period_number === fromPeriod);
+    if (!source) return;
+    setError('');
+    try {
+      await schoolFetch('/routine/slot', {
+        method: 'PUT',
+        body: JSON.stringify({
+          class_id: selectedClassId, day_of_week: toDay, period_number: toPeriod,
+          period_span: source.period_span || 1,
+          start_time: source.start_time || null, end_time: source.end_time || null,
+          subject_ids: source.subject_ids || [], teacher_employee_id: source.teacher_employee_id || null,
+          classroom_id: source.classroom_id || null,
+        }),
+      });
+      await schoolFetch(`/routine/slot/${source.id}`, { method: 'DELETE' });
+      refreshAfterEdit();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const saveSlot = async () => {
+    if (!editingSlot || selectedClassId === '') return;
+    setSaving(true); setError('');
+    try {
+      await schoolFetch('/routine/slot', {
+        method: 'PUT',
+        body: JSON.stringify({
+          class_id: selectedClassId, day_of_week: editingSlot.day, period_number: editingSlot.period,
+          period_span: Math.max(1, Number(slotForm.period_span) || 1),
+          start_time: slotForm.start_time || null, end_time: slotForm.end_time || null,
+          subject_ids: slotForm.subject_ids.map(Number),
+          teacher_employee_id: slotForm.teacher_employee_id ? Number(slotForm.teacher_employee_id) : null,
+          classroom_id: slotForm.classroom_id ? Number(slotForm.classroom_id) : null,
+        }),
+      });
+      setEditingSlot(null);
+      refreshAfterEdit();
+    } catch (e: any) { setError(e.message); } finally { setSaving(false); }
+  };
+
+  const clearSlot = async () => {
+    if (!editingSlot || selectedClassId === '') return;
+    const existing = slotMap.get(`${selectedClassId}-${editingSlot.day}-${editingSlot.period}`);
+    if (!existing) { setEditingSlot(null); return; }
+    try {
+      await schoolFetch(`/routine/slot/${existing.id}`, { method: 'DELETE' });
+      setEditingSlot(null);
+      refreshAfterEdit();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const addSubject = async () => {
+    if (!newSubject.trim()) return;
+    try {
+      await schoolFetch('/subjects/', { method: 'POST', body: JSON.stringify({ name: newSubject.trim() }) });
+      setNewSubject(''); setShowSubjectForm(false); loadMasters();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const addClassroom = async () => {
+    if (!newClassroom.name.trim()) return;
+    try {
+      await schoolFetch('/classrooms/', {
+        method: 'POST',
+        body: JSON.stringify({ name: newClassroom.name.trim(), capacity: newClassroom.capacity || null }),
+      });
+      setNewClassroom({ name: '', capacity: '' }); setShowClassroomForm(false); loadMasters();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const startEditClassroom = (c: ScClassroomT) => {
+    setEditingClassroomId(c.id);
+    setEditClassroomForm({ name: c.name, capacity: c.capacity != null ? String(c.capacity) : '' });
+  };
+
+  const saveClassroomEdit = async () => {
+    if (!editingClassroomId || !editClassroomForm.name.trim()) return;
+    try {
+      await schoolFetch(`/classrooms/${editingClassroomId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: editClassroomForm.name.trim(), capacity: editClassroomForm.capacity || null }),
+      });
+      setEditingClassroomId(null); loadMasters();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const saveTiffin = async () => {
+    if (selectedClassId === '') return;
+    const t = tiffinByClass[selectedClassId] ?? { after: null, start: '', end: '' };
+    setSavingTiffin(true); setError('');
+    try {
+      await schoolFetch(`/classes/${selectedClassId}/tiffin`, {
+        method: 'PATCH',
+        body: JSON.stringify({ tiffin_after_period: t.after, tiffin_start_time: t.start || null, tiffin_end_time: t.end || null }),
+      });
+    } catch (e: any) { setError(e.message); } finally { setSavingTiffin(false); }
+  };
+
+  const savePeriodCount = async (classId: number, count: number) => {
+    setSavingPeriodCount(true); setError('');
+    try {
+      await schoolFetch(`/classes/${classId}/period-count`, {
+        method: 'PATCH',
+        body: JSON.stringify({ period_count: count }),
+      });
+      setPeriodCountByClass(m => ({ ...m, [classId]: count }));
+    } catch (e: any) { setError(e.message); } finally { setSavingPeriodCount(false); }
+  };
+
+  const addPeriodRow = () => {
+    if (selectedClassId === '') return;
+    savePeriodCount(selectedClassId, (periodCountByClass[selectedClassId] ?? 7) + 1);
+  };
+
+  const saveShift = async (classId: number, shift: 'Morning' | 'Day') => {
+    setSavingShift(true); setError('');
+    try {
+      await schoolFetch(`/classes/${classId}/shift`, { method: 'PATCH', body: JSON.stringify({ shift }) });
+      setShiftByClass(m => ({ ...m, [classId]: shift }));
+    } catch (e: any) { setError(e.message); } finally { setSavingShift(false); }
+  };
+
+  // Removes the last period row. If it still has entries (on any day), asks
+  // for confirmation and deletes them first so nothing is silently dropped.
+  const removePeriodRow = async () => {
+    if (selectedClassId === '') return;
+    const count = periodCountByClass[selectedClassId] ?? 7;
+    if (count <= 1) return;
+    const lastPeriodSlots = classGrid.filter(s => s.period_number === count);
+    if (lastPeriodSlots.length > 0) {
+      if (!confirm(`Period ${count} has ${lastPeriodSlots.length} routine entr${lastPeriodSlots.length === 1 ? 'y' : 'ies'}. Remove them along with the row?`)) return;
+      setSavingPeriodCount(true); setError('');
+      try {
+        for (const slot of lastPeriodSlots) {
+          await schoolFetch(`/routine/slot/${slot.id}`, { method: 'DELETE' });
+        }
+        refreshAfterEdit();
+      } catch (e: any) { setError(e.message); setSavingPeriodCount(false); return; }
+    }
+    await savePeriodCount(selectedClassId, count - 1);
+  };
+
+  const refreshApprovals = () => { loadApproval(selectedClassId); loadAllApprovals(); };
+
+  const submitForApproval = async () => {
+    try {
+      await schoolFetch('/routine-approvals/submit', {
+        method: 'POST',
+        body: JSON.stringify({ class_id: selectedClassId === '' ? null : selectedClassId }),
+      });
+      refreshApprovals();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const approveRoutine = async () => {
+    if (!approval) return;
+    try {
+      await schoolFetch(`/routine-approvals/${approval.id}/approve`, { method: 'PATCH' });
+      refreshApprovals();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const rejectRoutine = async () => {
+    if (!approval) return;
+    try {
+      await schoolFetch(`/routine-approvals/${approval.id}/reject`, { method: 'PATCH', body: JSON.stringify({ reason: rejectReason }) });
+      setShowRejectBox(false); setRejectReason('');
+      refreshApprovals();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  const neutralizeUnsupportedColorsInClone = (clonedDoc: Document) => {
+    clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => el.remove());
+    const style = clonedDoc.createElement('style');
+    style.textContent = '* { outline-color: transparent !important; }';
+    clonedDoc.head.appendChild(style);
+  };
+
+  // Each page gets a fixed margin and the captured table is scaled to fit
+  // within it (never stretched edge-to-edge, never pixel-sliced mid-table —
+  // that previously risked cutting a table row across two pages).
+  const PDF_MARGIN_MM = 12;
+  const addCanvasAsPage = (pdf: jsPDF, canvas: HTMLCanvasElement, isFirstPage: boolean) => {
+    if (!isFirstPage) pdf.addPage();
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = pdf.internal.pageSize.getHeight();
+    const maxW = pdfW - PDF_MARGIN_MM * 2;
+    const maxH = pdfH - PDF_MARGIN_MM * 2;
+    const scale = Math.min(maxW / canvas.width, maxH / canvas.height);
+    const w = canvas.width * scale;
+    const h = canvas.height * scale;
+    const x = (pdfW - w) / 2;
+    const y = PDF_MARGIN_MM;
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, w, h);
+  };
+
+  const waitForImages = (root: HTMLElement) => Promise.all(
+    Array.from(root.querySelectorAll('img')).map((img) =>
+      img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+        img.addEventListener('load', () => resolve(), { once: true });
+        img.addEventListener('error', () => resolve(), { once: true });
+      })
+    )
+  );
+
+  const captureNode = async (node: HTMLElement) => {
+    await waitForImages(node);
+    return html2canvas(node, {
+      scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false,
+      onclone: neutralizeUnsupportedColorsInClone,
+    });
+  };
+
+  const exportPdf = async (which: 'class' | 'school') => {
+    setPrinting(which);
+    await new Promise(r => setTimeout(r, 50));
+    try {
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      if (which === 'class') {
+        const target = classPrintRef.current;
+        if (!target) return;
+        const canvas = await captureNode(target);
+        addCanvasAsPage(pdf, canvas, true);
+        const className = classes.find(c => c.id === selectedClassId)?.name || 'Class';
+        pdf.save(`Routine-${className}.pdf`);
+      } else {
+        const classesWithData = classes.filter(c => schoolGrid.some(s => s.class_id === c.id));
+        let first = true;
+        for (const c of classesWithData) {
+          const el = schoolClassRefs.current.get(c.id);
+          if (!el) continue;
+          const canvas = await captureNode(el);
+          addCanvasAsPage(pdf, canvas, first);
+          first = false;
+        }
+        pdf.save('Routine-Whole-School.pdf');
+      }
+    } catch (e) {
+      console.error('[RoutineTab] PDF generation failed:', e);
+      setError('Failed to generate PDF');
+    } finally {
+      setPrinting(null);
+    }
+  };
+
+  const approvalFor = (classId: number | null) => allApprovals.find(a => a.class_id === classId) || null;
+
+  function renderGridTable(classId: number, source: RoutineSlot[], editable: boolean) {
+    const slots = source.filter(s => s.class_id === classId);
+    const periods = Math.max(periodCountByClass[classId] ?? 7, slots.reduce((m, s) => Math.max(m, s.period_number), 0));
+    const lookup = new Map<string, RoutineSlot>();
+    slots.forEach(s => lookup.set(`${s.day_of_week}-${s.period_number}`, s));
+    const tiffin = tiffinByClass[classId];
+    const rows: React.ReactNode[] = [];
+    // A cluster's cell uses a real HTML rowSpan, so rows below it for that
+    // day column simply omit a <td> — the browser fills the gap. This map
+    // tracks, per day, the last period number still covered by that cell.
+    const coveredUntil = new Map<number, number>();
+    Array.from({ length: periods }, (_, i) => i + 1).forEach(period => {
+      const cells: React.ReactNode[] = [];
+      ROUTINE_DAYS.forEach(d => {
+        if ((coveredUntil.get(d.value) ?? 0) >= period) return;
+        const slot = lookup.get(`${d.value}-${period}`);
+        const span = slot?.period_span || 1;
+        if (span > 1) coveredUntil.set(d.value, period + span - 1);
+        const cellKey = `${d.value}-${period}`;
+        cells.push(
+          <td
+            key={d.value}
+            rowSpan={span > 1 ? span : undefined}
+            draggable={editable && !!slot}
+            onClick={editable ? () => openCellEditor(d.value, period) : undefined}
+            onDragStart={editable && slot ? (e) => {
+              e.dataTransfer.setData('application/json', JSON.stringify({ kind: 'slot', day: d.value, period }));
+            } : undefined}
+            onDragOver={editable ? (e) => { e.preventDefault(); setDragOverCell(cellKey); } : undefined}
+            onDragLeave={editable ? () => setDragOverCell(k => (k === cellKey ? null : k)) : undefined}
+            onDrop={editable ? (e) => {
+              e.preventDefault();
+              setDragOverCell(null);
+              const raw = e.dataTransfer.getData('application/json');
+              if (!raw) return;
+              const payload = JSON.parse(raw);
+              if (payload.kind === 'teacher') assignToSlot(d.value, period, { teacher_employee_id: payload.id });
+              else if (payload.kind === 'subject') assignToSlot(d.value, period, { add_subject_id: payload.id });
+              else if (payload.kind === 'classroom') assignToSlot(d.value, period, { classroom_id: payload.id });
+              else if (payload.kind === 'slot') moveSlot(payload.day, payload.period, d.value, period);
+            } : undefined}
+            className={`border border-gray-200 p-2 align-top ${editable ? 'cursor-pointer hover:bg-emerald-50' : ''} ${editable && slot ? 'cursor-grab' : ''} ${dragOverCell === cellKey ? 'bg-emerald-100 ring-2 ring-inset ring-emerald-400' : ''}`}
+          >
+            {slot ? (
+              <div>
+                <p className="font-medium text-gray-900">{slot.subject_names?.length ? slot.subject_names.join(' + ') : '—'}</p>
+                {slot.teacher_name && <p className="text-gray-500">{slot.teacher_name}</p>}
+                {slot.classroom_name && <p className="text-gray-400">{slot.classroom_name}{slot.classroom_capacity ? ` (cap ${slot.classroom_capacity})` : ''}</p>}
+                {slot.start_time && <p className="text-gray-400">{slot.start_time.slice(0, 5)}–{slot.end_time?.slice(0, 5) || ''}</p>}
+                {span > 1 && <p className="text-amber-600 font-medium mt-0.5">{span}-period cluster</p>}
+              </div>
+            ) : editable ? <span className="text-gray-300">+ add / drop here</span> : <span className="text-gray-300">—</span>}
+          </td>
+        );
+      });
+      rows.push(
+        <tr key={period}>
+          <td className="border border-gray-200 p-2 text-center font-medium text-gray-700">{period}</td>
+          {cells}
+        </tr>
+      );
+      if (tiffin?.after === period && tiffin.start) {
+        rows.push(
+          <tr key={`tiffin-${period}`}>
+            <td colSpan={ROUTINE_DAYS.length + 1} className="border border-gray-200 p-2 text-center text-xs font-semibold text-amber-700 bg-amber-50">
+              Tiffin Time — {tiffin.start}{tiffin.end ? `–${tiffin.end}` : ''}
+            </td>
+          </tr>
+        );
+      }
+    });
+    return (
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr>
+            <th className="border border-gray-200 p-2 bg-gray-50 font-medium text-gray-500">Period</th>
+            {ROUTINE_DAYS.map(d => (
+              <th
+                key={d.value}
+                draggable={editable}
+                onDragStart={editable ? (e) => e.dataTransfer.setData('text/plain', String(d.value)) : undefined}
+                onDragOver={editable ? (e) => { e.preventDefault(); setDragOverDay(d.value); } : undefined}
+                onDragLeave={editable ? () => setDragOverDay(dd => (dd === d.value ? null : dd)) : undefined}
+                onDrop={editable ? (e) => {
+                  e.preventDefault();
+                  const fromDay = Number(e.dataTransfer.getData('text/plain'));
+                  setDragOverDay(null);
+                  copyDayRoutine(fromDay, d.value);
+                } : undefined}
+                title={editable ? "Drag to another day to copy this day's routine" : undefined}
+                className={`border border-gray-200 p-2 bg-gray-50 font-medium text-gray-500 ${editable ? 'cursor-grab select-none' : ''} ${dragOverDay === d.value ? 'bg-emerald-100 ring-2 ring-inset ring-emerald-400' : ''}`}
+              >
+                {d.label}{copyingDay === d.value && ' …'}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    );
+  }
+
+  function signatureBox(label: string, a: RoutineApproval | null) {
+    const signed = a?.status === 'approved' && a.approved_by_title?.toLowerCase().includes(label.toLowerCase());
+    return (
+      <div style={{ textAlign: 'center', width: '220px' }}>
+        <div style={{ height: '34px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          {signed && <span style={{ fontStyle: 'italic', fontSize: '13px', color: '#111827' }}>{a!.approved_by_name}</span>}
+        </div>
+        <div style={{ borderTop: '1px solid #9ca3af', paddingTop: '4px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: '#374151' }}>{label}</div>
+          {signed && <div style={{ fontSize: '10px', color: '#6b7280' }}>{fmtDate(a!.approved_at)}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  function renderPrintableGrid(classId: number, title: string, source: RoutineSlot[]) {
+    const slots = source.filter(s => s.class_id === classId);
+    const periods = Math.max(periodCountByClass[classId] ?? 7, slots.reduce((m, s) => Math.max(m, s.period_number), 0));
+    const a = approvalFor(classId);
+    const headerCell: React.CSSProperties = {
+      border: '1px solid #d1d5db', padding: '8px 6px', background: '#14856E', color: '#ffffff',
+      fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.03em',
+    };
+    return (
+      <div style={{ width: '960px', padding: '32px', background: '#ffffff', fontFamily: 'Arial, Helvetica, sans-serif', color: '#111827' }}>
+        <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+          <img src="/puspokoli_school.png" alt="Puspokoli School" style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', marginBottom: '6px' }} crossOrigin="anonymous" />
+          <div style={{ fontSize: '20px', fontWeight: 700 }}>Puspokoli School</div>
+          <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>Weekly Class Routine</div>
+        </div>
+        <div style={{ borderBottom: '3px solid #14856E', margin: '10px 0 16px' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#374151', marginBottom: '12px' }}>
+          <span>Class: <strong>{title}</strong> ({shiftByClass[classId] || 'Morning'} shift)</span>
+          <span>Generated: {fmtDate(new Date().toISOString())}</span>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '10%' }} />
+            {ROUTINE_DAYS.map(d => <col key={d.value} style={{ width: `${90 / ROUTINE_DAYS.length}%` }} />)}
+          </colgroup>
+          <thead>
+            <tr>
+              <th style={headerCell}>Period</th>
+              {ROUTINE_DAYS.map(d => <th key={d.value} style={headerCell}>{d.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {(() => {
+              const tiffin = tiffinByClass[classId];
+              const rows: React.ReactNode[] = [];
+              // html2canvas mis-layouts real <td rowSpan> cells (the merged
+              // cell's content can get clipped to a too-short row height),
+              // so the printable grid avoids rowSpan entirely: a cluster's
+              // slot is expanded into every period it covers and its full
+              // detail (subject/teacher/room) is rendered on each of those
+              // rows, not just the anchor one. The on-screen grid still uses
+              // a real merged cell since that's a live browser, not a canvas
+              // screenshot.
+              const expandedLookup = new Map<string, RoutineSlot>();
+              slots.forEach(s => {
+                const span = s.period_span || 1;
+                for (let p = s.period_number; p < s.period_number + span; p++) {
+                  expandedLookup.set(`${s.day_of_week}-${p}`, s);
+                }
+              });
+              Array.from({ length: periods }, (_, i) => i + 1).forEach((period, idx) => {
+                const cells: React.ReactNode[] = ROUTINE_DAYS.map(d => {
+                  const slot = expandedLookup.get(`${d.value}-${period}`);
+                  const span = slot?.period_span || 1;
+                  return (
+                    <td key={d.value} style={{ border: '1px solid #e5e7eb', padding: '8px 6px', verticalAlign: 'top', textAlign: 'center' }}>
+                      {slot ? (
+                        <div>
+                          <div style={{ fontWeight: 700, color: '#111827' }}>{slot.subject_names?.length ? slot.subject_names.join(' + ') : '—'}</div>
+                          {slot.teacher_name && <div style={{ color: '#4b5563', marginTop: '2px' }}>{slot.teacher_name}</div>}
+                          {slot.classroom_name && <div style={{ color: '#9ca3af', marginTop: '1px' }}>{slot.classroom_name}{slot.classroom_capacity ? ` (cap ${slot.classroom_capacity})` : ''}</div>}
+                          {slot.start_time && <div style={{ color: '#9ca3af', marginTop: '1px' }}>{slot.start_time.slice(0, 5)}–{slot.end_time?.slice(0, 5) || ''}</div>}
+                          {span > 1 && <div style={{ color: '#92400e', fontWeight: 600, marginTop: '1px' }}>{span}-period cluster</div>}
+                        </div>
+                      ) : <span style={{ color: '#d1d5db' }}>—</span>}
+                    </td>
+                  );
+                });
+                rows.push(
+                  <tr key={period} style={{ background: idx % 2 === 1 ? '#f9fafb' : '#ffffff' }}>
+                    <td style={{ border: '1px solid #e5e7eb', padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: '#14856E' }}>{period}</td>
+                    {cells}
+                  </tr>
+                );
+                if (tiffin?.after === period && tiffin.start) {
+                  rows.push(
+                    <tr key={`tiffin-${period}`}>
+                      <td colSpan={ROUTINE_DAYS.length + 1} style={{
+                        border: '1px solid #e5e7eb', padding: '8px 6px', textAlign: 'center',
+                        fontWeight: 700, fontSize: '11px', color: '#92400e', background: '#fffbeb',
+                      }}>
+                        Tiffin Time — {tiffin.start}{tiffin.end ? `–${tiffin.end}` : ''}
+                      </td>
+                    </tr>
+                  );
+                }
+              });
+              return rows;
+            })()}
+          </tbody>
+        </table>
+
+        {a?.status === 'rejected' && (
+          <div style={{ marginTop: '14px', fontSize: '11px', color: '#b91c1c' }}>
+            Rejected{a.rejected_reason ? ` — ${a.rejected_reason}` : ''}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px' }}>
+          {signatureBox('Head Teacher', a)}
+          {signatureBox('Assistant Head Teacher', a)}
+        </div>
+      </div>
+    );
+  }
+
+  const currentClassName = classes.find(c => c.id === selectedClassId)?.name || '';
+  const currentPeriods = selectedClassId === ''
+    ? 7
+    : Math.max(periodCountByClass[selectedClassId] ?? 7, classGrid.filter(s => s.class_id === selectedClassId).reduce((m, s) => Math.max(m, s.period_number), 0));
+  const currentTiffin = selectedClassId === '' ? undefined : (tiffinByClass[selectedClassId] ?? { after: null, start: '', end: '' });
+
+  return (
+    <div className="space-y-6">
+      <ErrorBanner message={error} />
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Class</label>
+          <select
+            value={selectedClassId}
+            onChange={e => setSelectedClassId(e.target.value ? Number(e.target.value) : '')}
+            className="border rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">— Whole School (all classes) —</option>
+            {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({shiftByClass[c.id] || c.shift || 'Morning'})</option>)}
+          </select>
+        </div>
+        {selectedClassId !== '' && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Shift</label>
+            <select
+              value={shiftByClass[selectedClassId] || 'Morning'}
+              onChange={e => saveShift(selectedClassId, e.target.value as 'Morning' | 'Day')}
+              disabled={savingShift}
+              className="border rounded-lg px-3 py-2 text-sm disabled:opacity-60"
+            >
+              <option value="Morning">Morning</option>
+              <option value="Day">Day</option>
+            </select>
+          </div>
+        )}
+        {selectedClassId !== '' && (() => {
+          const cls = classes.find(c => c.id === selectedClassId);
+          return cls?.classroom_name ? (
+            <span className="px-3 py-2 text-xs font-medium text-gray-600 bg-gray-50 border rounded-lg">
+              Room: {cls.classroom_name}{cls.classroom_capacity ? ` — Capacity ${cls.classroom_capacity}` : ''}
+            </span>
+          ) : null;
+        })()}
+        <button onClick={() => setShowSubjectForm(true)} className="px-3 py-2 text-xs font-medium text-gray-600 border rounded-lg hover:bg-gray-50">
+          + Subject
+        </button>
+        <button onClick={() => setShowClassroomForm(true)} className="px-3 py-2 text-xs font-medium text-gray-600 border rounded-lg hover:bg-gray-50">
+          + Classroom
+        </button>
+        {selectedClassId !== '' && (
+          <div className="flex items-center gap-1">
+            <button onClick={removePeriodRow} disabled={savingPeriodCount || currentPeriods <= 1}
+              className="px-3 py-2 text-xs font-medium text-gray-600 border rounded-lg hover:bg-gray-50 disabled:opacity-50">
+              − Row
+            </button>
+            <span className="text-xs text-gray-400 w-6 text-center">{currentPeriods}</span>
+            <button onClick={addPeriodRow} disabled={savingPeriodCount}
+              className="px-3 py-2 text-xs font-medium text-gray-600 border rounded-lg hover:bg-gray-50 disabled:opacity-50">
+              + Row
+            </button>
+          </div>
+        )}
+        <div className="flex-1" />
+        <button
+          onClick={() => exportPdf(selectedClassId === '' ? 'school' : 'class')}
+          disabled={printing !== null}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#14856E] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b5a] disabled:opacity-60"
+        >
+          <Printer size={14} /> {printing ? 'Generating…' : selectedClassId === '' ? 'Print Whole-School PDF' : 'Print This Class PDF'}
+        </button>
+      </div>
+
+      {selectedClassId !== '' && currentTiffin && (
+        <div className="flex items-end gap-2 bg-white border rounded-xl p-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tiffin Time — after period</label>
+            <select
+              value={currentTiffin.after ?? ''}
+              onChange={e => setTiffinByClass(m => ({ ...m, [selectedClassId]: { ...currentTiffin, after: e.target.value ? Number(e.target.value) : null } }))}
+              className="border rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">— None —</option>
+              {Array.from({ length: currentPeriods }, (_, i) => i + 1).map(p => <option key={p} value={p}>Period {p}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <input type="time" value={currentTiffin.start}
+              onChange={e => setTiffinByClass(m => ({ ...m, [selectedClassId]: { ...currentTiffin, start: e.target.value } }))}
+              className="border rounded-lg px-3 py-2 text-sm" />
+            <input type="time" value={currentTiffin.end}
+              onChange={e => setTiffinByClass(m => ({ ...m, [selectedClassId]: { ...currentTiffin, end: e.target.value } }))}
+              className="border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <button onClick={saveTiffin} disabled={savingTiffin} className="px-3 py-2 text-xs font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-60">
+            {savingTiffin ? 'Saving…' : 'Save Tiffin Time'}
+          </button>
+        </div>
+      )}
+
+      {showSubjectForm && (
+        <div className="flex items-center gap-2 bg-white border rounded-xl p-3">
+          <input value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="Subject name"
+            className="border rounded-lg px-3 py-2 text-sm flex-1 max-w-xs" />
+          <button onClick={addSubject} className="px-3 py-2 text-sm bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a]">Add</button>
+          <button onClick={() => setShowSubjectForm(false)} className="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+          {subjects.length > 0 && <span className="text-xs text-gray-400 ml-2">{subjects.map(s => s.name).join(', ')}</span>}
+        </div>
+      )}
+      {showClassroomForm && (
+        <div className="bg-white border rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <input value={newClassroom.name} onChange={e => setNewClassroom(f => ({ ...f, name: e.target.value }))} placeholder="Classroom name"
+              className="border rounded-lg px-3 py-2 text-sm flex-1 max-w-xs" />
+            <input value={newClassroom.capacity} onChange={e => setNewClassroom(f => ({ ...f, capacity: e.target.value }))} placeholder="Capacity"
+              type="number" className="border rounded-lg px-3 py-2 text-sm w-28" />
+            <button onClick={addClassroom} className="px-3 py-2 text-sm bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a]">Add</button>
+            <button onClick={() => setShowClassroomForm(false)} className="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">Close</button>
+          </div>
+          {classrooms.length > 0 && (
+            <div className="divide-y divide-gray-100 border-t border-gray-100 pt-2">
+              {classrooms.map(c => (
+                <div key={c.id} className="flex items-center gap-2 py-1.5">
+                  {editingClassroomId === c.id ? (
+                    <>
+                      <input value={editClassroomForm.name} onChange={e => setEditClassroomForm(f => ({ ...f, name: e.target.value }))}
+                        className="border rounded-lg px-2 py-1 text-sm flex-1 max-w-xs" />
+                      <input value={editClassroomForm.capacity} onChange={e => setEditClassroomForm(f => ({ ...f, capacity: e.target.value }))}
+                        type="number" placeholder="Capacity" className="border rounded-lg px-2 py-1 text-sm w-24" />
+                      <button onClick={saveClassroomEdit} className="px-2 py-1 text-xs bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a]">Save</button>
+                      <button onClick={() => setEditingClassroomId(null)} className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm text-gray-900 flex-1">{c.name}</span>
+                      <span className="text-xs text-gray-500">Capacity: {c.capacity ?? '—'}</span>
+                      <button onClick={() => startEditClassroom(c)} className="p-1 text-gray-400 hover:text-[#14856E]"><Edit2 size={14} /></button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-sm font-medium text-gray-900">
+            {selectedClassId === '' ? 'Whole-School Routine Approval' : `${currentClassName} Routine Approval`}
+          </p>
+          {approval ? (
+            <p className="text-xs text-gray-500 mt-0.5">
+              Status:{' '}
+              <span className={approval.status === 'approved' ? 'text-green-600' : approval.status === 'rejected' ? 'text-red-600' : 'text-amber-600'}>
+                {approval.status}
+              </span>
+              {approval.approved_by_name && <> — {approval.approved_by_name} ({approval.approved_by_title}){approval.approved_at ? ` on ${fmtDate(approval.approved_at)}` : ''}</>}
+              {approval.status === 'rejected' && approval.rejected_reason && <> — Reason: {approval.rejected_reason}</>}
+            </p>
+          ) : <p className="text-xs text-gray-400 mt-0.5">Not yet submitted for approval.</p>}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={submitForApproval} className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-gray-600 border rounded-lg hover:bg-gray-50">
+            <Send size={13} /> Submit for Approval
+          </button>
+          {approval && approval.status === 'pending' && (
+            <>
+              <button onClick={approveRoutine} className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">
+                <CheckCircle2 size={13} /> Approve
+              </button>
+              <button onClick={() => setShowRejectBox(true)} className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                <XCircle size={13} /> Reject
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {showRejectBox && (
+        <div className="flex items-center gap-2 bg-white border rounded-xl p-3">
+          <input value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason for rejection"
+            className="border rounded-lg px-3 py-2 text-sm flex-1 max-w-sm" />
+          <button onClick={rejectRoutine} className="px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Confirm Reject</button>
+          <button onClick={() => setShowRejectBox(false)} className="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+        </div>
+      )}
+      <p className="text-xs text-gray-400">Head Teacher or Assistant Head Teacher may approve or reject solo.</p>
+
+      {loading ? (
+        <LoadingState label="Loading routine…" fullHeight />
+      ) : selectedClassId === '' ? (
+        <div className="space-y-8">
+          {classes.filter(c => schoolGrid.some(s => s.class_id === c.id)).map(c => (
+            <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4 overflow-x-auto">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">{c.name} <span className="text-xs font-normal text-gray-400">({shiftByClass[c.id] || c.shift || 'Morning'})</span></h3>
+              {renderGridTable(c.id, schoolGrid, false)}
+            </div>
+          ))}
+          {classes.filter(c => schoolGrid.some(s => s.class_id === c.id)).length === 0 && (
+            <EmptyState icon={CalendarClock} title="No routine entries yet" description="Select a class above to start building its weekly routine." bordered />
+          )}
+        </div>
+      ) : (
+        <div className="flex gap-4 items-start">
+          <div className="w-56 shrink-0 space-y-3">
+            <div className="bg-white border border-gray-200 rounded-xl p-3">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">Teachers (Education)</h4>
+              <div className="space-y-1 max-h-56 overflow-y-auto">
+                {teachers.map(t => (
+                  <div
+                    key={t.id}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('application/json', JSON.stringify({ kind: 'teacher', id: t.id }))}
+                    className="text-xs px-2 py-1.5 bg-gray-50 rounded-lg border border-gray-100 cursor-grab hover:border-emerald-300"
+                  >
+                    <div className="font-medium text-gray-900">{t.full_name}</div>
+                    {t.designation_title && <div className="text-gray-400">{t.designation_title}</div>}
+                  </div>
+                ))}
+                {teachers.length === 0 && <p className="text-xs text-gray-400">No Education dept staff found.</p>}
+              </div>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl p-3">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">Subjects</h4>
+              <div className="flex flex-wrap gap-1">
+                {subjects.map(s => (
+                  <div
+                    key={s.id}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('application/json', JSON.stringify({ kind: 'subject', id: s.id }))}
+                    className="text-xs px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 cursor-grab"
+                  >
+                    {s.name}
+                  </div>
+                ))}
+                {subjects.length === 0 && <p className="text-xs text-gray-400">No subjects yet.</p>}
+              </div>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl p-3">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">Classrooms</h4>
+              <div className="space-y-1">
+                {classrooms.map(c => (
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('application/json', JSON.stringify({ kind: 'classroom', id: c.id }))}
+                    className="text-xs px-2 py-1.5 bg-gray-50 rounded-lg border border-gray-100 cursor-grab flex justify-between"
+                  >
+                    <span>{c.name}</span><span className="text-gray-400">{c.capacity ?? '—'}</span>
+                  </div>
+                ))}
+                {classrooms.length === 0 && <p className="text-xs text-gray-400">No classrooms yet.</p>}
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-400">Drag a teacher, subject, or classroom onto a period cell to assign it. Drag a filled cell to move it, or a day header to copy the whole day.</p>
+          </div>
+          <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 overflow-x-auto">
+            {renderGridTable(selectedClassId, classGrid, true)}
+          </div>
+        </div>
+      )}
+
+      {editingSlot && selectedClassId !== '' && (
+        <Modal onClose={() => setEditingSlot(null)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">
+                {currentClassName} — {ROUTINE_DAYS.find(d => d.value === editingSlot.day)?.label}, Period {editingSlot.period}
+              </h3>
+              <button onClick={() => setEditingSlot(null)}><X size={18} /></button>
+            </div>
+            <ErrorBanner message={error} className="mb-3" />
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input type="time" value={slotForm.start_time} onChange={e => setSlotForm(f => ({ ...f, start_time: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+                <input type="time" value={slotForm.end_time} onChange={e => setSlotForm(f => ({ ...f, end_time: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Span (consecutive periods, for a cluster like a 2-hour class)</label>
+                <select value={slotForm.period_span} onChange={e => setSlotForm(f => ({ ...f, period_span: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
+                  {Array.from({ length: Math.max(1, currentPeriods - editingSlot.period + 1) }, (_, i) => i + 1).map(n => (
+                    <option key={n} value={n}>{n} period{n > 1 ? 's' : ''}{n > 1 ? ` (through Period ${editingSlot.period + n - 1})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Subjects (a cluster can cover more than one)</label>
+                {slotForm.subject_ids.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {slotForm.subject_ids.map(id => {
+                      const subj = subjects.find(s => String(s.id) === id);
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100">
+                          {subj?.name || id}
+                          <button type="button" onClick={() => setSlotForm(f => ({ ...f, subject_ids: f.subject_ids.filter(x => x !== id) }))} className="hover:text-emerald-900">
+                            <X size={11} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <select value="" onChange={e => { if (e.target.value) setSlotForm(f => ({ ...f, subject_ids: [...f.subject_ids, e.target.value] })); }}
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="">+ Add subject…</option>
+                  {subjects.filter(s => !slotForm.subject_ids.includes(String(s.id))).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Teacher (HR — Education department)</label>
+                <select value={slotForm.teacher_employee_id} onChange={e => setSlotForm(f => ({ ...f, teacher_employee_id: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="">— No teacher assigned —</option>
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>{t.full_name}{t.mobile ? ` — ${t.mobile}` : ''}{t.designation_title ? ` — ${t.designation_title}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <select value={slotForm.classroom_id} onChange={e => setSlotForm(f => ({ ...f, classroom_id: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm">
+                <option value="">— Classroom —</option>
+                {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}{c.capacity ? ` (capacity ${c.capacity})` : ''}</option>)}
+              </select>
+            </div>
+            <div className="flex justify-between mt-5">
+              <button onClick={clearSlot} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">Clear Slot</button>
+              <div className="flex gap-2">
+                <button onClick={() => setEditingSlot(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button onClick={saveSlot} disabled={saving} className="px-4 py-2 text-sm bg-[#14856E] text-white rounded-lg hover:bg-[#0f6b5a] disabled:opacity-60">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+        <div ref={classPrintRef}>
+          {selectedClassId !== '' && renderPrintableGrid(selectedClassId, currentClassName, classGrid)}
+        </div>
+        {classes.filter(c => schoolGrid.some(s => s.class_id === c.id)).map(c => (
+          <div key={c.id} ref={el => { if (el) schoolClassRefs.current.set(c.id, el); }}>
+            {renderPrintableGrid(c.id, c.name, schoolGrid)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function School() {
@@ -1507,8 +2550,13 @@ export function School() {
         <div className="md:hidden mb-4">
           <img src="/logo.png" alt="Sombhabona" className="h-10 w-auto" />
         </div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Puspokoli School</h1>
-        <p className="text-sm text-gray-600 mt-1">Attendance tracking, classroom monitoring & reports</p>
+        <div className="flex items-center gap-3">
+          <img src="/puspokoli_school.png" alt="Puspokoli School" className="h-12 w-12 rounded-full object-cover" />
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Puspokoli School</h1>
+            <p className="text-sm text-gray-600 mt-1">Attendance tracking, classroom monitoring & reports</p>
+          </div>
+        </div>
       </div>
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} compact />
@@ -1517,6 +2565,7 @@ export function School() {
       {tab === 'attendance'  && <AttendanceTab classes={classes} />}
       {tab === 'monitoring'  && <MonitoringTab classes={classes} />}
       {tab === 'students'    && <StudentsTab classes={classes} />}
+      {tab === 'routine'     && <RoutineTab classes={classes} />}
       {tab === 'reports'     && <ReportsTab classes={classes} />}
     </div>
   );
