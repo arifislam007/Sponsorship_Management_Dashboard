@@ -13,6 +13,7 @@ import { subjectsRouter } from './routes/subjects.js';
 import { classroomsRouter } from './routes/classrooms.js';
 import { routineRouter } from './routes/routine.js';
 import { routineApprovalsRouter } from './routes/routineApprovals.js';
+import { teachersRouter } from './routes/teachers.js';
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -34,6 +35,7 @@ app.use('/api/school/subjects',         authMiddleware, schoolAccess, subjectsRo
 app.use('/api/school/classrooms',       authMiddleware, schoolAccess, classroomsRouter);
 app.use('/api/school/routine',          authMiddleware, schoolAccess, routineRouter);
 app.use('/api/school/routine-approvals', authMiddleware, schoolAccess, routineApprovalsRouter);
+app.use('/api/school/teachers',         authMiddleware, schoolAccess, teachersRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((err, req, res, next) => {

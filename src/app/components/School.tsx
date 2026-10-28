@@ -1584,9 +1584,7 @@ function RoutineTab({ classes }: { classes: ScClass[] }) {
   const loadMasters = () => {
     schoolFetch<{ data: ScSubject[] }>('/subjects/').then(r => setSubjects(r.data)).catch(console.error);
     schoolFetch<{ data: ScClassroomT[] }>('/classrooms/').then(r => setClassrooms(r.data)).catch(console.error);
-    hrFetch<{ data: HrEmployee[] }>('/employees/?status=Active&limit=500')
-      .then(r => setTeachers(r.data.filter(e => e.department_name === 'Education')))
-      .catch(console.error);
+    schoolFetch<{ data: HrEmployee[] }>('/teachers/').then(r => setTeachers(r.data)).catch(console.error);
   };
   const loadSchoolGrid = () => {
     schoolFetch<{ data: RoutineSlot[] }>('/routine/school').then(r => setSchoolGrid(r.data)).catch(console.error);
